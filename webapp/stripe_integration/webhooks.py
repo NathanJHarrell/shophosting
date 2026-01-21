@@ -12,6 +12,7 @@ sys.path.insert(0, '/opt/shophosting/provisioning')
 
 from models import Customer, PricingPlan, Subscription, Invoice, WebhookEvent
 from .config import get_stripe_config
+from email_service import email_service
 
 logger = logging.getLogger(__name__)
 
@@ -224,7 +225,17 @@ def handle_payment_failed(invoice):
             subscription.status = 'past_due'
             subscription.save()
 
-    # TODO: Send payment failed email notification
+    # Send payment failed email notification
+    try:
+        email_service.send_payment_failed_email(
+            to_email=customer.email,
+            domain=customer.domain,
+            amount=invoice.get('amount_due'),
+            invoice_url=invoice.get('hosted_invoice_url')
+        )
+    except Exception as e:
+        logger.error(f"Failed to send payment failed email: {e}")
+
     logger.warning(f"Payment failed for customer {customer.id}")
 
 
@@ -274,15 +285,26 @@ def handle_subscription_deleted(subscription_data):
     subscription.canceled_at = datetime.now()
     subscription.save()
 
-    # Optionally suspend the customer's service
+    # Get the customer and send cancellation email
     customer = Customer.get_by_id(subscription.customer_id)
     if customer:
-        # Don't immediately suspend - give grace period or send notification
-        # customer.status = 'suspended'
-        # customer.save()
+        # Don't immediately suspend - give grace period
         logger.info(f"Subscription canceled for customer {customer.id}")
 
-    # TODO: Send cancellation email notification
+        # Determine end date
+        end_date = None
+        if subscription.current_period_end:
+            end_date = subscription.current_period_end.strftime('%B %d, %Y')
+
+        # Send cancellation email notification
+        try:
+            email_service.send_subscription_cancelled_email(
+                to_email=customer.email,
+                domain=customer.domain,
+                end_date=end_date
+            )
+        except Exception as e:
+            logger.error(f"Failed to send subscription cancelled email: {e}")
 
 
 # Map of Stripe event types to handlers

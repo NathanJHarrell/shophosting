@@ -14,9 +14,6 @@ from models import PortManager
 from jinja2 import Template
 import redis
 from rq import Worker, Queue
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import mysql.connector
 from datetime import datetime
 from dotenv import load_dotenv
@@ -521,66 +518,28 @@ class ProvisioningWorker:
     
     def send_welcome_email(self, config):
         """Send welcome email with credentials to customer"""
-
-        # Email configuration from environment variables
-        sender_email = os.getenv('SMTP_FROM', 'noreply@shophosting.io')
-        smtp_server = os.getenv('SMTP_SERVER', 'localhost')
-        smtp_port = int(os.getenv('SMTP_PORT') or '25')
-        smtp_user = os.getenv('SMTP_USER')
-        smtp_password = os.getenv('SMTP_PASSWORD')
-
-        # Skip email if SMTP server not configured
-        if not smtp_server:
-            logger.warning("SMTP server not configured, skipping welcome email")
-            return False
-
-        message = MIMEMultipart()
-        message["From"] = sender_email
-        message["To"] = config['email']
-        message["Subject"] = f"Your {config['platform'].title()} Store is Ready!"
-
-        # Determine admin URL based on platform
-        if config['platform'] == 'woocommerce':
-            admin_url = f"http://{config['domain']}/wp-admin"
-        else:
-            admin_url = f"http://{config['domain']}/admin"
-
-        body = f"""
-Hello!
-
-Your {config['platform'].title()} store has been successfully provisioned and is ready to use!
-
-Store URL: http://{config['domain']}
-Admin URL: {admin_url}
-
-Admin Username: {config['admin_user']}
-Admin Password: {config['admin_password']}
-
-IMPORTANT: Please change your password after your first login.
-
-Your store is currently accessible via HTTP. HTTPS will be automatically enabled once your domain's DNS is fully propagated.
-
-If you have any questions, please contact our support team at support@shophosting.io.
-
-Best regards,
-ShopHosting.io Team
-        """
-
-        message.attach(MIMEText(body, "plain"))
-
         try:
-            with smtplib.SMTP(smtp_server, smtp_port) as server:
-                # Only use TLS and auth if credentials are provided
-                if smtp_user and smtp_password:
-                    server.starttls()
-                    server.login(smtp_user, smtp_password)
-                server.send_message(message)
+            # Use the shared email service for styled emails
+            sys.path.insert(0, '/opt/shophosting/webapp')
+            from email_service import email_service
 
-            logger.info(f"Welcome email sent to {config['email']}")
-            return True
+            result = email_service.send_welcome_email(
+                to_email=config['email'],
+                domain=config['domain'],
+                platform=config['platform'],
+                admin_user=config['admin_user'],
+                admin_password=config['admin_password']
+            )
+
+            if result:
+                logger.info(f"Welcome email sent to {config['email']}")
+            else:
+                logger.warning(f"Welcome email not sent to {config['email']}")
+
+            return result
 
         except Exception as e:
-            logger.warning(f"Failed to send email: {e}")
+            logger.warning(f"Failed to send welcome email: {e}")
             return False
     
     def rollback(self, customer_id, customer_path):
