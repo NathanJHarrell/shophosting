@@ -8,6 +8,15 @@
     <a href="{{ url_for('admin.customers') }}" class="btn btn-secondary btn-sm">Back to Customers</a>
     <div style="display: flex; gap: 12px;">
         <a href="{{ url_for('admin.edit_customer', customer_id=customer.id) }}" class="btn btn-secondary btn-sm">Edit Customer</a>
+        {% if customer.status in ['failed', 'pending'] %}
+            <form method="POST" action="{{ url_for('admin.customer_retry_provisioning', customer_id=customer.id) }}" style="display: inline;" onsubmit="return confirm('This will restart the provisioning process. Continue?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-right: 4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    Retry Provisioning
+                </button>
+            </form>
+        {% endif %}
         {% if customer.status == 'suspended' %}
             <form method="POST" action="{{ url_for('admin.customer_reactivate', customer_id=customer.id) }}" style="display: inline;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -73,8 +82,13 @@
 
             {% if customer.error_message %}
             <div style="margin-top: 20px; padding: 16px; background: var(--error-muted); border-radius: var(--radius-md); border: 1px solid rgba(239, 68, 68, 0.2);">
-                <strong class="text-error">Error:</strong>
-                <p class="text-error" style="margin-top: 8px;">{{ customer.error_message }}</p>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <strong class="text-error">Error:</strong>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleErrorDetails('customer-error')" style="font-size: 0.75rem; padding: 4px 8px;">
+                        Expand
+                    </button>
+                </div>
+                <pre id="customer-error" class="error-details" style="margin-top: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: var(--radius-sm); overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.8rem; color: var(--text-error); max-height: 150px; overflow-y: auto;">{{ customer.error_message }}</pre>
             </div>
             {% endif %}
         </div>
@@ -185,8 +199,20 @@
                     <td><span class="badge badge-{{ job.status }}">{{ job.status }}</span></td>
                     <td>{{ job.started_at.strftime('%Y-%m-%d %H:%M') if job.started_at else '-' }}</td>
                     <td>{{ job.finished_at.strftime('%Y-%m-%d %H:%M') if job.finished_at else '-' }}</td>
-                    <td class="text-error" style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                        {{ job.error_message or '-' }}
+                    <td style="max-width: 400px;">
+                        {% if job.error_message %}
+                        <div class="error-cell">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="text-error error-preview" id="preview-{{ loop.index }}" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 250px; display: inline-block;">{{ job.error_message[:80] }}{% if job.error_message|length > 80 %}...{% endif %}</span>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleJobError({{ loop.index }})" style="font-size: 0.7rem; padding: 2px 6px; flex-shrink: 0;">
+                                    View
+                                </button>
+                            </div>
+                            <pre id="job-error-{{ loop.index }}" class="error-details" style="display: none; margin-top: 8px; padding: 10px; background: var(--error-muted); border-radius: var(--radius-sm); overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.75rem; color: var(--text-error); max-height: 200px; overflow-y: auto; border: 1px solid rgba(239, 68, 68, 0.2);">{{ job.error_message }}</pre>
+                        </div>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}
@@ -262,4 +288,55 @@
     </div>
 </div>
 {% endif %}
+
+<script>
+function toggleErrorDetails(id) {
+    var el = document.getElementById(id);
+    var btn = el.previousElementSibling.querySelector('button') || el.parentElement.querySelector('button');
+    if (el.style.maxHeight === '150px' || el.style.maxHeight === '') {
+        el.style.maxHeight = 'none';
+        if (btn) btn.textContent = 'Collapse';
+    } else {
+        el.style.maxHeight = '150px';
+        if (btn) btn.textContent = 'Expand';
+    }
+}
+
+function toggleJobError(index) {
+    var preview = document.getElementById('preview-' + index);
+    var details = document.getElementById('job-error-' + index);
+    var btn = preview.parentElement.querySelector('button');
+
+    if (details.style.display === 'none' || details.style.display === '') {
+        details.style.display = 'block';
+        preview.style.display = 'none';
+        if (btn) btn.textContent = 'Hide';
+    } else {
+        details.style.display = 'none';
+        preview.style.display = 'inline-block';
+        if (btn) btn.textContent = 'View';
+    }
+}
+
+// Try to pretty-print JSON errors
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.error-details').forEach(function(el) {
+        var text = el.textContent.trim();
+        // Try to detect and format JSON
+        if (text.startsWith('{') || text.startsWith('[')) {
+            try {
+                var parsed = JSON.parse(text);
+                el.textContent = JSON.stringify(parsed, null, 2);
+            } catch(e) {
+                // Not valid JSON, leave as-is
+            }
+        }
+        // Format Python/common stack traces
+        else if (text.includes('Traceback') || text.includes('  File "')) {
+            // Already formatted, just ensure proper display
+            el.style.whiteSpace = 'pre';
+        }
+    });
+});
+</script>
 {% endblock %}

@@ -4,6 +4,15 @@
 {% block page_title %}Customers{% endblock %}
 
 {% block content %}
+<!-- Header with New Customer button -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <h2 style="margin: 0; font-size: 1.25rem; font-weight: 600;">All Customers</h2>
+    <a href="{{ url_for('admin.create_customer') }}" class="btn btn-primary">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        New Customer
+    </a>
+</div>
+
 <!-- Filters -->
 <form method="GET" class="filters">
     <input type="text" name="search" class="form-control" placeholder="Search email, domain, company..." value="{{ search }}">

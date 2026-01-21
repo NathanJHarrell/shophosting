@@ -223,6 +223,106 @@ def customer_suspend(customer_id):
     return redirect(url_for('admin.customer_detail', customer_id=customer_id))
 
 
+@admin_bp.route('/customers/<int:customer_id>/retry-provisioning', methods=['POST'])
+@admin_required
+def customer_retry_provisioning(customer_id):
+    """Retry provisioning for a failed customer"""
+    admin = get_current_admin()
+    customer = Customer.get_by_id(customer_id)
+
+    if not customer:
+        flash('Customer not found.', 'error')
+        return redirect(url_for('admin.customers'))
+
+    if customer.status not in ('failed', 'pending'):
+        flash('Customer must be in failed or pending status to retry provisioning.', 'warning')
+        return redirect(url_for('admin.customer_detail', customer_id=customer_id))
+
+    try:
+        # Clean up any existing resources from previous failed attempt
+        customer_path = f"/var/customers/customer-{customer_id}"
+
+        # Stop and remove any existing containers
+        if os.path.exists(customer_path):
+            subprocess.run(
+                ['docker', 'compose', 'down', '-v', '--remove-orphans'],
+                cwd=customer_path,
+                capture_output=True,
+                timeout=60
+            )
+            # Remove customer directory (use sudo because Docker creates files as root/lxd)
+            subprocess.run(
+                ['sudo', 'rm', '-rf', customer_path],
+                capture_output=True,
+                timeout=30
+            )
+
+        # Remove any existing Nginx config
+        nginx_available = f"/etc/nginx/sites-available/customer-{customer_id}.conf"
+        nginx_enabled = f"/etc/nginx/sites-enabled/customer-{customer_id}.conf"
+
+        if os.path.exists(nginx_enabled):
+            os.unlink(nginx_enabled)
+        if os.path.exists(nginx_available):
+            os.unlink(nginx_available)
+
+        # Reload nginx to apply changes
+        subprocess.run(['systemctl', 'reload', 'nginx'], capture_output=True)
+
+        # Update customer status to provisioning
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE customers SET status = 'provisioning', error_message = NULL WHERE id = %s",
+            (customer_id,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # Queue new provisioning job
+        import sys
+        sys.path.insert(0, '/opt/shophosting/provisioning')
+        from enqueue_provisioning import ProvisioningQueue
+
+        queue = ProvisioningQueue(
+            redis_host=os.getenv('REDIS_HOST', 'localhost'),
+            redis_port=int(os.getenv('REDIS_PORT', 6379))
+        )
+
+        customer_data = {
+            'customer_id': customer.id,
+            'domain': customer.domain,
+            'platform': customer.platform,
+            'email': customer.email,
+            'web_port': customer.web_port,
+            'site_title': customer.company_name,
+            'memory_limit': os.getenv('DEFAULT_MEMORY_LIMIT', '1g'),
+            'cpu_limit': os.getenv('DEFAULT_CPU_LIMIT', '1.0')
+        }
+
+        job = queue.enqueue_customer(customer_data)
+
+        # Record the job
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO provisioning_jobs (customer_id, job_id, status)
+            VALUES (%s, %s, 'queued')
+        """, (customer_id, job.id))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        log_admin_action(admin.id, 'retry_provisioning', 'customer', customer_id,
+                        f'Retried provisioning for customer {customer.email}', request.remote_addr)
+        flash(f'Provisioning has been restarted for {customer.email}.', 'success')
+    except Exception as e:
+        flash(f'Failed to retry provisioning: {str(e)}', 'error')
+
+    return redirect(url_for('admin.customer_detail', customer_id=customer_id))
+
+
 @admin_bp.route('/customers/<int:customer_id>/reactivate', methods=['POST'])
 @admin_required
 def customer_reactivate(customer_id):

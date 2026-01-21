@@ -99,7 +99,19 @@ cd /opt/shophosting/docker/wordpress
 docker build -t shophosting/wordpress:latest .
 ```
 
-### 8. Install Systemd Services
+### 8. Configure Sudoers for Webapp
+
+The webapp user needs passwordless sudo access for certain operations (nginx reload, customer cleanup):
+
+```bash
+# Add sudoers entries for the webapp user
+echo 'agileweb ALL=(ALL) NOPASSWD: /usr/sbin/nginx -t, /usr/bin/systemctl reload nginx, /usr/bin/certbot' | sudo tee /etc/sudoers.d/shophosting-nginx
+echo 'agileweb ALL=(ALL) NOPASSWD: /usr/bin/rm -rf /var/customers/customer-*' | sudo tee /etc/sudoers.d/shophosting-cleanup
+sudo chmod 440 /etc/sudoers.d/shophosting-nginx /etc/sudoers.d/shophosting-cleanup
+sudo visudo -c  # Validate sudoers configuration
+```
+
+### 9. Install Systemd Services
 
 ```bash
 sudo cp /opt/shophosting/shophosting-webapp.service /etc/systemd/system/
@@ -109,7 +121,7 @@ sudo systemctl enable shophosting-webapp provisioning-worker
 sudo systemctl start shophosting-webapp provisioning-worker
 ```
 
-### 9. Configure Nginx
+### 10. Configure Nginx
 
 Create `/etc/nginx/sites-available/shophosting`:
 
@@ -205,7 +217,13 @@ ShopHosting.io includes a comprehensive admin panel for system monitoring and cu
 
 - **Dashboard**: Overview of customer stats, port usage, queue status, and quick action buttons
 - **Customer Management**: Create, edit, delete customers with automatic provisioning
-- **Provisioning Monitoring**: View queue status, failed jobs, and retry provisioning
+  - Quick "New Customer" button on all customer listing pages
+  - Detailed customer view with store credentials and activity logs
+  - Retry provisioning for failed customers with automatic cleanup
+- **Provisioning Monitoring**: View queue status, job history with real-time status updates
+  - Job status tracking: queued → started → finished/failed
+  - Expandable, prettified error logs (auto-formats JSON and stack traces)
+  - One-click retry for failed provisioning jobs
 - **System Health**: Service status, disk usage, backup status, port allocation
 - **Billing Overview**: MRR, subscription stats, recent invoices
 - **Log Viewer**: View webapp and worker logs directly from the admin panel
