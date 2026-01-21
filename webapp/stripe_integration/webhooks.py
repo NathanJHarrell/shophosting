@@ -8,7 +8,7 @@ from datetime import datetime
 import sys
 
 # Add provisioning module to path
-sys.path.insert(0, '/opt/shophosting.io/provisioning')
+sys.path.insert(0, '/opt/shophosting/provisioning')
 
 from models import Customer, PricingPlan, Subscription, Invoice, WebhookEvent
 from .config import get_stripe_config
