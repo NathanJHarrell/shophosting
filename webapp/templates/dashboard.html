@@ -1,0 +1,558 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - ShopHosting.io{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dashboard {
+        max-width: 900px;
+        margin: 0 auto;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .dashboard-header {
+        margin-bottom: 32px;
+    }
+
+    .dashboard-header h1 {
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--text-primary);
+    }
+
+    .dashboard-header p {
+        color: var(--text-tertiary);
+        margin-top: 6px;
+    }
+
+    /* Info Card */
+    .info-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        margin-bottom: 24px;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .info-card::before {
+        content: '';
+        position: absolute;
+        inset: -1px;
+        border-radius: inherit;
+        padding: 1px;
+        background: var(--gradient-border);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+    }
+
+    .info-card:hover::before {
+        opacity: 1;
+    }
+
+    .info-card:hover {
+        box-shadow: var(--shadow-glow);
+    }
+
+    .info-card-header {
+        padding: 20px 28px;
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .info-card-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .info-card-body {
+        padding: 8px 0;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 28px;
+        border-bottom: 1px solid var(--border-subtle);
+        transition: background 0.2s ease;
+    }
+
+    .info-row:last-child {
+        border-bottom: none;
+    }
+
+    .info-row:hover {
+        background: var(--bg-surface);
+    }
+
+    .info-label {
+        color: var(--text-secondary);
+        font-size: 0.925rem;
+        font-weight: 500;
+    }
+
+    .info-value {
+        color: var(--text-primary);
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+
+    /* Credentials Card - Success state */
+    .credentials-card {
+        background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(34, 197, 94, 0.03) 100%);
+        border-color: rgba(34, 197, 94, 0.2);
+    }
+
+    .credentials-card::before {
+        background: linear-gradient(135deg, rgba(34, 197, 94, 0.4) 0%, rgba(34, 197, 94, 0.2) 100%);
+    }
+
+    .credentials-card .info-card-header {
+        border-bottom-color: rgba(34, 197, 94, 0.15);
+    }
+
+    .credentials-card .info-card-title {
+        color: var(--success);
+    }
+
+    .credentials-card .info-row {
+        border-bottom-color: rgba(34, 197, 94, 0.1);
+    }
+
+    .credential-item {
+        padding: 20px 28px;
+        border-bottom: 1px solid rgba(34, 197, 94, 0.1);
+    }
+
+    .credential-item:last-child {
+        border-bottom: none;
+    }
+
+    .credential-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--success);
+        margin-bottom: 8px;
+    }
+
+    .credential-value {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.95rem;
+        color: var(--text-primary);
+        background: var(--bg-deep);
+        padding: 12px 16px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-subtle);
+        word-break: break-all;
+    }
+
+    .credential-value a {
+        color: var(--accent-cyan);
+        text-decoration: none;
+        transition: color 0.2s ease;
+    }
+
+    .credential-value a:hover {
+        color: var(--accent-blue);
+        text-decoration: underline;
+    }
+
+    .security-notice {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 16px 28px;
+        background: var(--warning-muted);
+        border-top: 1px solid rgba(245, 158, 11, 0.15);
+        color: var(--warning);
+        font-size: 0.9rem;
+    }
+
+    .security-notice strong {
+        flex-shrink: 0;
+    }
+
+    /* Quick Links */
+    .quick-links {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+        flex-wrap: wrap;
+    }
+
+    .quick-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 20px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 0.925rem;
+        transition: all 0.2s ease;
+    }
+
+    .quick-link:hover {
+        background: var(--bg-surface);
+        border-color: var(--border-accent);
+        color: var(--text-primary);
+        box-shadow: var(--shadow-sm);
+    }
+
+    /* Provisioning State */
+    .provisioning-card {
+        text-align: center;
+        padding: 60px 40px;
+    }
+
+    .spinner-container {
+        margin-bottom: 24px;
+    }
+
+    .spinner {
+        width: 56px;
+        height: 56px;
+        border: 3px solid var(--bg-surface);
+        border-top-color: var(--accent-cyan);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto;
+        position: relative;
+    }
+
+    .spinner::before {
+        content: '';
+        position: absolute;
+        inset: -8px;
+        border: 2px solid transparent;
+        border-top-color: rgba(0, 136, 255, 0.3);
+        border-radius: 50%;
+        animation: spin 1.5s linear infinite reverse;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .provisioning-card h2 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 12px;
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .provisioning-card p {
+        color: var(--text-secondary);
+        font-size: 1rem;
+        margin-bottom: 8px;
+    }
+
+    .auto-refresh-notice {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+    }
+
+    /* Progress steps */
+    .progress-steps {
+        display: flex;
+        justify-content: center;
+        gap: 32px;
+        margin-top: 32px;
+        padding-top: 32px;
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .progress-step {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--text-muted);
+        font-size: 0.875rem;
+    }
+
+    .progress-step.active {
+        color: var(--accent-cyan);
+    }
+
+    .progress-step.completed {
+        color: var(--success);
+    }
+
+    .step-indicator {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid currentColor;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .progress-step.active .step-indicator {
+        background: var(--accent-cyan);
+        border-color: var(--accent-cyan);
+        color: var(--bg-deepest);
+        box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+    }
+
+    .progress-step.completed .step-indicator {
+        background: var(--success);
+        border-color: var(--success);
+        color: var(--bg-deepest);
+    }
+
+    /* Error State */
+    .error-card {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(239, 68, 68, 0.03) 100%);
+        border-color: rgba(239, 68, 68, 0.2);
+    }
+
+    .error-card::before {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.4) 0%, rgba(239, 68, 68, 0.2) 100%);
+    }
+
+    .error-card .info-card-header {
+        border-bottom-color: rgba(239, 68, 68, 0.15);
+    }
+
+    .error-card .info-card-title {
+        color: var(--error);
+    }
+
+    .error-content {
+        padding: 28px;
+    }
+
+    .error-content p {
+        color: var(--text-secondary);
+        margin-bottom: 16px;
+    }
+
+    .error-message {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.875rem;
+        color: var(--error);
+        background: var(--bg-deep);
+        padding: 16px;
+        border-radius: var(--radius-md);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        margin-bottom: 20px;
+    }
+
+    .error-content a {
+        color: var(--accent-cyan);
+        text-decoration: none;
+    }
+
+    .error-content a:hover {
+        text-decoration: underline;
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+        .info-row {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 6px;
+        }
+
+        .progress-steps {
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .quick-links {
+            flex-direction: column;
+        }
+
+        .quick-link {
+            justify-content: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="dashboard">
+        <div class="dashboard-header">
+            <h1>Dashboard</h1>
+            <p>Manage your store and view credentials</p>
+        </div>
+
+        <!-- Store Information Card -->
+        <div class="info-card">
+            <div class="info-card-header">
+                <h2 class="info-card-title">Store Information</h2>
+            </div>
+            <div class="info-card-body">
+                <div class="info-row">
+                    <span class="info-label">Company</span>
+                    <span class="info-value">{{ customer.company_name }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Domain</span>
+                    <span class="info-value">{{ customer.domain }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Platform</span>
+                    <span class="info-value">{{ customer.platform | title }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Status</span>
+                    <span class="badge badge-{{ customer.status }}">{{ customer.status | title }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Provisioning In Progress -->
+        {% if customer.status == 'pending' or customer.status == 'provisioning' %}
+        <div class="info-card">
+            <div class="provisioning-card">
+                <div class="spinner-container">
+                    <div class="spinner"></div>
+                </div>
+                <h2>Setting Up Your Store</h2>
+                <p>Your store is being provisioned. This usually takes 2-5 minutes.</p>
+                <p class="auto-refresh-notice">This page will automatically refresh when ready.</p>
+
+                <div class="progress-steps">
+                    <div class="progress-step completed">
+                        <span class="step-indicator">1</span>
+                        <span>Account Created</span>
+                    </div>
+                    <div class="progress-step active">
+                        <span class="step-indicator">2</span>
+                        <span>Deploying Container</span>
+                    </div>
+                    <div class="progress-step">
+                        <span class="step-indicator">3</span>
+                        <span>Ready</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Provisioning Failed -->
+        {% elif customer.status == 'failed' %}
+        <div class="info-card error-card">
+            <div class="info-card-header">
+                <h2 class="info-card-title">Provisioning Failed</h2>
+            </div>
+            <div class="error-content">
+                <p>Unfortunately, there was an error setting up your store.</p>
+                {% if customer.error_message %}
+                <div class="error-message">{{ customer.error_message }}</div>
+                {% endif %}
+                <p>Please contact support at <a href="mailto:support@shophosting.io">support@shophosting.io</a> for assistance.</p>
+            </div>
+        </div>
+
+        <!-- Store Active - Show Credentials -->
+        {% elif customer.status == 'active' and credentials %}
+        <div class="info-card credentials-card">
+            <div class="info-card-header">
+                <h2 class="info-card-title">Your Store is Ready</h2>
+            </div>
+            <div class="credential-item">
+                <div class="credential-label">Store URL</div>
+                <div class="credential-value">
+                    <a href="{{ credentials.store_url }}" target="_blank">{{ credentials.store_url }}</a>
+                </div>
+            </div>
+            <div class="credential-item">
+                <div class="credential-label">Admin Panel</div>
+                <div class="credential-value">
+                    <a href="{{ credentials.admin_url }}" target="_blank">{{ credentials.admin_url }}</a>
+                </div>
+            </div>
+            <div class="credential-item">
+                <div class="credential-label">Admin Username</div>
+                <div class="credential-value">{{ credentials.admin_user }}</div>
+            </div>
+            <div class="credential-item">
+                <div class="credential-label">Admin Password</div>
+                <div class="credential-value">{{ credentials.admin_password }}</div>
+            </div>
+            <div class="security-notice">
+                <strong>Important:</strong>
+                <span>Please change your admin password after your first login for security.</span>
+            </div>
+        </div>
+
+        <div class="quick-links">
+            <a href="{{ credentials.store_url }}" target="_blank" class="quick-link">
+                <span>View Store</span>
+            </a>
+            <a href="{{ credentials.admin_url }}" target="_blank" class="quick-link">
+                <span>Admin Panel</span>
+            </a>
+        </div>
+
+        <!-- Store Suspended -->
+        {% elif customer.status == 'suspended' %}
+        <div class="info-card error-card">
+            <div class="info-card-header">
+                <h2 class="info-card-title">Account Suspended</h2>
+            </div>
+            <div class="error-content">
+                <p>Your account has been suspended. Please contact support for more information.</p>
+                <p>Email: <a href="mailto:support@shophosting.io">support@shophosting.io</a></p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if customer.status == 'pending' or customer.status == 'provisioning' %}
+<script>
+    // Auto-refresh page every 15 seconds while provisioning
+    setTimeout(function() {
+        location.reload();
+    }, 15000);
+
+    // Also check status via API more frequently
+    function checkStatus() {
+        fetch('{{ url_for("api_status") }}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'active' || data.status === 'failed') {
+                    location.reload();
+                }
+            })
+            .catch(err => console.error('Status check failed:', err));
+    }
+
+    // Check status every 5 seconds
+    setInterval(checkStatus, 5000);
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,50 @@
+# Environment and secrets
+.env
+.htpasswd
+*.pem
+*.key
+
+# Virtual environments
+venv/
+webapp/venv/
+provisioning/venv/
+
+# Logs and credentials
+logs/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.maybe
+
+# Internal documentation
+DEVELOPMENT_GUIDE.md
+SYSTEM_GUIDE.md
+
+# Test files
+test_*.py
+run_e2e_test.py
+quick_provision.py
+
+# Docker environment files
+docker/wordpress/.env

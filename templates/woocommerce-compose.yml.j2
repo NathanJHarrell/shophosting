@@ -1,0 +1,81 @@
+version: "3.8"
+
+{# Unique, stable prefix per customer #}
+{% set container_prefix = "customer-" ~ customer_id %}
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: {{ container_prefix }}-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: "{{ db_name }}"
+      MYSQL_USER: "{{ db_user }}"
+      MYSQL_PASSWORD: "{{ db_password }}"
+      MYSQL_ROOT_PASSWORD: "{{ db_password }}"
+    volumes:
+      - "/var/customers/{{ container_prefix }}/mysql:/var/lib/mysql"
+    networks:
+      - {{ container_prefix }}-network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p{{ db_password }} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  redis:
+    image: redis:7-alpine
+    container_name: {{ container_prefix }}-redis
+    restart: unless-stopped
+    volumes:
+      - "/var/customers/{{ container_prefix }}/redis:/data"
+    networks:
+      - {{ container_prefix }}-network
+
+  wordpress:
+    image: shophosting/wordpress:latest
+    container_name: {{ container_prefix }}-web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "{{ web_port }}:80"
+    environment:
+      WORDPRESS_DB_HOST: "db:3306"
+      WORDPRESS_DB_USER: "{{ db_user }}"
+      WORDPRESS_DB_PASSWORD: "{{ db_password }}"
+      WORDPRESS_DB_NAME: "{{ db_name }}"
+      WP_HOME: "https://{{ domain }}"
+      WP_SITEURL: "https://{{ domain }}"
+      WP_REDIS_HOST: "redis"
+      WP_REDIS_PORT: "6379"
+    volumes:
+      - "/var/customers/{{ container_prefix }}/wordpress:/var/www/html"
+    networks:
+      - {{ container_prefix }}-network
+    mem_limit: "{{ memory_limit }}"
+    cpus: "{{ cpu_limit }}"
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: {{ container_prefix }}-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: db
+      PMA_USER: "{{ db_user }}"
+      PMA_PASSWORD: "{{ db_password }}"
+    ports:
+      - "{{ (web_port | int) + 1000 }}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - {{ container_prefix }}-network
+
+networks:
+  {{ container_prefix }}-network:
+    name: {{ container_prefix }}-network

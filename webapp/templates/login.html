@@ -1,0 +1,238 @@
+{% extends "base.html" %}
+
+{% block title %}Login - ShopHosting.io{% endblock %}
+
+{% block extra_css %}
+<style>
+    .auth-page {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: calc(100vh - 300px);
+        padding: 40px 0;
+    }
+
+    .auth-container {
+        width: 100%;
+        max-width: 420px;
+    }
+
+    .auth-header {
+        text-align: center;
+        margin-bottom: 40px;
+    }
+
+    .auth-header h1 {
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin-bottom: 12px;
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .auth-header p {
+        color: var(--text-secondary);
+        font-size: 1rem;
+    }
+
+    .auth-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-xl);
+        padding: 36px;
+        position: relative;
+    }
+
+    .auth-card::before {
+        content: '';
+        position: absolute;
+        inset: -1px;
+        border-radius: inherit;
+        padding: 1px;
+        background: var(--gradient-border);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        opacity: 0.5;
+        pointer-events: none;
+    }
+
+    /* Glow effect behind card */
+    .auth-card-wrapper {
+        position: relative;
+    }
+
+    .auth-card-wrapper::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 120%;
+        height: 120%;
+        background: radial-gradient(ellipse at center, rgba(0, 136, 255, 0.08) 0%, transparent 60%);
+        pointer-events: none;
+        z-index: -1;
+    }
+
+    .auth-form .form-group {
+        margin-bottom: 20px;
+    }
+
+    .auth-form .form-group:last-of-type {
+        margin-bottom: 28px;
+    }
+
+    .auth-form label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+
+    .auth-form .form-control {
+        width: 100%;
+        padding: 14px 16px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        font-size: 1rem;
+        color: var(--text-primary);
+        transition: all 0.2s ease;
+    }
+
+    .auth-form .form-control::placeholder {
+        color: var(--text-muted);
+    }
+
+    .auth-form .form-control:hover {
+        border-color: var(--border-accent);
+    }
+
+    .auth-form .form-control:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+        box-shadow: 0 0 0 3px rgba(0, 136, 255, 0.12);
+        background: var(--bg-elevated);
+    }
+
+    .auth-form .btn-primary {
+        width: 100%;
+        padding: 16px 24px;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+
+    .auth-footer {
+        text-align: center;
+        margin-top: 28px;
+        padding-top: 28px;
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .auth-footer p {
+        color: var(--text-tertiary);
+        font-size: 0.925rem;
+    }
+
+    .auth-footer a {
+        color: var(--accent-cyan);
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.2s ease;
+    }
+
+    .auth-footer a:hover {
+        color: var(--accent-blue);
+    }
+
+    /* Divider */
+    .auth-divider {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin: 24px 0;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+    }
+
+    .auth-divider::before,
+    .auth-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border-subtle);
+    }
+
+    /* Animation */
+    .auth-container {
+        animation: fadeInUp 0.5s ease-out;
+    }
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+        .auth-card {
+            padding: 28px 24px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-page">
+    <div class="auth-container">
+        <div class="auth-header">
+            <h1>Welcome Back</h1>
+            <p>Log in to manage your store</p>
+        </div>
+
+        <div class="auth-card-wrapper">
+            <div class="auth-card">
+                <form method="POST" action="{{ url_for('login') }}" novalidate class="auth-form">
+                    {{ form.hidden_tag() }}
+
+                    <div class="form-group">
+                        {{ form.email.label }}
+                        {{ form.email(class="form-control", placeholder="you@example.com") }}
+                        {% for error in form.email.errors %}
+                            <div class="form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="form-group">
+                        {{ form.password.label }}
+                        {{ form.password(class="form-control", placeholder="Enter your password") }}
+                        {% for error in form.password.errors %}
+                            <div class="form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        {{ form.submit.label.text }}
+                    </button>
+                </form>
+
+                <div class="auth-footer">
+                    <p>Don't have an account? <a href="{{ url_for('signup') }}">Create one</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

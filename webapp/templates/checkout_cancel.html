@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Payment Cancelled - ShopHosting.io{% endblock %}
+
+{% block extra_css %}
+<style>
+    .cancel-page {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: calc(100vh - 300px);
+        padding: 40px 0;
+    }
+
+    .cancel-container {
+        max-width: 500px;
+        text-align: center;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    .cancel-icon {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 24px;
+        background: var(--warning-muted);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .cancel-icon svg {
+        width: 40px;
+        height: 40px;
+        color: var(--warning);
+    }
+
+    .cancel-container h1 {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+    }
+
+    .cancel-container p {
+        color: var(--text-secondary);
+        font-size: 1rem;
+        margin-bottom: 8px;
+    }
+
+    .cancel-container .subtext {
+        color: var(--text-tertiary);
+        font-size: 0.9rem;
+        margin-bottom: 32px;
+    }
+
+    .cancel-actions {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .cancel-actions .btn {
+        width: 100%;
+    }
+
+    .help-text {
+        margin-top: 32px;
+        padding-top: 24px;
+        border-top: 1px solid var(--border-subtle);
+        color: var(--text-tertiary);
+        font-size: 0.9rem;
+    }
+
+    .help-text a {
+        color: var(--accent-cyan);
+        text-decoration: none;
+    }
+
+    .help-text a:hover {
+        text-decoration: underline;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cancel-page">
+    <div class="cancel-container">
+        <div class="cancel-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </div>
+
+        <h1>Payment Cancelled</h1>
+        <p>Your payment was not completed.</p>
+        <p class="subtext">No charges have been made to your account. You can try again when you're ready.</p>
+
+        <div class="cancel-actions">
+            <a href="{{ url_for('pricing') }}" class="btn btn-primary">View Plans</a>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">Return Home</a>
+        </div>
+
+        <div class="help-text">
+            <p>Having trouble? <a href="mailto:support@shophosting.io">Contact our support team</a> for assistance.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

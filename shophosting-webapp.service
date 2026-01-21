@@ -1,0 +1,26 @@
+[Unit]
+Description=ShopHosting.io Flask Web Application
+After=network.target mysql.service redis.service
+Wants=mysql.service redis.service
+
+[Service]
+Type=simple
+User=agileweb
+Group=agileweb
+WorkingDirectory=/opt/shophosting/webapp
+Environment="PATH=/opt/shophosting/webapp/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/shophosting/.env
+ExecStart=/opt/shophosting/webapp/venv/bin/gunicorn --workers 4 --bind 127.0.0.1:5000 app:app
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=append:/opt/shophosting/logs/webapp.log
+StandardError=append:/opt/shophosting/logs/webapp.log
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

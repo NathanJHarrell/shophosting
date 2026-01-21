@@ -1,0 +1,26 @@
+[Unit]
+Description=ShopHosting.io Provisioning Worker
+After=network.target redis.service mysql.service
+Wants=redis.service mysql.service
+
+[Service]
+Type=simple
+User=agileweb
+Group=agileweb
+WorkingDirectory=/opt/shophosting/provisioning
+Environment="PATH=/opt/shophosting/provisioning/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/shophosting/.env
+ExecStart=/opt/shophosting/provisioning/venv/bin/python provisioning_worker.py
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=append:/opt/shophosting/logs/provisioning_worker.log
+StandardError=append:/opt/shophosting/logs/provisioning_worker.log
+
+# Security hardening
+NoNewPrivileges=false
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

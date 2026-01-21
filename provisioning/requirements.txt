@@ -1,0 +1,7 @@
+# ShopHosting.io Provisioning Worker Dependencies
+redis==5.0.1
+rq==1.16.0
+Jinja2==3.1.2
+PyYAML==6.0.1
+mysql-connector-python==8.2.0
+python-dotenv==1.0.0

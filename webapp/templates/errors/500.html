@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Server Error - ShopHosting.io{% endblock %}
+
+{% block extra_css %}
+<style>
+    .error-page {
+        text-align: center;
+        padding: 80px 20px;
+    }
+
+    .error-code {
+        font-size: 8rem;
+        font-weight: 700;
+        color: #fca5a5;
+        line-height: 1;
+        margin-bottom: 20px;
+    }
+
+    .error-page h1 {
+        font-size: 2rem;
+        color: #111827;
+        margin-bottom: 10px;
+    }
+
+    .error-page p {
+        color: #6b7280;
+        margin-bottom: 30px;
+    }
+
+    .support-link {
+        margin-top: 20px;
+        font-size: 0.875rem;
+    }
+
+    .support-link a {
+        color: #2563eb;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="error-page">
+        <div class="error-code">500</div>
+        <h1>Something Went Wrong</h1>
+        <p>We're experiencing technical difficulties. Please try again later.</p>
+        <a href="{{ url_for('index') }}" class="btn btn-primary">Go Home</a>
+        <p class="support-link">
+            If this problem persists, contact <a href="mailto:support@shophosting.io">support@shophosting.io</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

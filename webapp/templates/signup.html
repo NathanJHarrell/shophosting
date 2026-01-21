@@ -1,0 +1,464 @@
+{% extends "base.html" %}
+
+{% block title %}Sign Up - ShopHosting.io{% endblock %}
+
+{% block extra_css %}
+<style>
+    .auth-page {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: calc(100vh - 300px);
+        padding: 40px 0;
+    }
+
+    .auth-container {
+        width: 100%;
+        max-width: 500px;
+    }
+
+    .auth-header {
+        text-align: center;
+        margin-bottom: 40px;
+    }
+
+    .auth-header h1 {
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin-bottom: 12px;
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .auth-header p {
+        color: var(--text-secondary);
+        font-size: 1rem;
+    }
+
+    .auth-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-xl);
+        padding: 36px;
+        position: relative;
+    }
+
+    .auth-card::before {
+        content: '';
+        position: absolute;
+        inset: -1px;
+        border-radius: inherit;
+        padding: 1px;
+        background: var(--gradient-border);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        opacity: 0.5;
+        pointer-events: none;
+    }
+
+    /* Glow effect behind card */
+    .auth-card-wrapper {
+        position: relative;
+    }
+
+    .auth-card-wrapper::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 120%;
+        height: 120%;
+        background: radial-gradient(ellipse at center, rgba(0, 136, 255, 0.08) 0%, transparent 60%);
+        pointer-events: none;
+        z-index: -1;
+    }
+
+    .auth-form .form-group {
+        margin-bottom: 20px;
+    }
+
+    .auth-form .form-group:last-of-type {
+        margin-bottom: 28px;
+    }
+
+    .auth-form label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+
+    .auth-form .form-control {
+        width: 100%;
+        padding: 14px 16px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        font-size: 1rem;
+        color: var(--text-primary);
+        font-family: inherit;
+        transition: all 0.2s ease;
+    }
+
+    .auth-form .form-control::placeholder {
+        color: var(--text-muted);
+    }
+
+    .auth-form .form-control:hover {
+        border-color: var(--border-accent);
+    }
+
+    .auth-form .form-control:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+        box-shadow: 0 0 0 3px rgba(0, 136, 255, 0.12);
+        background: var(--bg-elevated);
+    }
+
+    .auth-form .btn-primary {
+        width: 100%;
+        padding: 16px 24px;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+
+    .auth-form .btn-primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+
+    /* Platform selection */
+    .platform-selector {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+
+    .platform-option {
+        position: relative;
+    }
+
+    .platform-option input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .platform-option label {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 16px;
+        background: var(--bg-surface);
+        border: 2px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        cursor: pointer;
+        transition: all 0.25s ease;
+        margin-bottom: 0;
+    }
+
+    .platform-option label:hover {
+        border-color: var(--border-accent);
+        background: var(--bg-hover);
+    }
+
+    .platform-option input:checked + label {
+        border-color: var(--accent-blue);
+        background: var(--info-muted);
+        box-shadow: 0 0 20px rgba(0, 136, 255, 0.15);
+    }
+
+    .platform-option label strong {
+        display: block;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+    }
+
+    .platform-option label span {
+        font-size: 0.85rem;
+        color: var(--text-tertiary);
+        font-weight: 400;
+    }
+
+    .platform-option input:checked + label strong {
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    /* Domain help text */
+    .form-help {
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        margin-top: 6px;
+    }
+
+    /* Capacity warning */
+    .capacity-warning {
+        background: var(--warning-muted);
+        border: 1px solid rgba(245, 158, 11, 0.25);
+        border-radius: var(--radius-md);
+        padding: 20px;
+        text-align: center;
+        margin-bottom: 24px;
+    }
+
+    .capacity-warning strong {
+        display: block;
+        color: var(--warning);
+        font-size: 1rem;
+        margin-bottom: 6px;
+    }
+
+    .capacity-warning p {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        margin: 0;
+    }
+
+    .auth-footer {
+        text-align: center;
+        margin-top: 28px;
+        padding-top: 28px;
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .auth-footer p {
+        color: var(--text-tertiary);
+        font-size: 0.925rem;
+    }
+
+    .auth-footer a {
+        color: var(--accent-cyan);
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.2s ease;
+    }
+
+    .auth-footer a:hover {
+        color: var(--accent-blue);
+    }
+
+    /* Row for password fields */
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+
+    @media (max-width: 540px) {
+        .form-row {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* Selected Plan Display */
+    .selected-plan {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 20px;
+        background: var(--info-muted);
+        border: 1px solid var(--border-accent);
+        border-radius: var(--radius-md);
+        margin-bottom: 24px;
+    }
+
+    .plan-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .plan-badge {
+        padding: 4px 10px;
+        background: var(--bg-surface);
+        border-radius: 100px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--text-tertiary);
+    }
+
+    .plan-info strong {
+        color: var(--text-primary);
+        font-size: 1rem;
+    }
+
+    .plan-price-info {
+        text-align: right;
+    }
+
+    .plan-price-info .price {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .plan-price-info .period {
+        color: var(--text-tertiary);
+        font-size: 0.9rem;
+    }
+
+    /* Animation */
+    .auth-container {
+        animation: fadeInUp 0.5s ease-out;
+    }
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Responsive */
+    @media (max-width: 540px) {
+        .auth-card {
+            padding: 28px 20px;
+        }
+
+        .platform-selector {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-page">
+    <div class="auth-container">
+        <div class="auth-header">
+            <h1>Create Your Store</h1>
+            <p>Get your ecommerce store up and running in minutes</p>
+        </div>
+
+        <div class="auth-card-wrapper">
+            <div class="auth-card">
+                {% if plan %}
+                <div class="selected-plan">
+                    <div class="plan-info">
+                        <span class="plan-badge">{{ plan.platform | title }}</span>
+                        <strong>{{ plan.name }}</strong>
+                    </div>
+                    <div class="plan-price-info">
+                        <span class="price">${{ plan.price_monthly | int }}</span><span class="period">/mo</span>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if not ports_available %}
+                <div class="capacity-warning">
+                    <strong>We're at capacity</strong>
+                    <p>Please check back later or contact us for availability.</p>
+                </div>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('signup', plan_slug=plan.slug) if plan else url_for('signup') }}" novalidate class="auth-form">
+                    {{ form.hidden_tag() }}
+                    {{ form.plan_slug }}
+
+                    <div class="form-group">
+                        {{ form.email.label }}
+                        {{ form.email(class="form-control", placeholder="you@example.com") }}
+                        {% for error in form.email.errors %}
+                            <div class="form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            {{ form.password.label }}
+                            {{ form.password(class="form-control", placeholder="Min 8 characters") }}
+                            {% for error in form.password.errors %}
+                                <div class="form-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.confirm_password.label }}
+                            {{ form.confirm_password(class="form-control", placeholder="Confirm password") }}
+                            {% for error in form.confirm_password.errors %}
+                                <div class="form-error">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        {{ form.company_name.label }}
+                        {{ form.company_name(class="form-control", placeholder="Your Store Name") }}
+                        {% for error in form.company_name.errors %}
+                            <div class="form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="form-group">
+                        {{ form.domain.label }}
+                        {{ form.domain(class="form-control", placeholder="yourdomain.com") }}
+                        <div class="form-help">
+                            Enter your domain name. Make sure to point your DNS to our servers.
+                        </div>
+                        {% for error in form.domain.errors %}
+                            <div class="form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    {% if not plan %}
+                    <div class="form-group">
+                        <label>Platform</label>
+                        <div class="platform-selector">
+                            <div class="platform-option">
+                                <input type="radio" id="platform-woo" name="platform" value="woocommerce"
+                                       {% if form.platform.data == 'woocommerce' or not form.platform.data %}checked{% endif %}>
+                                <label for="platform-woo">
+                                    <strong>WooCommerce</strong>
+                                    <span>WordPress-powered</span>
+                                </label>
+                            </div>
+                            <div class="platform-option">
+                                <input type="radio" id="platform-magento" name="platform" value="magento"
+                                       {% if form.platform.data == 'magento' %}checked{% endif %}>
+                                <label for="platform-magento">
+                                    <strong>Magento</strong>
+                                    <span>Enterprise-grade</span>
+                                </label>
+                            </div>
+                        </div>
+                        {% for error in form.platform.errors %}
+                            <div class="form-error">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <input type="hidden" name="platform" value="{{ plan.platform }}">
+                    {% endif %}
+
+                    <button type="submit" class="btn btn-primary" {% if not ports_available %}disabled{% endif %}>
+                        {{ form.submit.label.text }}
+                    </button>
+                </form>
+
+                <div class="auth-footer">
+                    <p>Already have an account? <a href="{{ url_for('login') }}">Log in</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

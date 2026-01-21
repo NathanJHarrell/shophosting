@@ -1,0 +1,161 @@
+vcl 4.1;
+
+import std;
+
+backend default {
+    .host = "web";
+    .port = "8080";
+    .first_byte_timeout = 600s;
+    .probe = {
+        .url = "/health_check.php";
+        .timeout = 2s;
+        .interval = 5s;
+        .window = 10;
+        .threshold = 5;
+    }
+}
+
+acl purge {
+    "localhost";
+    "web";
+    "127.0.0.1";
+    "::1";
+}
+
+sub vcl_recv {
+    # Remove empty query string parameters
+    if (req.url ~ "\?$") {
+        set req.url = regsub(req.url, "\?$", "");
+    }
+
+    # Bypass cache for admin, downloader, and API
+    if (req.url ~ "^/(pub/)?(admin|downloader|api|graphql)") {
+        return (pass);
+    }
+
+    # Purge request
+    if (req.method == "PURGE") {
+        if (client.ip !~ purge) {
+            return (synth(405, "Method not allowed"));
+        }
+        if (!req.http.X-Magento-Tags-Pattern && !req.http.X-Pool) {
+            return (synth(400, "X-Magento-Tags-Pattern or X-Pool header required"));
+        }
+        if (req.http.X-Magento-Tags-Pattern) {
+            ban("obj.http.X-Magento-Tags ~ " + req.http.X-Magento-Tags-Pattern);
+        }
+        if (req.http.X-Pool) {
+            ban("obj.http.X-Pool ~ " + req.http.X-Pool);
+        }
+        return (synth(200, "Purged"));
+    }
+
+    # BAN request
+    if (req.method == "BAN") {
+        if (client.ip !~ purge) {
+            return (synth(405, "Method not allowed"));
+        }
+        ban("obj.http.X-Magento-Tags ~ " + req.http.X-Magento-Tags-Pattern);
+        return (synth(200, "Banned"));
+    }
+
+    # Only cache GET and HEAD requests
+    if (req.method != "GET" && req.method != "HEAD") {
+        return (pass);
+    }
+
+    # Bypass cache for checkout and customer sections
+    if (req.url ~ "/checkout" || req.url ~ "/customer" || req.url ~ "/cart") {
+        return (pass);
+    }
+
+    # Normalize Accept-Encoding
+    if (req.http.Accept-Encoding) {
+        if (req.http.Accept-Encoding ~ "gzip") {
+            set req.http.Accept-Encoding = "gzip";
+        } elsif (req.http.Accept-Encoding ~ "deflate") {
+            set req.http.Accept-Encoding = "deflate";
+        } else {
+            unset req.http.Accept-Encoding;
+        }
+    }
+
+    # Remove cookies for static files
+    if (req.url ~ "^/pub/media/|^/pub/static/|^/static/|^/media/") {
+        unset req.http.Cookie;
+        return (hash);
+    }
+
+    return (hash);
+}
+
+sub vcl_hash {
+    hash_data(req.url);
+
+    if (req.http.host) {
+        hash_data(req.http.host);
+    } else {
+        hash_data(server.ip);
+    }
+
+    # Include store/currency in hash
+    if (req.http.cookie ~ "X-Magento-Vary=") {
+        hash_data(regsub(req.http.cookie, "^.*?X-Magento-Vary=([^;]+);*.*$", "\1"));
+    }
+
+    if (req.http.X-Forwarded-Proto) {
+        hash_data(req.http.X-Forwarded-Proto);
+    }
+
+    return (lookup);
+}
+
+sub vcl_backend_response {
+    # Enable grace mode
+    set beresp.grace = 3d;
+
+    # Cache static files for longer
+    if (bereq.url ~ "^/pub/static/|^/static/") {
+        unset beresp.http.Set-Cookie;
+        set beresp.ttl = 30d;
+    }
+
+    if (bereq.url ~ "^/pub/media/|^/media/") {
+        unset beresp.http.Set-Cookie;
+        set beresp.ttl = 7d;
+    }
+
+    # Don't cache responses with Set-Cookie
+    if (beresp.http.Set-Cookie) {
+        set beresp.ttl = 0s;
+        set beresp.uncacheable = true;
+        return (deliver);
+    }
+
+    # Cache pages
+    if (beresp.http.Cache-Control !~ "private" && beresp.status == 200) {
+        set beresp.ttl = 1h;
+    }
+
+    return (deliver);
+}
+
+sub vcl_deliver {
+    # Debug headers (remove in production)
+    if (obj.hits > 0) {
+        set resp.http.X-Cache = "HIT";
+        set resp.http.X-Cache-Hits = obj.hits;
+    } else {
+        set resp.http.X-Cache = "MISS";
+    }
+
+    # Remove internal headers
+    unset resp.http.X-Magento-Debug;
+    unset resp.http.X-Magento-Tags;
+    unset resp.http.X-Powered-By;
+    unset resp.http.Server;
+    unset resp.http.X-Varnish;
+    unset resp.http.Via;
+
+    return (deliver);
+}

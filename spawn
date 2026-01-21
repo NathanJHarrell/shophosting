@@ -1,0 +1,15 @@
+#!/bin/bash
+# ShopHosting.io Container Spawner
+# Run this script to interactively spawn WooCommerce or Magento containers
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLI_DIR="$SCRIPT_DIR/cli"
+PROVISIONING_DIR="$SCRIPT_DIR/provisioning"
+
+# Check if we're using a virtual environment
+if [ -d "$PROVISIONING_DIR/venv" ]; then
+    source "$PROVISIONING_DIR/venv/bin/activate"
+fi
+
+# Run the spawn script
+python3 "$CLI_DIR/spawn.py" "$@"

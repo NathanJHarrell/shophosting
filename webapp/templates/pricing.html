@@ -1,0 +1,475 @@
+{% extends "base.html" %}
+
+{% block title %}Pricing - ShopHosting.io{% endblock %}
+
+{% block extra_css %}
+<style>
+    .pricing-page {
+        padding: 40px 0 80px;
+    }
+
+    .pricing-header {
+        text-align: center;
+        margin-bottom: 48px;
+    }
+
+    .pricing-header h1 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        margin-bottom: 16px;
+        background: var(--gradient-primary);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .pricing-header p {
+        color: var(--text-secondary);
+        font-size: 1.1rem;
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    /* Platform Tabs */
+    .platform-tabs {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        margin-bottom: 48px;
+    }
+
+    .platform-tab {
+        padding: 14px 32px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        color: var(--text-secondary);
+        font-weight: 600;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.25s ease;
+    }
+
+    .platform-tab:hover {
+        border-color: var(--border-accent);
+        color: var(--text-primary);
+    }
+
+    .platform-tab.active {
+        background: var(--gradient-primary);
+        color: var(--bg-deepest);
+        border-color: transparent;
+        box-shadow: var(--shadow-glow);
+    }
+
+    /* Plan Sections */
+    .plan-section {
+        display: none;
+    }
+
+    .plan-section.active {
+        display: block;
+    }
+
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 24px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .section-title::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border-subtle);
+    }
+
+    /* Plans Grid */
+    .plans-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+        margin-bottom: 48px;
+    }
+
+    @media (max-width: 1024px) {
+        .plans-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 640px) {
+        .plans-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* Plan Card */
+    .plan-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-xl);
+        padding: 32px;
+        position: relative;
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .plan-card::before {
+        content: '';
+        position: absolute;
+        inset: -1px;
+        border-radius: inherit;
+        padding: 1px;
+        background: var(--gradient-border);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+    }
+
+    .plan-card:hover::before {
+        opacity: 1;
+    }
+
+    .plan-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-glow);
+    }
+
+    .plan-card.featured {
+        border-color: var(--accent-blue);
+        background: linear-gradient(180deg, rgba(0, 136, 255, 0.08) 0%, var(--bg-elevated) 50%);
+    }
+
+    .plan-card.featured::before {
+        opacity: 1;
+    }
+
+    .featured-badge {
+        position: absolute;
+        top: -12px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--gradient-primary);
+        color: var(--bg-deepest);
+        padding: 6px 16px;
+        border-radius: 100px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .plan-name {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 8px;
+    }
+
+    .plan-stores {
+        color: var(--text-tertiary);
+        font-size: 0.9rem;
+        margin-bottom: 20px;
+    }
+
+    .plan-price {
+        margin-bottom: 24px;
+    }
+
+    .price-amount {
+        font-size: 3rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1;
+    }
+
+    .price-amount .currency {
+        font-size: 1.5rem;
+        vertical-align: top;
+        color: var(--text-secondary);
+    }
+
+    .price-period {
+        color: var(--text-tertiary);
+        font-size: 0.9rem;
+        margin-top: 4px;
+    }
+
+    .plan-features {
+        list-style: none;
+        margin-bottom: 28px;
+        flex: 1;
+    }
+
+    .plan-features li {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 8px 0;
+        color: var(--text-secondary);
+        font-size: 0.925rem;
+    }
+
+    .plan-features li::before {
+        content: '';
+        width: 18px;
+        height: 18px;
+        flex-shrink: 0;
+        margin-top: 2px;
+        background: var(--success);
+        -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E") center/contain no-repeat;
+        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='3'%3E%3Cpath d='M5 13l4 4L19 7'/%3E%3C/svg%3E") center/contain no-repeat;
+    }
+
+    .plan-features li.unavailable {
+        color: var(--text-muted);
+    }
+
+    .plan-features li.unavailable::before {
+        background: var(--text-muted);
+        -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='M18 6L6 18M6 6l12 12'/%3E%3C/svg%3E") center/contain no-repeat;
+        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='M18 6L6 18M6 6l12 12'/%3E%3C/svg%3E") center/contain no-repeat;
+    }
+
+    .plan-cta {
+        width: 100%;
+    }
+
+    .plan-card.featured .plan-cta {
+        box-shadow: var(--shadow-glow);
+    }
+
+    /* Resource specs */
+    .plan-resources {
+        display: flex;
+        gap: 16px;
+        padding-top: 16px;
+        margin-top: 16px;
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .resource-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-tertiary);
+        font-size: 0.8rem;
+    }
+
+    .resource-item strong {
+        color: var(--text-secondary);
+    }
+
+    /* FAQ / Info section */
+    .pricing-info {
+        max-width: 800px;
+        margin: 60px auto 0;
+        text-align: center;
+    }
+
+    .pricing-info h3 {
+        font-size: 1.25rem;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+    }
+
+    .pricing-info p {
+        color: var(--text-secondary);
+        line-height: 1.7;
+    }
+
+    .pricing-info a {
+        color: var(--accent-cyan);
+        text-decoration: none;
+    }
+
+    .pricing-info a:hover {
+        text-decoration: underline;
+    }
+
+    /* Animation */
+    .pricing-page {
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="pricing-page">
+        <div class="pricing-header">
+            <h1>Choose Your Plan</h1>
+            <p>Powerful managed hosting for your e-commerce store. No hidden fees, cancel anytime.</p>
+        </div>
+
+        <!-- Platform Tabs -->
+        <div class="platform-tabs">
+            <button class="platform-tab active" data-platform="woocommerce">WordPress / WooCommerce</button>
+            <button class="platform-tab" data-platform="magento">Magento</button>
+        </div>
+
+        <!-- WordPress Plans -->
+        <div class="plan-section active" data-platform="woocommerce">
+            <h2 class="section-title">Single-Store Plans</h2>
+            <div class="plans-grid">
+                {% for plan in plans if plan.platform == 'woocommerce' and plan.tier_type == 'single' %}
+                <div class="plan-card {% if plan.slug == 'wp-commerce-pro' %}featured{% endif %}">
+                    {% if plan.slug == 'wp-commerce-pro' %}
+                    <div class="featured-badge">Most Popular</div>
+                    {% endif %}
+                    <h3 class="plan-name">{{ plan.name }}</h3>
+                    <p class="plan-stores">{{ plan.store_limit }} store{% if plan.store_limit > 1 %}s{% endif %}</p>
+                    <div class="plan-price">
+                        <div class="price-amount">
+                            <span class="currency">$</span>{{ plan.price_monthly | int }}
+                        </div>
+                        <div class="price-period">per month</div>
+                    </div>
+                    <ul class="plan-features">
+                        <li>Daily backups</li>
+                        <li>{{ plan.memory_limit | upper }} RAM / {{ plan.cpu_limit }} vCPU</li>
+                        <li {% if not plan.has_feature('redis_cache') %}class="unavailable"{% endif %}>Redis object cache</li>
+                        <li {% if not plan.has_feature('staging') %}class="unavailable"{% endif %}>Staging environment</li>
+                        <li {% if not plan.has_feature('premium_plugins') %}class="unavailable"{% endif %}>Premium plugins included</li>
+                        <li {% if not plan.has_feature('support_24_7') %}class="unavailable"{% endif %}>24/7 priority support</li>
+                    </ul>
+                    <a href="{{ url_for('signup', plan=plan.slug) }}" class="btn btn-primary plan-cta">Get Started</a>
+                </div>
+                {% endfor %}
+            </div>
+
+            <h2 class="section-title">Multi-Store Plans</h2>
+            <div class="plans-grid">
+                {% for plan in plans if plan.platform == 'woocommerce' and plan.tier_type == 'multi' %}
+                <div class="plan-card {% if plan.slug == 'wp-agency' %}featured{% endif %}">
+                    {% if plan.slug == 'wp-agency' %}
+                    <div class="featured-badge">Best Value</div>
+                    {% endif %}
+                    <h3 class="plan-name">{{ plan.name }}</h3>
+                    <p class="plan-stores">Up to {{ plan.store_limit }} stores</p>
+                    <div class="plan-price">
+                        <div class="price-amount">
+                            <span class="currency">$</span>{{ plan.price_monthly | int }}
+                        </div>
+                        <div class="price-period">per month</div>
+                    </div>
+                    <ul class="plan-features">
+                        <li>Centralized management</li>
+                        <li>{{ plan.memory_limit | upper }} RAM / {{ plan.cpu_limit }} vCPU per store</li>
+                        <li {% if not plan.has_feature('white_label') %}class="unavailable"{% endif %}>White-label dashboard</li>
+                        <li {% if not plan.has_feature('premium_plugins') %}class="unavailable"{% endif %}>Premium plugins included</li>
+                        <li {% if not plan.has_feature('support_24_7') %}class="unavailable"{% endif %}>24/7 priority support</li>
+                        <li {% if not plan.has_feature('dedicated_support') %}class="unavailable"{% endif %}>Dedicated support channel</li>
+                    </ul>
+                    <a href="{{ url_for('signup', plan=plan.slug) }}" class="btn btn-primary plan-cta">Get Started</a>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Magento Plans -->
+        <div class="plan-section" data-platform="magento">
+            <h2 class="section-title">Single-Store Plans</h2>
+            <div class="plans-grid">
+                {% for plan in plans if plan.platform == 'magento' and plan.tier_type == 'single' %}
+                <div class="plan-card {% if plan.slug == 'mg-commerce-pro' %}featured{% endif %}">
+                    {% if plan.slug == 'mg-commerce-pro' %}
+                    <div class="featured-badge">Most Popular</div>
+                    {% endif %}
+                    <h3 class="plan-name">{{ plan.name }}</h3>
+                    <p class="plan-stores">{{ plan.store_limit }} store{% if plan.store_limit > 1 %}s{% endif %}</p>
+                    <div class="plan-price">
+                        <div class="price-amount">
+                            <span class="currency">$</span>{{ plan.price_monthly | int }}
+                        </div>
+                        <div class="price-period">per month</div>
+                    </div>
+                    <ul class="plan-features">
+                        <li>Daily backups</li>
+                        <li>{{ plan.memory_limit | upper }} RAM / {{ plan.cpu_limit }} vCPU</li>
+                        <li {% if not plan.has_feature('redis_cache') %}class="unavailable"{% endif %}>Redis + Varnish cache</li>
+                        <li {% if not plan.has_feature('staging') %}class="unavailable"{% endif %}>Staging environment</li>
+                        <li {% if not plan.has_feature('premium_plugins') %}class="unavailable"{% endif %}>Premium extensions</li>
+                        <li {% if not plan.has_feature('support_24_7') %}class="unavailable"{% endif %}>24/7 priority support</li>
+                    </ul>
+                    <a href="{{ url_for('signup', plan=plan.slug) }}" class="btn btn-primary plan-cta">Get Started</a>
+                </div>
+                {% endfor %}
+            </div>
+
+            <h2 class="section-title">Multi-Store Plans</h2>
+            <div class="plans-grid">
+                {% for plan in plans if plan.platform == 'magento' and plan.tier_type == 'multi' %}
+                <div class="plan-card {% if plan.slug == 'mg-agency' %}featured{% endif %}">
+                    {% if plan.slug == 'mg-agency' %}
+                    <div class="featured-badge">Best Value</div>
+                    {% endif %}
+                    <h3 class="plan-name">{{ plan.name }}</h3>
+                    <p class="plan-stores">Up to {{ plan.store_limit }} stores</p>
+                    <div class="plan-price">
+                        <div class="price-amount">
+                            <span class="currency">$</span>{{ plan.price_monthly | int }}
+                        </div>
+                        <div class="price-period">per month</div>
+                    </div>
+                    <ul class="plan-features">
+                        <li>Centralized management</li>
+                        <li>{{ plan.memory_limit | upper }} RAM / {{ plan.cpu_limit }} vCPU per store</li>
+                        <li {% if not plan.has_feature('white_label') %}class="unavailable"{% endif %}>White-label dashboard</li>
+                        <li {% if not plan.has_feature('premium_plugins') %}class="unavailable"{% endif %}>Premium extensions</li>
+                        <li {% if not plan.has_feature('support_24_7') %}class="unavailable"{% endif %}>24/7 priority support</li>
+                        <li {% if not plan.has_feature('dedicated_support') %}class="unavailable"{% endif %}>Dedicated support channel</li>
+                    </ul>
+                    <a href="{{ url_for('signup', plan=plan.slug) }}" class="btn btn-primary plan-cta">Get Started</a>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="pricing-info">
+            <h3>All plans include</h3>
+            <p>
+                Free SSL certificates, automated security updates, DDoS protection,
+                99.9% uptime SLA, and our expert migration assistance.
+                Have questions? <a href="mailto:sales@shophosting.io">Contact our sales team</a>.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Platform tab switching
+    document.querySelectorAll('.platform-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            const platform = this.dataset.platform;
+
+            // Update active tab
+            document.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+
+            // Update visible section
+            document.querySelectorAll('.plan-section').forEach(section => {
+                section.classList.toggle('active', section.dataset.platform === platform);
+            });
+        });
+    });
+</script>
+{% endblock %}
