@@ -521,30 +521,30 @@ class ProvisioningWorker:
     
     def send_welcome_email(self, config):
         """Send welcome email with credentials to customer"""
-        
+
         # Email configuration from environment variables
         sender_email = os.getenv('SMTP_FROM', 'noreply@shophosting.io')
-        smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
-        smtp_port = int(os.getenv('SMTP_PORT') or '587')
+        smtp_server = os.getenv('SMTP_SERVER', 'localhost')
+        smtp_port = int(os.getenv('SMTP_PORT') or '25')
         smtp_user = os.getenv('SMTP_USER')
         smtp_password = os.getenv('SMTP_PASSWORD')
-        
-        # Skip email if not configured
-        if not smtp_user or not smtp_password:
-            logger.warning("SMTP not configured, skipping welcome email")
+
+        # Skip email if SMTP server not configured
+        if not smtp_server:
+            logger.warning("SMTP server not configured, skipping welcome email")
             return False
-        
+
         message = MIMEMultipart()
         message["From"] = sender_email
         message["To"] = config['email']
         message["Subject"] = f"Your {config['platform'].title()} Store is Ready!"
-        
+
         # Determine admin URL based on platform
         if config['platform'] == 'woocommerce':
             admin_url = f"http://{config['domain']}/wp-admin"
         else:
             admin_url = f"http://{config['domain']}/admin"
-        
+
         body = f"""
 Hello!
 
@@ -565,18 +565,20 @@ If you have any questions, please contact our support team at support@shophostin
 Best regards,
 ShopHosting.io Team
         """
-        
+
         message.attach(MIMEText(body, "plain"))
-        
+
         try:
             with smtplib.SMTP(smtp_server, smtp_port) as server:
-                server.starttls()
-                server.login(smtp_user, smtp_password)
+                # Only use TLS and auth if credentials are provided
+                if smtp_user and smtp_password:
+                    server.starttls()
+                    server.login(smtp_user, smtp_password)
                 server.send_message(message)
-            
+
             logger.info(f"Welcome email sent to {config['email']}")
             return True
-            
+
         except Exception as e:
             logger.warning(f"Failed to send email: {e}")
             return False
