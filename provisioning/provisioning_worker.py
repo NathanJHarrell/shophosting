@@ -77,7 +77,7 @@ class ProvisioningWorker:
         try:
             conn = self.get_db_connection()
             cursor = conn.cursor()
-            
+
             if error_message:
                 cursor.execute(
                     "UPDATE customers SET status = %s, error_message = %s, updated_at = %s WHERE id = %s",
@@ -88,15 +88,49 @@ class ProvisioningWorker:
                     "UPDATE customers SET status = %s, updated_at = %s WHERE id = %s",
                     (status, datetime.now(), customer_id)
                 )
-            
+
             conn.commit()
             cursor.close()
             conn.close()
-            
+
             logger.info(f"Updated customer {customer_id} status to {status}")
-            
+
         except Exception as e:
             logger.error(f"Failed to update customer status: {e}")
+
+    def update_job_status(self, job_id, status, error_message=None):
+        """Update provisioning job status in database"""
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+
+            now = datetime.now()
+
+            if status == 'started':
+                cursor.execute(
+                    "UPDATE provisioning_jobs SET status = %s, started_at = %s WHERE job_id = %s",
+                    (status, now, job_id)
+                )
+            elif status in ('finished', 'failed'):
+                if error_message:
+                    cursor.execute(
+                        "UPDATE provisioning_jobs SET status = %s, finished_at = %s, error_message = %s WHERE job_id = %s",
+                        (status, now, error_message, job_id)
+                    )
+                else:
+                    cursor.execute(
+                        "UPDATE provisioning_jobs SET status = %s, finished_at = %s WHERE job_id = %s",
+                        (status, now, job_id)
+                    )
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            logger.info(f"Updated job {job_id} status to {status}")
+
+        except Exception as e:
+            logger.error(f"Failed to update job status: {e}")
     
     def save_customer_credentials(self, customer_id, credentials):
         """Save customer credentials to database"""
@@ -565,13 +599,18 @@ ShopHosting.io Team
         except Exception as e:
             logger.error(f"Rollback failed: {e}")
     
-    def provision_customer(self, job_data):
+    def provision_customer(self, job_data, rq_job_id=None):
         """Main provisioning function - orchestrates all steps"""
-        
+
         customer_id = job_data['customer_id']
         customer_path = None
-        
+
         logger.info(f"Starting provisioning for customer {customer_id}")
+
+        # Update job status to started
+        if rq_job_id:
+            self.update_job_status(rq_job_id, 'started')
+
         self.update_customer_status(customer_id, 'provisioning')
         
         try:
@@ -628,9 +667,13 @@ ShopHosting.io Team
             
             # Step 9: Update status to active
             self.update_customer_status(customer_id, 'active')
-            
+
+            # Update job status to finished
+            if rq_job_id:
+                self.update_job_status(rq_job_id, 'finished')
+
             logger.info(f"Provisioning completed successfully for customer {customer_id}")
-            
+
             return {
                 'status': 'success',
                 'customer_id': customer_id,
@@ -638,33 +681,41 @@ ShopHosting.io Team
                 'admin_user': config['admin_user'],
                 'admin_password': admin_password
             }
-            
+
         except ProvisioningError as e:
             logger.error(f"Provisioning failed for customer {customer_id}: {e}")
-            
+
             # Rollback
             if customer_path:
                 self.rollback(customer_id, customer_path)
-            
+
             # Update status to failed
             self.update_customer_status(customer_id, 'failed', str(e))
-            
+
+            # Update job status to failed
+            if rq_job_id:
+                self.update_job_status(rq_job_id, 'failed', str(e))
+
             return {
                 'status': 'failed',
                 'customer_id': customer_id,
                 'error': str(e)
             }
-        
+
         except Exception as e:
             logger.error(f"Unexpected error provisioning customer {customer_id}: {e}")
-            
+
             # Rollback
             if customer_path:
                 self.rollback(customer_id, customer_path)
-            
+
             # Update status to failed
             self.update_customer_status(customer_id, 'failed', f"Unexpected error: {str(e)}")
-            
+
+            # Update job status to failed
+            if rq_job_id:
+                self.update_job_status(rq_job_id, 'failed', f"Unexpected error: {str(e)}")
+
             return {
                 'status': 'failed',
                 'customer_id': customer_id,
@@ -675,8 +726,14 @@ ShopHosting.io Team
 # RQ job function
 def provision_customer_job(job_data):
     """Job function called by RQ worker"""
+    from rq import get_current_job
+
+    # Get the current RQ job ID
+    current_job = get_current_job()
+    rq_job_id = current_job.id if current_job else None
+
     worker = ProvisioningWorker()
-    return worker.provision_customer(job_data)
+    return worker.provision_customer(job_data, rq_job_id=rq_job_id)
 
 
 if __name__ == '__main__':
