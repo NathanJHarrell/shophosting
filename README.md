@@ -48,7 +48,7 @@ sudo usermod -aG docker shophosting
 
 ```bash
 cd /opt
-sudo git clone https://github.com/YOUR_USERNAME/shophosting.git
+sudo git clone https://github.com/NJHarrell/shophosting.git
 sudo chown -R shophosting:shophosting /opt/shophosting
 ```
 
