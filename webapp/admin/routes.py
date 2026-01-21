@@ -19,6 +19,7 @@ from .models import AdminUser, log_admin_action
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import Customer, PortManager, get_db_connection, PricingPlan, Subscription, Invoice
+from models import Ticket, TicketMessage, TicketAttachment, TicketCategory
 
 
 # =============================================================================
@@ -344,6 +345,324 @@ def billing():
                            billing_stats=billing_stats,
                            recent_invoices=recent_invoices,
                            subscription_breakdown=subscription_breakdown)
+
+
+# =============================================================================
+# Support Tickets
+# =============================================================================
+
+@admin_bp.route('/tickets')
+@admin_required
+def tickets():
+    """List all support tickets"""
+    admin = get_current_admin()
+
+    # Get filter parameters
+    status = request.args.get('status', '')
+    priority = request.args.get('priority', '')
+    category_id = request.args.get('category', '')
+    assigned = request.args.get('assigned', '')
+    search = request.args.get('search', '').strip()
+    page = int(request.args.get('page', 1))
+    per_page = 20
+
+    # Get tickets
+    tickets_list, total = Ticket.get_all_filtered(
+        status=status or None,
+        priority=priority or None,
+        category_id=int(category_id) if category_id else None,
+        assigned_admin_id=assigned or None,
+        search=search or None,
+        page=page,
+        per_page=per_page
+    )
+
+    total_pages = (total + per_page - 1) // per_page
+
+    # Get categories and admins for filter dropdowns
+    categories = TicketCategory.get_all_active()
+    admins = AdminUser.get_all()
+    ticket_stats = Ticket.get_stats()
+
+    return render_template('admin/tickets.html',
+                           admin=admin,
+                           tickets=tickets_list,
+                           categories=categories,
+                           admins=admins,
+                           stats=ticket_stats,
+                           status_filter=status,
+                           priority_filter=priority,
+                           category_filter=category_id,
+                           assigned_filter=assigned,
+                           search=search,
+                           page=page,
+                           total_pages=total_pages,
+                           total=total)
+
+
+@admin_bp.route('/tickets/<int:ticket_id>')
+@admin_required
+def ticket_detail(ticket_id):
+    """View ticket detail with customer context"""
+    admin = get_current_admin()
+    ticket = Ticket.get_by_id(ticket_id)
+
+    if not ticket:
+        flash('Ticket not found.', 'error')
+        return redirect(url_for('admin.tickets'))
+
+    # Get related data
+    customer = Customer.get_by_id(ticket.customer_id)
+    category = TicketCategory.get_by_id(ticket.category_id) if ticket.category_id else None
+    messages = ticket.get_messages(include_internal=True)  # Include internal notes for admin
+    attachments = ticket.get_attachments()
+    admins = AdminUser.get_all()
+
+    # Get customer's other tickets count
+    customer_tickets, customer_ticket_count = Ticket.get_by_customer(customer.id, page=1, per_page=1)
+
+    return render_template('admin/ticket_detail.html',
+                           admin=admin,
+                           ticket=ticket,
+                           customer=customer,
+                           category=category,
+                           messages=messages,
+                           attachments=attachments,
+                           admins=admins,
+                           categories=TicketCategory.get_all_active(),
+                           customer_ticket_count=customer_ticket_count)
+
+
+@admin_bp.route('/tickets/<int:ticket_id>/respond', methods=['POST'])
+@admin_required
+def ticket_respond(ticket_id):
+    """Admin respond to ticket"""
+    admin = get_current_admin()
+    ticket = Ticket.get_by_id(ticket_id)
+
+    if not ticket:
+        flash('Ticket not found.', 'error')
+        return redirect(url_for('admin.tickets'))
+
+    message_text = request.form.get('message', '').strip()
+    if not message_text:
+        flash('Message cannot be empty.', 'error')
+        return redirect(url_for('admin.ticket_detail', ticket_id=ticket_id))
+
+    try:
+        # Create message
+        message = TicketMessage(
+            ticket_id=ticket.id,
+            admin_user_id=admin.id,
+            message=message_text,
+            is_internal_note=False
+        )
+        message.save()
+
+        # Update ticket status to in_progress if it was open
+        if ticket.status == 'open':
+            ticket.status = 'in_progress'
+            ticket.save()
+
+        log_admin_action(admin.id, 'ticket_respond', 'ticket', ticket_id,
+                        f'Responded to ticket {ticket.ticket_number}', request.remote_addr)
+        flash('Response sent successfully.', 'success')
+    except Exception as e:
+        flash(f'Error sending response: {str(e)}', 'error')
+
+    return redirect(url_for('admin.ticket_detail', ticket_id=ticket_id))
+
+
+@admin_bp.route('/tickets/<int:ticket_id>/note', methods=['POST'])
+@admin_required
+def ticket_note(ticket_id):
+    """Add internal note to ticket"""
+    admin = get_current_admin()
+    ticket = Ticket.get_by_id(ticket_id)
+
+    if not ticket:
+        flash('Ticket not found.', 'error')
+        return redirect(url_for('admin.tickets'))
+
+    note_text = request.form.get('note', '').strip()
+    if not note_text:
+        flash('Note cannot be empty.', 'error')
+        return redirect(url_for('admin.ticket_detail', ticket_id=ticket_id))
+
+    try:
+        # Create internal note
+        message = TicketMessage(
+            ticket_id=ticket.id,
+            admin_user_id=admin.id,
+            message=note_text,
+            is_internal_note=True
+        )
+        message.save()
+
+        log_admin_action(admin.id, 'ticket_note', 'ticket', ticket_id,
+                        f'Added internal note to ticket {ticket.ticket_number}', request.remote_addr)
+        flash('Internal note added.', 'success')
+    except Exception as e:
+        flash(f'Error adding note: {str(e)}', 'error')
+
+    return redirect(url_for('admin.ticket_detail', ticket_id=ticket_id))
+
+
+@admin_bp.route('/tickets/<int:ticket_id>/status', methods=['POST'])
+@admin_required
+def ticket_status(ticket_id):
+    """Change ticket status"""
+    admin = get_current_admin()
+    ticket = Ticket.get_by_id(ticket_id)
+
+    if not ticket:
+        flash('Ticket not found.', 'error')
+        return redirect(url_for('admin.tickets'))
+
+    new_status = request.form.get('status', '')
+    if new_status not in Ticket.STATUSES:
+        flash('Invalid status.', 'error')
+        return redirect(url_for('admin.ticket_detail', ticket_id=ticket_id))
+
+    try:
+        old_status = ticket.status
+        ticket.status = new_status
+
+        # Set resolved/closed timestamps
+        if new_status == 'resolved' and not ticket.resolved_at:
+            ticket.resolved_at = datetime.now()
+        elif new_status == 'closed' and not ticket.closed_at:
+            ticket.closed_at = datetime.now()
+
+        ticket.save()
+
+        log_admin_action(admin.id, 'ticket_status', 'ticket', ticket_id,
+                        f'Changed status from {old_status} to {new_status}', request.remote_addr)
+        flash(f'Ticket status updated to {new_status.replace("_", " ")}.', 'success')
+    except Exception as e:
+        flash(f'Error updating status: {str(e)}', 'error')
+
+    return redirect(url_for('admin.ticket_detail', ticket_id=ticket_id))
+
+
+@admin_bp.route('/tickets/<int:ticket_id>/assign', methods=['POST'])
+@admin_required
+def ticket_assign(ticket_id):
+    """Assign ticket to admin"""
+    admin = get_current_admin()
+    ticket = Ticket.get_by_id(ticket_id)
+
+    if not ticket:
+        flash('Ticket not found.', 'error')
+        return redirect(url_for('admin.tickets'))
+
+    assigned_id = request.form.get('assigned_admin_id', '')
+
+    try:
+        if assigned_id:
+            assigned_admin = AdminUser.get_by_id(int(assigned_id))
+            ticket.assigned_admin_id = int(assigned_id)
+            assigned_name = assigned_admin.full_name if assigned_admin else 'Unknown'
+        else:
+            ticket.assigned_admin_id = None
+            assigned_name = 'Unassigned'
+
+        ticket.save()
+
+        log_admin_action(admin.id, 'ticket_assign', 'ticket', ticket_id,
+                        f'Assigned ticket to {assigned_name}', request.remote_addr)
+        flash(f'Ticket assigned to {assigned_name}.', 'success')
+    except Exception as e:
+        flash(f'Error assigning ticket: {str(e)}', 'error')
+
+    return redirect(url_for('admin.ticket_detail', ticket_id=ticket_id))
+
+
+@admin_bp.route('/tickets/<int:ticket_id>/priority', methods=['POST'])
+@admin_required
+def ticket_priority(ticket_id):
+    """Change ticket priority"""
+    admin = get_current_admin()
+    ticket = Ticket.get_by_id(ticket_id)
+
+    if not ticket:
+        flash('Ticket not found.', 'error')
+        return redirect(url_for('admin.tickets'))
+
+    new_priority = request.form.get('priority', '')
+    if new_priority not in Ticket.PRIORITIES:
+        flash('Invalid priority.', 'error')
+        return redirect(url_for('admin.ticket_detail', ticket_id=ticket_id))
+
+    try:
+        old_priority = ticket.priority
+        ticket.priority = new_priority
+        ticket.save()
+
+        log_admin_action(admin.id, 'ticket_priority', 'ticket', ticket_id,
+                        f'Changed priority from {old_priority} to {new_priority}', request.remote_addr)
+        flash(f'Ticket priority updated to {new_priority}.', 'success')
+    except Exception as e:
+        flash(f'Error updating priority: {str(e)}', 'error')
+
+    return redirect(url_for('admin.ticket_detail', ticket_id=ticket_id))
+
+
+@admin_bp.route('/tickets/<int:ticket_id>/category', methods=['POST'])
+@admin_required
+def ticket_category(ticket_id):
+    """Change ticket category"""
+    admin = get_current_admin()
+    ticket = Ticket.get_by_id(ticket_id)
+
+    if not ticket:
+        flash('Ticket not found.', 'error')
+        return redirect(url_for('admin.tickets'))
+
+    new_category_id = request.form.get('category_id', '')
+
+    try:
+        if new_category_id:
+            category = TicketCategory.get_by_id(int(new_category_id))
+            ticket.category_id = int(new_category_id)
+            category_name = category.name if category else 'Unknown'
+        else:
+            ticket.category_id = None
+            category_name = 'None'
+
+        ticket.save()
+
+        log_admin_action(admin.id, 'ticket_category', 'ticket', ticket_id,
+                        f'Changed category to {category_name}', request.remote_addr)
+        flash(f'Ticket category updated to {category_name}.', 'success')
+    except Exception as e:
+        flash(f'Error updating category: {str(e)}', 'error')
+
+    return redirect(url_for('admin.ticket_detail', ticket_id=ticket_id))
+
+
+@admin_bp.route('/tickets/attachment/<int:attachment_id>')
+@admin_required
+def serve_ticket_attachment(attachment_id):
+    """Serve attachment file for admin"""
+    from flask import send_file, abort
+    import os
+
+    attachment = TicketAttachment.get_by_id(attachment_id)
+    if not attachment:
+        abort(404)
+
+    TICKET_UPLOAD_PATH = '/var/customers/tickets'
+    full_path = os.path.join(TICKET_UPLOAD_PATH, attachment.file_path)
+
+    if not os.path.exists(full_path):
+        abort(404)
+
+    return send_file(
+        full_path,
+        download_name=attachment.original_filename,
+        as_attachment=True
+    )
 
 
 # =============================================================================

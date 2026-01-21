@@ -849,3 +849,535 @@ class WebhookEvent:
 
     def __repr__(self):
         return f"<WebhookEvent {self.id}: {self.stripe_event_id}>"
+
+
+# =============================================================================
+# TicketCategory Model
+# =============================================================================
+
+class TicketCategory:
+    """Ticket category model for organizing support tickets"""
+
+    def __init__(self, id=None, name=None, slug=None, description=None,
+                 color='#0088ff', display_order=0, is_active=True,
+                 created_at=None, updated_at=None):
+        self.id = id
+        self.name = name
+        self.slug = slug
+        self.description = description
+        self.color = color
+        self.display_order = display_order
+        self.is_active = is_active
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    @staticmethod
+    def get_all_active():
+        """Get all active categories ordered by display_order"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                SELECT * FROM ticket_categories
+                WHERE is_active = TRUE
+                ORDER BY display_order
+            """)
+            return [TicketCategory(**row) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_id(category_id):
+        """Get category by ID"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM ticket_categories WHERE id = %s", (category_id,))
+            row = cursor.fetchone()
+            return TicketCategory(**row) if row else None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_slug(slug):
+        """Get category by slug"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM ticket_categories WHERE slug = %s", (slug,))
+            row = cursor.fetchone()
+            return TicketCategory(**row) if row else None
+        finally:
+            cursor.close()
+            conn.close()
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'slug': self.slug,
+            'description': self.description,
+            'color': self.color
+        }
+
+    def __repr__(self):
+        return f"<TicketCategory {self.id}: {self.slug}>"
+
+
+# =============================================================================
+# Ticket Model
+# =============================================================================
+
+class Ticket:
+    """Support ticket model"""
+
+    STATUSES = ['open', 'in_progress', 'waiting_customer', 'resolved', 'closed']
+    PRIORITIES = ['low', 'medium', 'high', 'urgent']
+
+    def __init__(self, id=None, ticket_number=None, customer_id=None,
+                 category_id=None, assigned_admin_id=None, subject=None,
+                 status='open', priority='medium', created_at=None,
+                 updated_at=None, resolved_at=None, closed_at=None):
+        self.id = id
+        self.ticket_number = ticket_number
+        self.customer_id = customer_id
+        self.category_id = category_id
+        self.assigned_admin_id = assigned_admin_id
+        self.subject = subject
+        self.status = status
+        self.priority = priority
+        self.created_at = created_at or datetime.now()
+        self.updated_at = updated_at or datetime.now()
+        self.resolved_at = resolved_at
+        self.closed_at = closed_at
+
+    @staticmethod
+    def generate_ticket_number():
+        """Generate unique ticket number like TKT-001234"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT MAX(id) FROM tickets")
+            max_id = cursor.fetchone()[0] or 0
+            return f"TKT-{(max_id + 1):06d}"
+        finally:
+            cursor.close()
+            conn.close()
+
+    def save(self):
+        """Save ticket to database (insert or update)"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            if self.id is None:
+                # Generate ticket number for new tickets
+                if not self.ticket_number:
+                    self.ticket_number = Ticket.generate_ticket_number()
+
+                cursor.execute("""
+                    INSERT INTO tickets
+                    (ticket_number, customer_id, category_id, assigned_admin_id,
+                     subject, status, priority, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    self.ticket_number, self.customer_id, self.category_id,
+                    self.assigned_admin_id, self.subject, self.status,
+                    self.priority, self.created_at, self.updated_at
+                ))
+                self.id = cursor.lastrowid
+            else:
+                cursor.execute("""
+                    UPDATE tickets SET
+                        category_id = %s, assigned_admin_id = %s, subject = %s,
+                        status = %s, priority = %s, updated_at = %s,
+                        resolved_at = %s, closed_at = %s
+                    WHERE id = %s
+                """, (
+                    self.category_id, self.assigned_admin_id, self.subject,
+                    self.status, self.priority, datetime.now(),
+                    self.resolved_at, self.closed_at, self.id
+                ))
+            conn.commit()
+            return self
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_id(ticket_id):
+        """Get ticket by ID"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM tickets WHERE id = %s", (ticket_id,))
+            row = cursor.fetchone()
+            return Ticket(**row) if row else None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_ticket_number(ticket_number):
+        """Get ticket by ticket number"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM tickets WHERE ticket_number = %s", (ticket_number,))
+            row = cursor.fetchone()
+            return Ticket(**row) if row else None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_customer(customer_id, status=None, page=1, per_page=20):
+        """Get tickets for a customer with optional status filter"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            where = "t.customer_id = %s"
+            params = [customer_id]
+
+            if status:
+                where += " AND t.status = %s"
+                params.append(status)
+
+            # Get count
+            cursor.execute(f"SELECT COUNT(*) as count FROM tickets t WHERE {where}", params)
+            total = cursor.fetchone()['count']
+
+            # Get paginated results
+            offset = (page - 1) * per_page
+            cursor.execute(f"""
+                SELECT t.*, tc.name as category_name, tc.color as category_color
+                FROM tickets t
+                LEFT JOIN ticket_categories tc ON t.category_id = tc.id
+                WHERE {where}
+                ORDER BY
+                    CASE t.status
+                        WHEN 'open' THEN 1
+                        WHEN 'in_progress' THEN 2
+                        WHEN 'waiting_customer' THEN 3
+                        ELSE 4
+                    END,
+                    t.updated_at DESC
+                LIMIT %s OFFSET %s
+            """, params + [per_page, offset])
+
+            tickets = cursor.fetchall()
+            return tickets, total
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_all_filtered(status=None, priority=None, category_id=None,
+                         assigned_admin_id=None, customer_id=None,
+                         search=None, page=1, per_page=20):
+        """Get all tickets with filters (for admin)"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            where_clauses = ["1=1"]
+            params = []
+
+            if status:
+                where_clauses.append("t.status = %s")
+                params.append(status)
+            if priority:
+                where_clauses.append("t.priority = %s")
+                params.append(priority)
+            if category_id:
+                where_clauses.append("t.category_id = %s")
+                params.append(category_id)
+            if assigned_admin_id:
+                if assigned_admin_id == 'unassigned':
+                    where_clauses.append("t.assigned_admin_id IS NULL")
+                else:
+                    where_clauses.append("t.assigned_admin_id = %s")
+                    params.append(assigned_admin_id)
+            if customer_id:
+                where_clauses.append("t.customer_id = %s")
+                params.append(customer_id)
+            if search:
+                where_clauses.append("(t.ticket_number LIKE %s OR t.subject LIKE %s OR c.email LIKE %s)")
+                search_param = f"%{search}%"
+                params.extend([search_param, search_param, search_param])
+
+            where_sql = " AND ".join(where_clauses)
+
+            # Get count
+            cursor.execute(f"""
+                SELECT COUNT(*) as count
+                FROM tickets t
+                LEFT JOIN customers c ON t.customer_id = c.id
+                WHERE {where_sql}
+            """, params)
+            total = cursor.fetchone()['count']
+
+            # Get paginated results
+            offset = (page - 1) * per_page
+            cursor.execute(f"""
+                SELECT t.*,
+                       tc.name as category_name, tc.color as category_color,
+                       c.email as customer_email, c.company_name as customer_company,
+                       c.domain as customer_domain,
+                       a.full_name as assigned_admin_name
+                FROM tickets t
+                LEFT JOIN ticket_categories tc ON t.category_id = tc.id
+                LEFT JOIN customers c ON t.customer_id = c.id
+                LEFT JOIN admin_users a ON t.assigned_admin_id = a.id
+                WHERE {where_sql}
+                ORDER BY
+                    CASE t.priority
+                        WHEN 'urgent' THEN 1
+                        WHEN 'high' THEN 2
+                        WHEN 'medium' THEN 3
+                        ELSE 4
+                    END,
+                    CASE t.status
+                        WHEN 'open' THEN 1
+                        WHEN 'in_progress' THEN 2
+                        WHEN 'waiting_customer' THEN 3
+                        ELSE 4
+                    END,
+                    t.updated_at DESC
+                LIMIT %s OFFSET %s
+            """, params + [per_page, offset])
+
+            tickets = cursor.fetchall()
+            return tickets, total
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_stats():
+        """Get ticket statistics for admin dashboard"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open_count,
+                    SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress_count,
+                    SUM(CASE WHEN status = 'waiting_customer' THEN 1 ELSE 0 END) as waiting_count,
+                    SUM(CASE WHEN priority = 'urgent' THEN 1 ELSE 0 END) as urgent_count,
+                    SUM(CASE WHEN assigned_admin_id IS NULL AND status NOT IN ('resolved', 'closed') THEN 1 ELSE 0 END) as unassigned_count
+                FROM tickets
+            """)
+            return cursor.fetchone()
+        finally:
+            cursor.close()
+            conn.close()
+
+    def get_messages(self, include_internal=False):
+        """Get all messages for this ticket"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            where = "tm.ticket_id = %s"
+            params = [self.id]
+
+            if not include_internal:
+                where += " AND tm.is_internal_note = FALSE"
+
+            cursor.execute(f"""
+                SELECT tm.*,
+                       c.email as customer_email, c.company_name as customer_name,
+                       a.full_name as admin_name
+                FROM ticket_messages tm
+                LEFT JOIN customers c ON tm.customer_id = c.id
+                LEFT JOIN admin_users a ON tm.admin_user_id = a.id
+                WHERE {where}
+                ORDER BY tm.created_at ASC
+            """, params)
+            return cursor.fetchall()
+        finally:
+            cursor.close()
+            conn.close()
+
+    def get_attachments(self):
+        """Get all attachments for this ticket"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                SELECT * FROM ticket_attachments
+                WHERE ticket_id = %s
+                ORDER BY created_at ASC
+            """, (self.id,))
+            return cursor.fetchall()
+        finally:
+            cursor.close()
+            conn.close()
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'ticket_number': self.ticket_number,
+            'customer_id': self.customer_id,
+            'category_id': self.category_id,
+            'assigned_admin_id': self.assigned_admin_id,
+            'subject': self.subject,
+            'status': self.status,
+            'priority': self.priority,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+    def __repr__(self):
+        return f"<Ticket {self.ticket_number}: {self.subject}>"
+
+
+# =============================================================================
+# TicketMessage Model
+# =============================================================================
+
+class TicketMessage:
+    """Ticket message/reply model"""
+
+    def __init__(self, id=None, ticket_id=None, customer_id=None,
+                 admin_user_id=None, message=None, is_internal_note=False,
+                 created_at=None, updated_at=None):
+        self.id = id
+        self.ticket_id = ticket_id
+        self.customer_id = customer_id
+        self.admin_user_id = admin_user_id
+        self.message = message
+        self.is_internal_note = is_internal_note
+        self.created_at = created_at or datetime.now()
+        self.updated_at = updated_at
+
+    def save(self):
+        """Save message to database"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            if self.id is None:
+                cursor.execute("""
+                    INSERT INTO ticket_messages
+                    (ticket_id, customer_id, admin_user_id, message, is_internal_note, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (
+                    self.ticket_id, self.customer_id, self.admin_user_id,
+                    self.message, self.is_internal_note, self.created_at
+                ))
+                self.id = cursor.lastrowid
+
+                # Update ticket's updated_at timestamp
+                cursor.execute(
+                    "UPDATE tickets SET updated_at = %s WHERE id = %s",
+                    (datetime.now(), self.ticket_id)
+                )
+            conn.commit()
+            return self
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_id(message_id):
+        """Get message by ID"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM ticket_messages WHERE id = %s", (message_id,))
+            row = cursor.fetchone()
+            return TicketMessage(**row) if row else None
+        finally:
+            cursor.close()
+            conn.close()
+
+    def __repr__(self):
+        return f"<TicketMessage {self.id}>"
+
+
+# =============================================================================
+# TicketAttachment Model
+# =============================================================================
+
+class TicketAttachment:
+    """Ticket attachment model"""
+
+    ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'txt', 'doc', 'docx', 'zip'}
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+    def __init__(self, id=None, ticket_id=None, message_id=None,
+                 filename=None, original_filename=None, file_path=None,
+                 file_size=None, mime_type=None, uploaded_by_customer_id=None,
+                 uploaded_by_admin_id=None, created_at=None):
+        self.id = id
+        self.ticket_id = ticket_id
+        self.message_id = message_id
+        self.filename = filename
+        self.original_filename = original_filename
+        self.file_path = file_path
+        self.file_size = file_size
+        self.mime_type = mime_type
+        self.uploaded_by_customer_id = uploaded_by_customer_id
+        self.uploaded_by_admin_id = uploaded_by_admin_id
+        self.created_at = created_at or datetime.now()
+
+    def save(self):
+        """Save attachment record to database"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO ticket_attachments
+                (ticket_id, message_id, filename, original_filename, file_path,
+                 file_size, mime_type, uploaded_by_customer_id, uploaded_by_admin_id, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                self.ticket_id, self.message_id, self.filename, self.original_filename,
+                self.file_path, self.file_size, self.mime_type,
+                self.uploaded_by_customer_id, self.uploaded_by_admin_id, self.created_at
+            ))
+            self.id = cursor.lastrowid
+            conn.commit()
+            return self
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_id(attachment_id):
+        """Get attachment by ID"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM ticket_attachments WHERE id = %s", (attachment_id,))
+            row = cursor.fetchone()
+            return TicketAttachment(**row) if row else None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_ticket(ticket_id):
+        """Get all attachments for a ticket"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                SELECT * FROM ticket_attachments
+                WHERE ticket_id = %s
+                ORDER BY created_at ASC
+            """, (ticket_id,))
+            return [TicketAttachment(**row) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def allowed_file(filename):
+        """Check if file extension is allowed"""
+        return '.' in filename and \
+               filename.rsplit('.', 1)[1].lower() in TicketAttachment.ALLOWED_EXTENSIONS
+
+    def __repr__(self):
+        return f"<TicketAttachment {self.id}: {self.original_filename}>"

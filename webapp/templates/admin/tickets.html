@@ -1,0 +1,249 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Support Tickets{% endblock %}
+{% block page_title %}Support Tickets{% endblock %}
+
+{% block extra_css %}
+<style>
+    .badge-open { background: var(--info-muted); color: var(--accent-blue); }
+    .badge-in_progress { background: var(--info-muted); color: var(--accent-cyan); }
+    .badge-waiting_customer { background: var(--warning-muted); color: var(--warning); }
+    .badge-resolved { background: var(--success-muted); color: var(--success); }
+    .badge-closed { background: var(--bg-surface); color: var(--text-tertiary); }
+
+    .badge-low { background: var(--bg-surface); color: var(--text-tertiary); }
+    .badge-medium { background: var(--info-muted); color: var(--accent-blue); }
+    .badge-high { background: var(--warning-muted); color: var(--warning); }
+    .badge-urgent { background: var(--error-muted); color: var(--error); }
+
+    .badge-category {
+        background: var(--bg-surface);
+        color: var(--text-secondary);
+    }
+
+    .ticket-row {
+        cursor: pointer;
+    }
+
+    .ticket-row:hover td {
+        background: var(--bg-hover);
+    }
+
+    .ticket-subject {
+        font-weight: 500;
+        color: var(--text-primary);
+        max-width: 300px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .customer-info {
+        font-size: 0.85rem;
+    }
+
+    .customer-email {
+        color: var(--text-secondary);
+    }
+
+    .customer-domain {
+        color: var(--text-tertiary);
+    }
+
+    .filters {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .filter-label {
+        font-size: 0.75rem;
+        color: var(--text-tertiary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .filter-group .form-control {
+        min-width: 140px;
+    }
+
+    .search-group .form-control {
+        min-width: 220px;
+    }
+
+    .filter-actions {
+        display: flex;
+        gap: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Stats -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Total Tickets</div>
+        <div class="stat-value">{{ stats.total or 0 }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Open</div>
+        <div class="stat-value info">{{ stats.open_count or 0 }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">In Progress</div>
+        <div class="stat-value info">{{ stats.in_progress_count or 0 }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Urgent</div>
+        <div class="stat-value error">{{ stats.urgent_count or 0 }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Unassigned</div>
+        <div class="stat-value warning">{{ stats.unassigned_count or 0 }}</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('admin.tickets') }}">
+            <div class="filters">
+                <div class="filter-group search-group">
+                    <label class="filter-label">Search</label>
+                    <input type="text" name="search" class="form-control" placeholder="Ticket#, subject, email..." value="{{ search }}">
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Status</label>
+                    <select name="status" class="form-control">
+                        <option value="">All Statuses</option>
+                        <option value="open" {% if status_filter == 'open' %}selected{% endif %}>Open</option>
+                        <option value="in_progress" {% if status_filter == 'in_progress' %}selected{% endif %}>In Progress</option>
+                        <option value="waiting_customer" {% if status_filter == 'waiting_customer' %}selected{% endif %}>Waiting</option>
+                        <option value="resolved" {% if status_filter == 'resolved' %}selected{% endif %}>Resolved</option>
+                        <option value="closed" {% if status_filter == 'closed' %}selected{% endif %}>Closed</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Priority</label>
+                    <select name="priority" class="form-control">
+                        <option value="">All Priorities</option>
+                        <option value="urgent" {% if priority_filter == 'urgent' %}selected{% endif %}>Urgent</option>
+                        <option value="high" {% if priority_filter == 'high' %}selected{% endif %}>High</option>
+                        <option value="medium" {% if priority_filter == 'medium' %}selected{% endif %}>Medium</option>
+                        <option value="low" {% if priority_filter == 'low' %}selected{% endif %}>Low</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Category</label>
+                    <select name="category" class="form-control">
+                        <option value="">All Categories</option>
+                        {% for cat in categories %}
+                            <option value="{{ cat.id }}" {% if category_filter == cat.id|string %}selected{% endif %}>{{ cat.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Assigned To</label>
+                    <select name="assigned" class="form-control">
+                        <option value="">All Assignees</option>
+                        <option value="unassigned" {% if assigned_filter == 'unassigned' %}selected{% endif %}>Unassigned</option>
+                        {% for a in admins %}
+                            <option value="{{ a.id }}" {% if assigned_filter == a.id|string %}selected{% endif %}>{{ a.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-actions">
+                    <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+                    <a href="{{ url_for('admin.tickets') }}" class="btn btn-secondary btn-sm">Clear</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tickets Table -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">
+            {% if search or status_filter or priority_filter or category_filter or assigned_filter %}
+                Filtered Results ({{ total }})
+            {% else %}
+                All Tickets ({{ total }})
+            {% endif %}
+        </h3>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Ticket</th>
+                    <th>Subject</th>
+                    <th>Customer</th>
+                    <th>Category</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Assigned</th>
+                    <th>Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ticket in tickets %}
+                    <tr class="ticket-row" onclick="window.location='{{ url_for('admin.ticket_detail', ticket_id=ticket.id) }}'">
+                        <td class="mono">{{ ticket.ticket_number }}</td>
+                        <td class="ticket-subject">{{ ticket.subject }}</td>
+                        <td class="customer-info">
+                            <div class="customer-email">{{ ticket.customer_email }}</div>
+                            <div class="customer-domain">{{ ticket.customer_domain }}</div>
+                        </td>
+                        <td>
+                            {% if ticket.category_name %}
+                                <span class="badge badge-category" style="border-left: 3px solid {{ ticket.category_color or '#0088ff' }}">{{ ticket.category_name }}</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge badge-{{ ticket.priority }}">{{ ticket.priority }}</span></td>
+                        <td><span class="badge badge-{{ ticket.status }}">{{ ticket.status|replace('_', ' ') }}</span></td>
+                        <td>{{ ticket.assigned_admin_name or '-' }}</td>
+                        <td class="text-muted">{{ ticket.updated_at.strftime('%b %d, %H:%M') }}</td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="8" style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+                            No tickets found
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if total_pages > 1 %}
+    <div class="pagination">
+        {% if page > 1 %}
+            <a href="{{ url_for('admin.tickets', page=page-1, status=status_filter, priority=priority_filter, category=category_filter, assigned=assigned_filter, search=search) }}">&larr; Previous</a>
+        {% endif %}
+
+        {% for p in range(1, total_pages + 1) %}
+            {% if p == page %}
+                <span class="active">{{ p }}</span>
+            {% else %}
+                <a href="{{ url_for('admin.tickets', page=p, status=status_filter, priority=priority_filter, category=category_filter, assigned=assigned_filter, search=search) }}">{{ p }}</a>
+            {% endif %}
+        {% endfor %}
+
+        {% if page < total_pages %}
+            <a href="{{ url_for('admin.tickets', page=page+1, status=status_filter, priority=priority_filter, category=category_filter, assigned=assigned_filter, search=search) }}">Next &rarr;</a>
+        {% endif %}
+    </div>
+{% endif %}
+{% endblock %}

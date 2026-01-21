@@ -1,4 +1,3 @@
-# File: /opt/shophosting/provisioning/provisioning_worker.py
 """
 ShopHosting.io Provisioning Worker - Handles automated customer provisioning with Nginx
 """
@@ -9,6 +8,9 @@ import secrets
 import string
 import logging
 from pathlib import Path
+import sys
+sys.path.insert(0, '/opt/shophosting/webapp')
+from models import PortManager
 from jinja2 import Template
 import redis
 from rq import Worker, Queue
@@ -194,8 +196,55 @@ class ProvisioningWorker:
         except Exception as e:
             logger.error(f"Failed to generate docker-compose: {e}")
             raise ProvisioningError(f"Compose generation failed: {e}")
-    
-    def start_containers(self, customer_path):
+
+    def is_port_in_use(self, port):
+        """Check if a port is already in use"""
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.connect(('localhost', port))
+                return True
+            except ConnectionRefusedError:
+                return False
+            except Exception:
+                return False
+
+    def find_available_port(self, start_port):
+        """Find next available port starting from start_port"""
+        max_port = 8200  # Safety limit
+        current_port = start_port
+
+        while current_port <= max_port:
+            if not self.is_port_in_use(current_port):
+                if PortManager.is_port_available(current_port):
+                    return current_port
+            current_port += 1
+
+        raise ProvisioningError(f"No available ports found starting from {start_port}")
+
+    def update_docker_compose_port(self, customer_path, new_port):
+        """Update the web_port in docker-compose.yml"""
+        compose_path = customer_path / "docker-compose.yml"
+        try:
+            with open(compose_path, 'r') as f:
+                content = f.read()
+
+            # Replace ports mapping
+            import re
+            pattern = r'"(\d+):80"'
+            replacement = f'"{new_port}:80"'
+            new_content = re.sub(pattern, replacement, content)
+
+            with open(compose_path, 'w') as f:
+                f.write(new_content)
+
+            logger.info(f"Updated docker-compose.yml to use port {new_port}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update docker-compose port: {e}")
+            return False
+
+    def start_containers(self, customer_path, config):
         """Start Docker containers using docker-compose"""
         try:
             result = subprocess.run(
@@ -553,9 +602,17 @@ ShopHosting.io Team
             
             # Step 3: Generate docker-compose file
             self.generate_docker_compose(customer_path, config)
-            
+
+            # Step 3.5: Validate and fix port if needed
+            if self.is_port_in_use(config['web_port']):
+                logger.warning(f"Port {config['web_port']} is in use, finding alternative...")
+                new_port = self.find_available_port(config['web_port'])
+                logger.info(f"Using port {new_port} instead of {config['web_port']}")
+                config['web_port'] = new_port
+                self.update_docker_compose_port(customer_path, new_port)
+
             # Step 4: Start containers
-            self.start_containers(customer_path)
+            self.start_containers(customer_path, config)
             
             # Step 5: Configure reverse proxy
             self.configure_reverse_proxy(config['domain'], customer_id, config['web_port'])

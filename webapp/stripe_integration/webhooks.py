@@ -136,7 +136,9 @@ def handle_checkout_completed(session):
             'platform': customer.platform,
             'email': customer.email,
             'site_title': customer.company_name,
-            'web_port': customer.web_port
+            'web_port': customer.web_port,
+            'memory_limit': plan.memory_limit if plan else '1g',
+            'cpu_limit': plan.cpu_limit if plan else '1.0'
         }
         job = queue.enqueue_customer(job_data)
         logger.info(f"Provisioning job {job.id} enqueued for customer {customer.id}")

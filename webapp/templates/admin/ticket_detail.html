@@ -1,0 +1,514 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}{{ ticket.ticket_number }}{% endblock %}
+{% block page_title %}Ticket {{ ticket.ticket_number }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ticket-layout {
+        display: grid;
+        grid-template-columns: 1fr 350px;
+        gap: 24px;
+    }
+
+    @media (max-width: 1200px) {
+        .ticket-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .badge-open { background: var(--info-muted); color: var(--accent-blue); }
+    .badge-in_progress { background: var(--info-muted); color: var(--accent-cyan); }
+    .badge-waiting_customer { background: var(--warning-muted); color: var(--warning); }
+    .badge-resolved { background: var(--success-muted); color: var(--success); }
+    .badge-closed { background: var(--bg-surface); color: var(--text-tertiary); }
+
+    .badge-low { background: var(--bg-surface); color: var(--text-tertiary); }
+    .badge-medium { background: var(--info-muted); color: var(--accent-blue); }
+    .badge-high { background: var(--warning-muted); color: var(--warning); }
+    .badge-urgent { background: var(--error-muted); color: var(--error); }
+
+    .ticket-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 24px;
+    }
+
+    .ticket-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .ticket-meta {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .messages-section .card-body {
+        padding: 0;
+    }
+
+    .message {
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .message:last-child {
+        border-bottom: none;
+    }
+
+    .message.internal-note {
+        background: var(--warning-muted);
+        border-left: 4px solid var(--warning);
+    }
+
+    .message-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+
+    .message-sender {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .sender-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 0.8rem;
+    }
+
+    .message.customer .sender-avatar {
+        background: var(--info-muted);
+        color: var(--accent-cyan);
+    }
+
+    .message.admin .sender-avatar {
+        background: var(--success-muted);
+        color: var(--success);
+    }
+
+    .message.internal-note .sender-avatar {
+        background: var(--warning);
+        color: var(--bg-deepest);
+    }
+
+    .sender-name {
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .sender-role {
+        font-size: 0.8rem;
+        color: var(--text-tertiary);
+    }
+
+    .message-time {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+
+    .message-body {
+        color: var(--text-secondary);
+        line-height: 1.7;
+        white-space: pre-wrap;
+    }
+
+    .message-attachments {
+        margin-top: 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .attachment-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+    }
+
+    .attachment-link:hover {
+        border-color: var(--accent-blue);
+        color: var(--accent-blue);
+    }
+
+    .reply-section {
+        padding: 24px;
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .reply-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+    }
+
+    .reply-tab {
+        padding: 8px 16px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        transition: all 0.2s;
+    }
+
+    .reply-tab:hover {
+        background: var(--bg-hover);
+    }
+
+    .reply-tab.active {
+        background: var(--info-muted);
+        color: var(--accent-blue);
+        border-color: var(--accent-blue);
+    }
+
+    .reply-form {
+        display: none;
+    }
+
+    .reply-form.active {
+        display: block;
+    }
+
+    .sidebar-card {
+        margin-bottom: 20px;
+    }
+
+    .sidebar-card .card-header {
+        padding: 16px 20px;
+    }
+
+    .sidebar-card .card-body {
+        padding: 20px;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .info-row:last-child {
+        border-bottom: none;
+    }
+
+    .info-label {
+        color: var(--text-tertiary);
+        font-size: 0.9rem;
+    }
+
+    .info-value {
+        color: var(--text-primary);
+        font-weight: 500;
+        text-align: right;
+    }
+
+    .action-form {
+        margin-bottom: 16px;
+    }
+
+    .action-form:last-child {
+        margin-bottom: 0;
+    }
+
+    .action-form label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.85rem;
+        color: var(--text-tertiary);
+    }
+
+    .action-form .form-control {
+        width: 100%;
+    }
+
+    .action-form select.form-control {
+        padding: 10px 14px;
+    }
+
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-tertiary);
+        text-decoration: none;
+        font-size: 0.9rem;
+        margin-bottom: 20px;
+        transition: color 0.2s;
+    }
+
+    .back-link:hover {
+        color: var(--accent-blue);
+    }
+
+    .internal-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 8px;
+        background: var(--warning);
+        color: var(--bg-deepest);
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('admin.tickets') }}" class="back-link">
+    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+    </svg>
+    Back to Tickets
+</a>
+
+<div class="ticket-header">
+    <div>
+        <h2 class="ticket-title">{{ ticket.subject }}</h2>
+        <div class="ticket-meta">
+            <span class="mono text-muted">{{ ticket.ticket_number }}</span>
+            <span class="badge badge-{{ ticket.status }}">{{ ticket.status|replace('_', ' ') }}</span>
+            <span class="badge badge-{{ ticket.priority }}">{{ ticket.priority }}</span>
+            {% if category %}
+                <span class="badge badge-category" style="border-left: 3px solid {{ category.color or '#0088ff' }}">{{ category.name }}</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="ticket-layout">
+    <div class="main-column">
+        <!-- Messages -->
+        <div class="card messages-section">
+            <div class="card-header">
+                <h3 class="card-title">Conversation</h3>
+            </div>
+            <div class="card-body">
+                {% for msg in messages %}
+                    <div class="message {% if msg.customer_id %}customer{% else %}admin{% endif %} {% if msg.is_internal_note %}internal-note{% endif %}">
+                        <div class="message-header">
+                            <div class="message-sender">
+                                <div class="sender-avatar">
+                                    {% if msg.customer_id %}
+                                        {{ customer.email[0]|upper }}
+                                    {% else %}
+                                        {{ msg.admin_name[0]|upper if msg.admin_name else 'A' }}
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <div class="sender-name">
+                                        {% if msg.customer_id %}
+                                            {{ customer.email }}
+                                        {% else %}
+                                            {{ msg.admin_name or 'Admin' }}
+                                        {% endif %}
+                                    </div>
+                                    <div class="sender-role">
+                                        {% if msg.customer_id %}Customer{% else %}Support Staff{% endif %}
+                                    </div>
+                                </div>
+                                {% if msg.is_internal_note %}
+                                    <span class="internal-badge">
+                                        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                                        </svg>
+                                        Internal Note
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <div class="message-time">{{ msg.created_at.strftime('%b %d, %Y at %H:%M') }}</div>
+                        </div>
+                        <div class="message-body">{{ msg.message }}</div>
+
+                        {% set msg_attachments = attachments|selectattr('message_id', 'equalto', msg.id)|list %}
+                        {% if msg_attachments %}
+                            <div class="message-attachments">
+                                {% for att in msg_attachments %}
+                                    <a href="{{ url_for('admin.serve_ticket_attachment', attachment_id=att.id) }}" class="attachment-link">
+                                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                                        </svg>
+                                        {{ att.original_filename }}
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+
+            {% if ticket.status != 'closed' %}
+                <div class="reply-section">
+                    <div class="reply-tabs">
+                        <button class="reply-tab active" onclick="showReplyForm('respond')">Reply to Customer</button>
+                        <button class="reply-tab" onclick="showReplyForm('note')">Add Internal Note</button>
+                    </div>
+
+                    <form id="respond-form" class="reply-form active" method="POST" action="{{ url_for('admin.ticket_respond', ticket_id=ticket.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="form-group">
+                            <textarea name="message" class="form-control" rows="4" placeholder="Type your response to the customer..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Send Response</button>
+                    </form>
+
+                    <form id="note-form" class="reply-form" method="POST" action="{{ url_for('admin.ticket_note', ticket_id=ticket.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="form-group">
+                            <textarea name="note" class="form-control" rows="4" placeholder="Add an internal note (only visible to support staff)..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-secondary">Add Note</button>
+                    </form>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="sidebar-column">
+        <!-- Customer Info -->
+        <div class="card sidebar-card">
+            <div class="card-header">
+                <h4 class="card-title">Customer</h4>
+            </div>
+            <div class="card-body">
+                <div class="info-row">
+                    <span class="info-label">Email</span>
+                    <span class="info-value">{{ customer.email }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Company</span>
+                    <span class="info-value">{{ customer.company_name }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Domain</span>
+                    <span class="info-value mono">{{ customer.domain }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Status</span>
+                    <span class="info-value"><span class="badge badge-{{ customer.status }}">{{ customer.status }}</span></span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Total Tickets</span>
+                    <span class="info-value">{{ customer_ticket_count }}</span>
+                </div>
+                <div style="margin-top: 16px;">
+                    <a href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}" class="btn btn-secondary btn-sm" style="width: 100%;">View Customer</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ticket Info & Actions -->
+        <div class="card sidebar-card">
+            <div class="card-header">
+                <h4 class="card-title">Ticket Details</h4>
+            </div>
+            <div class="card-body">
+                <div class="info-row">
+                    <span class="info-label">Created</span>
+                    <span class="info-value">{{ ticket.created_at.strftime('%b %d, %Y') }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Updated</span>
+                    <span class="info-value">{{ ticket.updated_at.strftime('%b %d, %H:%M') }}</span>
+                </div>
+                {% if ticket.resolved_at %}
+                <div class="info-row">
+                    <span class="info-label">Resolved</span>
+                    <span class="info-value">{{ ticket.resolved_at.strftime('%b %d, %Y') }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card sidebar-card">
+            <div class="card-header">
+                <h4 class="card-title">Actions</h4>
+            </div>
+            <div class="card-body">
+                <form class="action-form" method="POST" action="{{ url_for('admin.ticket_status', ticket_id=ticket.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label>Status</label>
+                    <select name="status" class="form-control" onchange="this.form.submit()">
+                        <option value="open" {% if ticket.status == 'open' %}selected{% endif %}>Open</option>
+                        <option value="in_progress" {% if ticket.status == 'in_progress' %}selected{% endif %}>In Progress</option>
+                        <option value="waiting_customer" {% if ticket.status == 'waiting_customer' %}selected{% endif %}>Waiting for Customer</option>
+                        <option value="resolved" {% if ticket.status == 'resolved' %}selected{% endif %}>Resolved</option>
+                        <option value="closed" {% if ticket.status == 'closed' %}selected{% endif %}>Closed</option>
+                    </select>
+                </form>
+
+                <form class="action-form" method="POST" action="{{ url_for('admin.ticket_priority', ticket_id=ticket.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label>Priority</label>
+                    <select name="priority" class="form-control" onchange="this.form.submit()">
+                        <option value="low" {% if ticket.priority == 'low' %}selected{% endif %}>Low</option>
+                        <option value="medium" {% if ticket.priority == 'medium' %}selected{% endif %}>Medium</option>
+                        <option value="high" {% if ticket.priority == 'high' %}selected{% endif %}>High</option>
+                        <option value="urgent" {% if ticket.priority == 'urgent' %}selected{% endif %}>Urgent</option>
+                    </select>
+                </form>
+
+                <form class="action-form" method="POST" action="{{ url_for('admin.ticket_assign', ticket_id=ticket.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label>Assigned To</label>
+                    <select name="assigned_admin_id" class="form-control" onchange="this.form.submit()">
+                        <option value="">Unassigned</option>
+                        {% for a in admins %}
+                            <option value="{{ a.id }}" {% if ticket.assigned_admin_id == a.id %}selected{% endif %}>{{ a.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+
+                <form class="action-form" method="POST" action="{{ url_for('admin.ticket_category', ticket_id=ticket.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <label>Category</label>
+                    <select name="category_id" class="form-control" onchange="this.form.submit()">
+                        <option value="">None</option>
+                        {% for cat in categories %}
+                            <option value="{{ cat.id }}" {% if ticket.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function showReplyForm(type) {
+        document.querySelectorAll('.reply-tab').forEach(tab => tab.classList.remove('active'));
+        document.querySelectorAll('.reply-form').forEach(form => form.classList.remove('active'));
+
+        event.target.classList.add('active');
+        document.getElementById(type + '-form').classList.add('active');
+    }
+</script>
+{% endblock %}

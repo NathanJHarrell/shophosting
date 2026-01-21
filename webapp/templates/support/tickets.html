@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+
+{% block title %}Support Tickets{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 32px;
+    }
+
+    .page-title {
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+    }
+
+    .status-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }
+
+    .status-tab {
+        padding: 10px 20px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 0.9rem;
+        transition: all 0.2s;
+    }
+
+    .status-tab:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+    }
+
+    .status-tab.active {
+        background: var(--info-muted);
+        color: var(--accent-blue);
+        border-color: var(--accent-blue);
+    }
+
+    .tickets-list {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .ticket-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 20px 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: all 0.2s;
+        text-decoration: none;
+        color: inherit;
+    }
+
+    .ticket-card:hover {
+        border-color: var(--border-accent);
+        box-shadow: var(--shadow-glow);
+        transform: translateY(-1px);
+    }
+
+    .ticket-info {
+        flex: 1;
+    }
+
+    .ticket-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 8px;
+    }
+
+    .ticket-number {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.85rem;
+        color: var(--text-tertiary);
+    }
+
+    .ticket-subject {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 8px;
+    }
+
+    .ticket-meta {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 0.85rem;
+        color: var(--text-tertiary);
+    }
+
+    .ticket-badges {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 100px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .badge-open { background: var(--info-muted); color: var(--accent-blue); }
+    .badge-in_progress { background: var(--info-muted); color: var(--accent-cyan); }
+    .badge-waiting_customer { background: var(--warning-muted); color: var(--warning); }
+    .badge-resolved { background: var(--success-muted); color: var(--success); }
+    .badge-closed { background: var(--bg-surface); color: var(--text-tertiary); }
+
+    .badge-category {
+        background: var(--bg-surface);
+        color: var(--text-secondary);
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+    }
+
+    .empty-state-icon {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 20px;
+        color: var(--text-muted);
+    }
+
+    .empty-state-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .empty-state-text {
+        color: var(--text-tertiary);
+        margin-bottom: 24px;
+    }
+
+    .pagination {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin-top: 32px;
+    }
+
+    .pagination a, .pagination span {
+        padding: 8px 14px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        color: var(--text-secondary);
+        text-decoration: none;
+        font-size: 0.875rem;
+        transition: all 0.2s;
+    }
+
+    .pagination a:hover {
+        background: var(--bg-hover);
+        border-color: var(--border-accent);
+    }
+
+    .pagination .active {
+        background: var(--info-muted);
+        color: var(--accent-blue);
+        border-color: var(--accent-blue);
+    }
+
+    .pagination .disabled {
+        opacity: 0.5;
+        pointer-events: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <h1 class="page-title">Support Tickets</h1>
+        <a href="{{ url_for('create_ticket') }}" class="btn btn-primary">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+            </svg>
+            New Ticket
+        </a>
+    </div>
+
+    <div class="status-tabs">
+        <a href="{{ url_for('support_tickets') }}" class="status-tab {% if not status_filter %}active{% endif %}">All</a>
+        <a href="{{ url_for('support_tickets', status='open') }}" class="status-tab {% if status_filter == 'open' %}active{% endif %}">Open</a>
+        <a href="{{ url_for('support_tickets', status='in_progress') }}" class="status-tab {% if status_filter == 'in_progress' %}active{% endif %}">In Progress</a>
+        <a href="{{ url_for('support_tickets', status='waiting_customer') }}" class="status-tab {% if status_filter == 'waiting_customer' %}active{% endif %}">Waiting</a>
+        <a href="{{ url_for('support_tickets', status='resolved') }}" class="status-tab {% if status_filter == 'resolved' %}active{% endif %}">Resolved</a>
+        <a href="{{ url_for('support_tickets', status='closed') }}" class="status-tab {% if status_filter == 'closed' %}active{% endif %}">Closed</a>
+    </div>
+
+    {% if tickets %}
+        <div class="tickets-list">
+            {% for ticket in tickets %}
+                <a href="{{ url_for('view_ticket', ticket_number=ticket.ticket_number) }}" class="ticket-card">
+                    <div class="ticket-info">
+                        <div class="ticket-header">
+                            <span class="ticket-number">{{ ticket.ticket_number }}</span>
+                            <span class="badge badge-{{ ticket.status }}">{{ ticket.status|replace('_', ' ') }}</span>
+                            {% if ticket.category_name %}
+                                <span class="badge badge-category" style="border-left: 3px solid {{ ticket.category_color or '#0088ff' }}">{{ ticket.category_name }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="ticket-subject">{{ ticket.subject }}</div>
+                        <div class="ticket-meta">
+                            <span>Created: {{ ticket.created_at.strftime('%b %d, %Y') }}</span>
+                            <span>Updated: {{ ticket.updated_at.strftime('%b %d, %Y at %H:%M') }}</span>
+                        </div>
+                    </div>
+                    <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color: var(--text-muted);">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                    </svg>
+                </a>
+            {% endfor %}
+        </div>
+
+        {% if total_pages > 1 %}
+            <div class="pagination">
+                {% if page > 1 %}
+                    <a href="{{ url_for('support_tickets', page=page-1, status=status_filter) }}">&larr; Previous</a>
+                {% else %}
+                    <span class="disabled">&larr; Previous</span>
+                {% endif %}
+
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                        <span class="active">{{ p }}</span>
+                    {% else %}
+                        <a href="{{ url_for('support_tickets', page=p, status=status_filter) }}">{{ p }}</a>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page < total_pages %}
+                    <a href="{{ url_for('support_tickets', page=page+1, status=status_filter) }}">Next &rarr;</a>
+                {% else %}
+                    <span class="disabled">Next &rarr;</span>
+                {% endif %}
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="empty-state">
+            <svg class="empty-state-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+            </svg>
+            <h3 class="empty-state-title">No tickets found</h3>
+            <p class="empty-state-text">
+                {% if status_filter %}
+                    You don't have any {{ status_filter|replace('_', ' ') }} tickets.
+                {% else %}
+                    You haven't created any support tickets yet.
+                {% endif %}
+            </p>
+            <a href="{{ url_for('create_ticket') }}" class="btn btn-primary">Create Your First Ticket</a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

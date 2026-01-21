@@ -10,11 +10,14 @@ import logging
 from datetime import datetime
 from functools import wraps
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+import uuid
+import mimetypes
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, abort
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_wtf import FlaskForm
 from flask_wtf.csrf import CSRFProtect
-from wtforms import StringField, PasswordField, SelectField, SubmitField, HiddenField
+from wtforms import StringField, PasswordField, SelectField, SubmitField, HiddenField, TextAreaField
+from werkzeug.utils import secure_filename
 from wtforms.validators import DataRequired, Email, Length, EqualTo, ValidationError
 from dotenv import load_dotenv
 
@@ -22,6 +25,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, '/opt/shophosting/provisioning')
 
 from models import Customer, PortManager, PricingPlan, Subscription, Invoice, init_db_pool
+from models import Ticket, TicketMessage, TicketAttachment, TicketCategory
 from enqueue_provisioning import ProvisioningQueue
 from stripe_integration import init_stripe, create_checkout_session, process_webhook, create_portal_session
 from stripe_integration.checkout import get_checkout_session
@@ -131,6 +135,33 @@ class LoginForm(FlaskForm):
     email = StringField('Email', validators=[DataRequired(), Email()])
     password = PasswordField('Password', validators=[DataRequired()])
     submit = SubmitField('Login')
+
+
+class CreateTicketForm(FlaskForm):
+    """Create support ticket form"""
+    category = SelectField('Category', coerce=int, validators=[DataRequired()])
+    subject = StringField('Subject', validators=[
+        DataRequired(),
+        Length(min=5, max=255, message='Subject must be between 5 and 255 characters')
+    ])
+    message = TextAreaField('Description', validators=[
+        DataRequired(),
+        Length(min=20, message='Please provide more detail (at least 20 characters)')
+    ])
+    submit = SubmitField('Create Ticket')
+
+
+class TicketReplyForm(FlaskForm):
+    """Reply to ticket form"""
+    message = TextAreaField('Message', validators=[
+        DataRequired(),
+        Length(min=2, message='Message is too short')
+    ])
+    submit = SubmitField('Send Reply')
+
+
+# Ticket attachment upload path
+TICKET_UPLOAD_PATH = '/var/customers/tickets'
 
 
 # =============================================================================
@@ -430,6 +461,254 @@ def api_credentials():
 
     credentials = customer.get_credentials()
     return jsonify(credentials)
+
+
+# =============================================================================
+# Support Ticket Routes
+# =============================================================================
+
+def save_ticket_attachment(file, ticket, customer_id=None, admin_id=None, message_id=None):
+    """Save uploaded file and create attachment record"""
+    if not file or file.filename == '':
+        return None, "No file selected"
+
+    if not TicketAttachment.allowed_file(file.filename):
+        return None, "File type not allowed"
+
+    # Check file size
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
+    file.seek(0)
+
+    if size > TicketAttachment.MAX_FILE_SIZE:
+        return None, "File too large (max 10MB)"
+
+    # Generate unique filename
+    original_filename = secure_filename(file.filename)
+    unique_prefix = uuid.uuid4().hex[:8]
+    filename = f"{unique_prefix}_{original_filename}"
+
+    # Create directory structure
+    now = datetime.now()
+    relative_path = f"{now.year}/{now.month:02d}/{ticket.ticket_number}"
+    full_dir = os.path.join(TICKET_UPLOAD_PATH, relative_path)
+    os.makedirs(full_dir, exist_ok=True)
+
+    # Save file
+    file_path = os.path.join(relative_path, filename)
+    full_path = os.path.join(TICKET_UPLOAD_PATH, file_path)
+    file.save(full_path)
+
+    # Get mime type
+    mime_type = mimetypes.guess_type(original_filename)[0] or 'application/octet-stream'
+
+    # Create attachment record
+    attachment = TicketAttachment(
+        ticket_id=ticket.id,
+        message_id=message_id,
+        filename=filename,
+        original_filename=original_filename,
+        file_path=file_path,
+        file_size=size,
+        mime_type=mime_type,
+        uploaded_by_customer_id=customer_id,
+        uploaded_by_admin_id=admin_id
+    )
+    attachment.save()
+
+    return attachment, None
+
+
+@app.route('/support')
+@login_required
+def support_tickets():
+    """List customer's support tickets"""
+    status_filter = request.args.get('status')
+    page = request.args.get('page', 1, type=int)
+
+    tickets, total = Ticket.get_by_customer(current_user.id, status=status_filter, page=page)
+    total_pages = (total + 19) // 20
+
+    return render_template('support/tickets.html',
+                          tickets=tickets,
+                          total=total,
+                          page=page,
+                          total_pages=total_pages,
+                          status_filter=status_filter)
+
+
+@app.route('/support/new', methods=['GET', 'POST'])
+@login_required
+def create_ticket():
+    """Create new support ticket"""
+    form = CreateTicketForm()
+
+    # Populate category choices
+    categories = TicketCategory.get_all_active()
+    form.category.choices = [(c.id, c.name) for c in categories]
+
+    if form.validate_on_submit():
+        try:
+            # Create ticket
+            ticket = Ticket(
+                customer_id=current_user.id,
+                category_id=form.category.data,
+                subject=form.subject.data.strip(),
+                status='open',
+                priority='medium'
+            )
+            ticket.save()
+
+            # Create initial message
+            message = TicketMessage(
+                ticket_id=ticket.id,
+                customer_id=current_user.id,
+                message=form.message.data.strip()
+            )
+            message.save()
+
+            # Handle file attachment
+            if 'attachment' in request.files:
+                file = request.files['attachment']
+                if file and file.filename:
+                    attachment, error = save_ticket_attachment(
+                        file, ticket,
+                        customer_id=current_user.id,
+                        message_id=message.id
+                    )
+                    if error:
+                        flash(f'Ticket created but attachment failed: {error}', 'warning')
+                    else:
+                        logger.info(f"Attachment saved for ticket {ticket.ticket_number}")
+
+            logger.info(f"New ticket created: {ticket.ticket_number} by customer {current_user.email}")
+            flash(f'Ticket {ticket.ticket_number} created successfully!', 'success')
+            return redirect(url_for('view_ticket', ticket_number=ticket.ticket_number))
+
+        except Exception as e:
+            logger.error(f"Error creating ticket: {e}")
+            flash('An error occurred while creating the ticket. Please try again.', 'error')
+
+    return render_template('support/create_ticket.html', form=form, categories=categories)
+
+
+@app.route('/support/<ticket_number>')
+@login_required
+def view_ticket(ticket_number):
+    """View ticket details and messages"""
+    ticket = Ticket.get_by_ticket_number(ticket_number)
+
+    if not ticket:
+        flash('Ticket not found.', 'error')
+        return redirect(url_for('support_tickets'))
+
+    # Verify ownership
+    if ticket.customer_id != current_user.id:
+        flash('Access denied.', 'error')
+        return redirect(url_for('support_tickets'))
+
+    # Get messages (excluding internal notes)
+    messages = ticket.get_messages(include_internal=False)
+
+    # Get attachments
+    attachments = ticket.get_attachments()
+
+    # Get category
+    category = TicketCategory.get_by_id(ticket.category_id) if ticket.category_id else None
+
+    form = TicketReplyForm()
+
+    return render_template('support/view_ticket.html',
+                          ticket=ticket,
+                          messages=messages,
+                          attachments=attachments,
+                          category=category,
+                          form=form)
+
+
+@app.route('/support/<ticket_number>/reply', methods=['POST'])
+@login_required
+def reply_ticket(ticket_number):
+    """Add reply to ticket"""
+    ticket = Ticket.get_by_ticket_number(ticket_number)
+
+    if not ticket:
+        flash('Ticket not found.', 'error')
+        return redirect(url_for('support_tickets'))
+
+    # Verify ownership
+    if ticket.customer_id != current_user.id:
+        flash('Access denied.', 'error')
+        return redirect(url_for('support_tickets'))
+
+    # Check if ticket is closed
+    if ticket.status == 'closed':
+        flash('Cannot reply to a closed ticket.', 'error')
+        return redirect(url_for('view_ticket', ticket_number=ticket_number))
+
+    form = TicketReplyForm()
+
+    if form.validate_on_submit():
+        try:
+            # Create message
+            message = TicketMessage(
+                ticket_id=ticket.id,
+                customer_id=current_user.id,
+                message=form.message.data.strip()
+            )
+            message.save()
+
+            # Update ticket status if it was waiting for customer
+            if ticket.status == 'waiting_customer':
+                ticket.status = 'open'
+                ticket.save()
+
+            # Handle file attachment
+            if 'attachment' in request.files:
+                file = request.files['attachment']
+                if file and file.filename:
+                    attachment, error = save_ticket_attachment(
+                        file, ticket,
+                        customer_id=current_user.id,
+                        message_id=message.id
+                    )
+                    if error:
+                        flash(f'Reply sent but attachment failed: {error}', 'warning')
+
+            logger.info(f"Reply added to ticket {ticket.ticket_number} by customer {current_user.email}")
+            flash('Reply sent successfully!', 'success')
+
+        except Exception as e:
+            logger.error(f"Error adding reply to ticket: {e}")
+            flash('An error occurred. Please try again.', 'error')
+
+    return redirect(url_for('view_ticket', ticket_number=ticket_number))
+
+
+@app.route('/support/attachment/<int:attachment_id>')
+@login_required
+def serve_attachment(attachment_id):
+    """Serve attachment file with access control"""
+    attachment = TicketAttachment.get_by_id(attachment_id)
+
+    if not attachment:
+        abort(404)
+
+    # Verify access - customer can only access their own ticket attachments
+    ticket = Ticket.get_by_id(attachment.ticket_id)
+    if not ticket or ticket.customer_id != current_user.id:
+        abort(403)
+
+    full_path = os.path.join(TICKET_UPLOAD_PATH, attachment.file_path)
+
+    if not os.path.exists(full_path):
+        abort(404)
+
+    return send_file(
+        full_path,
+        download_name=attachment.original_filename,
+        as_attachment=True
+    )
 
 
 # =============================================================================
