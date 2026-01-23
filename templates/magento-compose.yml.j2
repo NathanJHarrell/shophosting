@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   varnish:
     image: varnish:7.4
@@ -24,7 +22,7 @@ services:
       - {{ container_prefix }}-network
 
   web:
-    image: shophosting/magento:latest
+    image: localhost:5001/magento:latest
     container_name: {{ container_prefix }}-web
     user: root
     restart: unless-stopped

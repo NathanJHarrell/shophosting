@@ -355,6 +355,83 @@ We're sorry to see you go. If you have feedback, contact support@shophosting.io
         html = self._get_base_template(content, f"Subscription cancelled for {domain}")
         return self._send_email(to_email, "Subscription Cancelled", html, plain_text)
 
+    def send_admin_password_reset_email(self, to_email: str, admin_name: str, temp_password: str) -> bool:
+        """Send password reset email to admin user"""
+        admin_login_url = "https://shophosting.io/admin/login"
+
+        content = f'''
+            <h1 style="margin: 0 0 24px 0; color: #f4f4f6; font-size: 24px; font-weight: 600;">
+                Password Reset
+            </h1>
+
+            <p style="margin: 0 0 24px 0; color: #a1a1aa; font-size: 16px; line-height: 1.6;">
+                Hi <strong style="color: #f4f4f6;">{admin_name}</strong>,
+            </p>
+
+            <p style="margin: 0 0 24px 0; color: #a1a1aa; font-size: 16px; line-height: 1.6;">
+                Your password has been reset by an administrator. A temporary password has been generated for you.
+            </p>
+
+            <!-- Password card -->
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #111114; border-radius: 10px; margin-bottom: 24px;">
+                <tr>
+                    <td style="padding: 24px;">
+                        <p style="margin: 0 0 16px 0; color: #71717a; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Temporary Password</p>
+                        <p style="margin: 0; color: #f4f4f6; font-size: 18px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; letter-spacing: 1px;">{temp_password}</p>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- Warning box -->
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: rgba(245, 158, 11, 0.1); border-radius: 10px; border: 1px solid rgba(245, 158, 11, 0.2); margin-bottom: 24px;">
+                <tr>
+                    <td style="padding: 20px;">
+                        <p style="margin: 0 0 8px 0; color: #f59e0b; font-size: 14px; font-weight: 600;">
+                            Action Required
+                        </p>
+                        <p style="margin: 0; color: #fcd34d; font-size: 14px; line-height: 1.5;">
+                            You will be required to change your password on your next login. Your new password must be at least 8 characters and contain uppercase, lowercase, numbers, and special characters.
+                        </p>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- CTA Button -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                    <td style="border-radius: 10px; background: linear-gradient(135deg, #00d4ff 0%, #0088ff 50%, #5b5bd6 100%);">
+                        <a href="{admin_login_url}" style="display: inline-block; padding: 14px 28px; color: #08080a; text-decoration: none; font-weight: 600; font-size: 15px;">Log In to Admin Panel</a>
+                    </td>
+                </tr>
+            </table>
+
+            <p style="margin: 24px 0 0 0; color: #71717a; font-size: 14px;">
+                If you did not request this password reset, please contact the super administrator immediately.
+            </p>
+        '''
+
+        plain_text = f"""Password Reset
+
+Hi {admin_name},
+
+Your password has been reset by an administrator. A temporary password has been generated for you.
+
+Temporary Password: {temp_password}
+
+You will be required to change your password on your next login.
+
+Log in at: {admin_login_url}
+
+Your new password must be at least 8 characters and contain uppercase, lowercase, numbers, and special characters.
+
+If you did not request this password reset, please contact the super administrator immediately.
+
+- ShopHosting.io Team
+"""
+
+        html = self._get_base_template(content, f"Password reset for your admin account")
+        return self._send_email(to_email, "Password Reset - Action Required", html, plain_text)
+
 
 # Singleton instance for easy importing
 email_service = EmailService()

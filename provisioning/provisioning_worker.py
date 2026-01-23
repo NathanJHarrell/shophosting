@@ -39,6 +39,89 @@ class ProvisioningError(Exception):
     pass
 
 
+class ProvisioningLogHandler(logging.Handler):
+    """Custom log handler that saves logs to database"""
+
+    def __init__(self, customer_id=None, job_id=None):
+        super().__init__()
+        self.customer_id = customer_id
+        self.job_id = job_id
+
+    def emit(self, record):
+        try:
+            log_level = record.levelname
+            message = self.format(record)
+
+            step_name = None
+            if 'directory structure' in message.lower():
+                step_name = 'create_directory'
+            elif 'docker-compose' in message.lower():
+                step_name = 'generate_config'
+            elif 'port' in message.lower() and ('in use' in message.lower() or 'alternative' in message.lower()):
+                step_name = 'port_allocation'
+            elif 'containers started' in message.lower() or 'docker compose' in message.lower():
+                step_name = 'start_containers'
+            elif 'nginx' in message.lower() or 'reverse proxy' in message.lower():
+                step_name = 'configure_proxy'
+            elif 'ssl' in message.lower() or 'certbot' in message.lower():
+                step_name = 'ssl_cert'
+            elif 'container' in message.lower() and ('waiting' in message.lower() or 'ready' in message.lower()):
+                step_name = 'wait_container'
+            elif 'wordpress' in message.lower() or 'magento' in message.lower():
+                step_name = 'install_app'
+            elif 'credentials' in message.lower():
+                step_name = 'save_credentials'
+            elif 'welcome email' in message.lower():
+                step_name = 'send_email'
+            elif 'completed successfully' in message.lower():
+                step_name = 'complete'
+            elif 'failed' in message.lower() or 'error' in message.lower():
+                step_name = 'error'
+            elif 'rollback' in message.lower():
+                step_name = 'rollback'
+
+            self._save_log(log_level, message, step_name)
+        except Exception as e:
+            pass
+
+    def _save_log(self, log_level, message, step_name=None):
+        if not self.customer_id:
+            return
+
+        try:
+            import mysql.connector
+            from datetime import datetime
+
+            db_config = {
+                'host': os.getenv('DB_HOST', 'localhost'),
+                'user': os.getenv('DB_USER', 'shophosting_app'),
+                'password': os.getenv('DB_PASSWORD', ''),
+                'database': os.getenv('DB_NAME', 'shophosting_db')
+            }
+
+            conn = mysql.connector.connect(**db_config)
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO provisioning_logs
+                (job_id, customer_id, log_level, message, step_name, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                self.job_id,
+                self.customer_id,
+                log_level,
+                message,
+                step_name,
+                datetime.now()
+            ))
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception:
+            pass
+
+
 class ProvisioningWorker:
     """Handles provisioning of new customer containers with Nginx reverse proxy"""
 
@@ -60,6 +143,9 @@ class ProvisioningWorker:
         # Validate database password is set
         if not self.db_config['password']:
             logger.warning("DB_PASSWORD not set in environment variables!")
+
+        self.current_job_id = None
+        self.current_customer_id = None
     
     def get_db_connection(self):
         """Get database connection"""
@@ -438,7 +524,7 @@ class ProvisioningWorker:
                 admin_email = os.getenv('ADMIN_EMAIL', 'admin@shophosting.io')
                 logger.info(f"Attempting to obtain SSL certificate for {domain}")
                 certbot_result = subprocess.run(
-                    ['certbot', '--nginx', '-d', domain,
+                    ['sudo', 'certbot', '--nginx', '-d', domain,
                      '--non-interactive', '--agree-tos', '--email', admin_email,
                      '--redirect'],
                     capture_output=True,
@@ -507,10 +593,35 @@ class ProvisioningWorker:
                 raise ProvisioningError(f"Container {container_name} failed to start within timeout")
 
             if config['platform'] == 'woocommerce':
-                # WordPress will auto-setup via web interface on first visit
-                # Just verify container is accessible
-                logger.info("WordPress container ready. Users can complete setup at the web interface.")
-                commands = []  # No commands needed - WordPress handles setup via web
+                # WordPress was installed via WP-CLI in entrypoint-wrapper.sh
+                # Verify installation was successful
+                logger.info("Verifying WordPress installation...")
+                container_name = f"customer-{config['customer_id']}-web"
+                
+                for attempt in range(30):  # Wait up to 5 minutes for WP install
+                    wp_check = subprocess.run(
+                        f"docker exec {container_name} wp core is-installed --allow-root 2>/dev/null",
+                        shell=True, capture_output=True, text=True, timeout=30
+                    )
+                    if wp_check.returncode == 0:
+                        logger.info("WordPress installation verified successfully")
+                        
+                        # Get WordPress version for logging
+                        wp_version = subprocess.run(
+                            f"docker exec {container_name} wp core version --allow-root",
+                            shell=True, capture_output=True, text=True, timeout=30
+                        )
+                        if wp_version.returncode == 0:
+                            logger.info(f"WordPress version: {wp_version.stdout.strip()}")
+                        
+                        break
+                    
+                    logger.info(f"Waiting for WordPress installation... attempt {attempt + 1}/30")
+                    time.sleep(10)
+                else:
+                    logger.warning("WordPress installation verification timed out, but container is running")
+                
+                commands = []
             elif config['platform'] == 'magento':
                 # Magento is pre-installed in the image via environment variables
                 # Wait a bit more for PHP-FPM to be ready, then verify
@@ -556,6 +667,20 @@ class ProvisioningWorker:
             # Use the shared email service for styled emails
             sys.path.insert(0, '/opt/shophosting/webapp')
             from email_service import email_service
+            
+            # Prevent duplicate emails by checking if customer is already active
+            try:
+                conn = self.get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT status FROM customers WHERE id = %s", (config['customer_id'],))
+                row = cursor.fetchone()
+                cursor.close()
+                conn.close()
+                if row and row[0] == 'active':
+                    logger.info(f"Customer {config['customer_id']} already active, skipping welcome email")
+                    return True
+            except Exception as check_err:
+                logger.warning(f"Could not check customer status: {check_err}")
 
             result = email_service.send_welcome_email(
                 to_email=config['email'],
@@ -581,19 +706,35 @@ class ProvisioningWorker:
         logger.warning(f"Rolling back provisioning for customer {customer_id}")
         
         try:
-            # Stop and remove containers
+            # Stop and remove containers with volume removal
             if customer_path and customer_path.exists():
                 subprocess.run(
-                    ['docker', 'compose', 'down', '-v'],
-                    cwd=customer_path,
+                    ['docker', 'compose', 'down', '-v', '--remove-orphans'],
+                    cwd=str(customer_path),
+                    capture_output=True,
+                    timeout=120
+                )
+                
+                # Short delay to ensure volumes are unmounted
+                import time
+                time.sleep(2)
+                
+                # Change ownership of all files to ensure deletion works
+                subprocess.run(
+                    ['sudo', 'chmod', '-R', '777', str(customer_path)],
+                    capture_output=True,
+                    timeout=30
+                )
+                
+                # Remove directory with sudo (Docker creates files as root)
+                import shutil
+                result = subprocess.run(
+                    ['sudo', 'rm', '-rf', str(customer_path)],
                     capture_output=True,
                     timeout=60
                 )
-            
-            # Remove directory
-            import shutil
-            if customer_path and customer_path.exists():
-                shutil.rmtree(customer_path)
+                if result.returncode != 0:
+                    logger.warning(f"Rollback rm failed: {result.stderr.decode()}")
             
             # Remove Nginx config (using sudo)
             nginx_available = Path(f"/etc/nginx/sites-available/customer-{customer_id}.conf")
@@ -621,27 +762,30 @@ class ProvisioningWorker:
         customer_id = job_data['customer_id']
         customer_path = None
 
+        self.current_job_id = rq_job_id
+        self.current_customer_id = customer_id
+
+        log_handler = ProvisioningLogHandler(customer_id=customer_id, job_id=rq_job_id)
+        log_handler.setLevel(logging.INFO)
+        logger.addHandler(log_handler)
+
         logger.info(f"Starting provisioning for customer {customer_id}")
 
-        # Update job status to started
         if rq_job_id:
             self.update_job_status(rq_job_id, 'started')
 
         self.update_customer_status(customer_id, 'provisioning')
 
-        # Clean up any existing resources from a previous failed attempt
         existing_path = self.base_path / f"customer-{customer_id}"
         if existing_path.exists():
             logger.info(f"Cleaning up existing resources for customer {customer_id}")
             try:
-                # Stop containers first
                 subprocess.run(
                     ['docker', 'compose', 'down', '-v', '--remove-orphans'],
                     cwd=str(existing_path),
                     capture_output=True,
                     timeout=60
                 )
-                # Remove directory with sudo (Docker creates files as root)
                 subprocess.run(
                     ['sudo', 'rm', '-rf', str(existing_path)],
                     capture_output=True,
@@ -651,20 +795,21 @@ class ProvisioningWorker:
                 logger.warning(f"Cleanup of existing resources failed: {e}")
 
         try:
-            # Step 1: Create directory structure
             customer_path = self.create_customer_directory(customer_id, job_data['platform'])
 
-            # Step 2: Generate credentials and config
             db_password = self.generate_password()
             admin_password = job_data.get('admin_password') or self.generate_password()
+            
+            email_username = job_data['email'].split('@')[0]
+            admin_user = ''.join(c for c in email_username if c.isalnum())[:60] or 'admin'
             
             config = {
                 'customer_id': customer_id,
                 'domain': job_data['domain'],
                 'platform': job_data['platform'],
-                'site_title': job_data.get('site_title', 'My Store'),
+                'site_title': job_data.get('site_title', job_data['domain']),
                 'email': job_data['email'],
-                'admin_user': job_data.get('admin_user', 'admin'),
+                'admin_user': job_data.get('admin_user', admin_user),
                 'admin_password': admin_password,
                 'db_name': f"customer_{customer_id}",
                 'db_user': f"customer_{customer_id}",
@@ -675,11 +820,10 @@ class ProvisioningWorker:
                 'memory_limit': job_data.get('memory_limit', '1g'),
                 'cpu_limit': job_data.get('cpu_limit', '1.0')
             }
-            
-            # Step 3: Generate docker-compose file
+
+            logger.info(f"Generated configuration for customer {customer_id}")
             self.generate_docker_compose(customer_path, config)
 
-            # Step 3.5: Validate and fix port if needed
             if self.is_port_in_use(config['web_port']):
                 logger.warning(f"Port {config['web_port']} is in use, finding alternative...")
                 new_port = self.find_available_port(config['web_port'])
@@ -687,29 +831,26 @@ class ProvisioningWorker:
                 config['web_port'] = new_port
                 self.update_docker_compose_port(customer_path, new_port)
 
-            # Step 4: Start containers
+            logger.info(f"Starting containers for customer {customer_id}")
             self.start_containers(customer_path, config)
             
-            # Step 5: Configure reverse proxy
+            logger.info(f"Configuring Nginx reverse proxy for {config['domain']}")
             self.configure_reverse_proxy(config['domain'], customer_id, config['web_port'])
             
-            # Step 6: Install application
+            logger.info(f"Installing {job_data['platform']} application")
             self.install_application(customer_path, config)
             
-            # Step 7: Save credentials to database
+            logger.info(f"Saving customer credentials to database")
             self.save_customer_credentials(customer_id, config)
             
-            # Step 8: Send welcome email
+            logger.info(f"Sending welcome email to {config['email']}")
             self.send_welcome_email(config)
             
-            # Step 9: Update status to active
+            logger.info(f"Provisioning completed successfully for customer {customer_id}")
             self.update_customer_status(customer_id, 'active')
 
-            # Update job status to finished
             if rq_job_id:
                 self.update_job_status(rq_job_id, 'finished')
-
-            logger.info(f"Provisioning completed successfully for customer {customer_id}")
 
             return {
                 'status': 'success',
@@ -722,14 +863,11 @@ class ProvisioningWorker:
         except ProvisioningError as e:
             logger.error(f"Provisioning failed for customer {customer_id}: {e}")
 
-            # Rollback
             if customer_path:
                 self.rollback(customer_id, customer_path)
 
-            # Update status to failed
             self.update_customer_status(customer_id, 'failed', str(e))
 
-            # Update job status to failed
             if rq_job_id:
                 self.update_job_status(rq_job_id, 'failed', str(e))
 
@@ -742,14 +880,11 @@ class ProvisioningWorker:
         except Exception as e:
             logger.error(f"Unexpected error provisioning customer {customer_id}: {e}")
 
-            # Rollback
             if customer_path:
                 self.rollback(customer_id, customer_path)
 
-            # Update status to failed
             self.update_customer_status(customer_id, 'failed', f"Unexpected error: {str(e)}")
 
-            # Update job status to failed
             if rq_job_id:
                 self.update_job_status(rq_job_id, 'failed', f"Unexpected error: {str(e)}")
 

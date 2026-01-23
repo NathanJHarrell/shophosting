@@ -1,0 +1,124 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Admin Users - ShopHosting.io{% endblock %}
+{% block page_title %}Admin Users{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary btn-sm">Back to Dashboard</a>
+    {% if session.get('admin_user_role') == 'super_admin' %}
+    <a href="{{ url_for('admin.new_admin') }}" class="btn btn-primary btn-sm">
+        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-right: 4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+        New Admin
+    </a>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">All Admin Users</h3>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Last Login</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for admin_user in admins %}
+                <tr>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 36px; height: 36px; background: var(--gradient-primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; color: var(--bg-deepest);">
+                                {{ admin_user.full_name[:1].upper() }}
+                            </div>
+                            <span>{{ admin_user.full_name }}</span>
+                        </div>
+                    </td>
+                    <td>{{ admin_user.email }}</td>
+                    <td>
+                        <span class="badge badge-{{ admin_user.role }}">
+                            {{ admin_user.role.replace('_', ' ')|title }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if admin_user.is_active %}
+                        <span style="color: var(--success);">Active</span>
+                        {% else %}
+                        <span style="color: var(--error);">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ admin_user.last_login_at.strftime('%Y-%m-%d %H:%M') if admin_user.last_login_at else 'Never' }}</td>
+                    <td>{{ admin_user.created_at.strftime('%Y-%m-%d') if admin_user.created_at else '-' }}</td>
+                    <td>
+                        {% if session.get('admin_user_role') == 'super_admin' %}
+                        <div class="dropdown">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleDropdown('dropdown-{{ admin_user.id }}')">
+                                Actions <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-left: 4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </button>
+                            <div id="dropdown-{{ admin_user.id }}" class="dropdown-content" style="right: 0; left: auto;">
+                                <a href="{{ url_for('admin.edit_admin', admin_id=admin_user.id) }}">Edit</a>
+                                <a href="{{ url_for('admin.reset_admin_password', admin_id=admin_user.id) }}" onclick="return confirmResetPassword('{{ admin_user.full_name }}');">Reset Password</a>
+                                {% if admin_user.is_active %}
+                                <a href="{{ url_for('admin.toggle_admin_active', admin_id=admin_user.id) }}" onclick="return confirmAction('Deactivate {{ admin_user.full_name }}?');">Deactivate</a>
+                                {% else %}
+                                <a href="{{ url_for('admin.toggle_admin_active', admin_id=admin_user.id) }}" onclick="return confirmAction('Activate {{ admin_user.full_name }}?');">Activate</a>
+                                {% endif %}
+                                {% if admin_user.id != session.get('admin_user_id') %}
+                                <a href="{{ url_for('admin.delete_admin', admin_id=admin_user.id) }}" class="danger" onclick="return confirmAction('Delete {{ admin_user.full_name }}? This cannot be undone.');">Delete</a>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% else %}
+                        <span class="text-muted" style="font-size: 0.85rem;">View only</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-muted" style="text-align: center; padding: 40px;">No admin users found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function toggleDropdown(id) {
+    var dropdown = document.getElementById(id);
+    var isVisible = dropdown.style.display === 'block';
+
+    document.querySelectorAll('.dropdown-content').forEach(function(el) {
+        el.style.display = 'none';
+    });
+
+    if (!isVisible) {
+        dropdown.style.display = 'block';
+    }
+}
+
+function confirmAction(message) {
+    return confirm(message);
+}
+
+function confirmResetPassword(name) {
+    return confirm('Reset password for ' + name + '? A temporary password will be generated and sent to their email.');
+}
+
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('.dropdown')) {
+        document.querySelectorAll('.dropdown-content').forEach(function(el) {
+            el.style.display = 'none';
+        });
+    }
+});
+</script>
+{% endblock %}

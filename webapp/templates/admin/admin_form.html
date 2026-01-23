@@ -1,0 +1,86 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}{{ 'New Admin User' if is_new else 'Edit Admin User' }} - ShopHosting.io{% endblock %}
+{% block page_title %}{{ 'New Admin User' if is_new else 'Edit Admin User' }}{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin.admins') }}" class="btn btn-secondary btn-sm">Back to Admin Users</a>
+</div>
+
+<div class="card" style="max-width: 600px;">
+    <div class="card-header">
+        <h3 class="card-title">{{ 'Create New Admin User' if is_new else 'Edit Admin User' }}</h3>
+    </div>
+    <div class="card-body">
+        <form method="POST">
+            {{ form.hidden_tag() }}
+
+            <div style="margin-bottom: 20px;">
+                {{ form.full_name.label(class_='form-label') }}
+                {{ form.full_name(class_='form-control', placeholder='Full Name') }}
+                {% if form.full_name.errors %}
+                <div class="text-error" style="font-size: 0.85rem; margin-top: 4px;">
+                    {{ form.full_name.errors[0] }}
+                </div>
+                {% endif %}
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                {{ form.email.label(class_='form-label') }}
+                {{ form.email(class_='form-control', placeholder='email@example.com') }}
+                {% if form.email.errors %}
+                <div class="text-error" style="font-size: 0.85rem; margin-top: 4px;">
+                    {{ form.email.errors[0] }}
+                </div>
+                {% endif %}
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                {{ form.password.label(class_='form-label') }}
+                {{ form.password(class_='form-control', placeholder='Enter password') }}
+                {% if is_new %}
+                <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">Password is required for new admin users</div>
+                {% else %}
+                <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">Leave blank to keep current password</div>
+                {% endif %}
+                {% if form.password.errors %}
+                <div class="text-error" style="font-size: 0.85rem; margin-top: 4px;">
+                    {{ form.password.errors[0] }}
+                </div>
+                {% endif %}
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                {{ form.role.label(class_='form-label') }}
+                {% if is_self and admin_user.role == 'super_admin' %}
+                {{ form.role(class_='form-control', disabled=true) }}
+                <input type="hidden" name="{{ form.role.name }}" value="{{ form.role.data }}">
+                <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">You cannot change your own role.</div>
+                {% else %}
+                {{ form.role(class_='form-control') }}
+                {% endif %}
+            </div>
+
+            <div style="margin-bottom: 24px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                    {% if is_self and admin_user.role == 'super_admin' %}
+                    {{ form.is_active(disabled=true) }}
+                    <span>{{ form.is_active.label.text }}</span>
+                    <input type="hidden" name="{{ form.is_active.name }}" value="true">
+                    <div class="text-muted" style="font-size: 0.8rem; margin-left: 8px;">(Cannot deactivate yourself)</div>
+                    {% else %}
+                    {{ form.is_active() }}
+                    <span>{{ form.is_active.label.text }}</span>
+                    {% endif %}
+                </label>
+            </div>
+
+            <div style="display: flex; gap: 12px;">
+                {{ form.submit(class_='btn btn-primary') }}
+                <a href="{{ url_for('admin.admins') }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

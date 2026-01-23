@@ -163,3 +163,33 @@ def api_ticket_stats():
         'urgent': stats['urgent_count'] or 0,
         'unassigned': stats['unassigned_count'] or 0
     })
+
+
+@admin_bp.route('/api/provisioning-logs/<int:customer_id>')
+@admin_required
+def api_provisioning_logs(customer_id):
+    """Get provisioning logs for a customer (for live updates)"""
+    from .routes import get_provisioning_logs_by_customer, get_provisioning_jobs
+
+    jobs = get_provisioning_jobs(customer_id)
+    in_progress_job = None
+    for job in jobs:
+        if job['status'] == 'started':
+            in_progress_job = job
+            break
+
+    if not in_progress_job:
+        return jsonify({'logs': [], 'in_progress': False})
+
+    logs = get_provisioning_logs_by_customer(customer_id, limit=100)
+
+    for log in logs:
+        for key in ['created_at']:
+            if log.get(key):
+                log[key] = log[key].isoformat()
+
+    return jsonify({
+        'logs': logs,
+        'in_progress': True,
+        'job_id': in_progress_job['job_id']
+    })

@@ -225,6 +225,40 @@
     </div>
 </div>
 
+<!-- Live Provisioning Logs -->
+{% if in_progress_job and provisioning_logs %}
+<div class="card" id="provisioning-logs-card">
+    <div class="card-header">
+        <h3 class="card-title">
+            <span style="display: flex; align-items: center; gap: 8px;">
+                Live Provisioning Progress
+                <span class="pulse-indicator"></span>
+            </span>
+        </h3>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="refreshProvisioningLogs()" style="font-size: 0.75rem;">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-right: 4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            Refresh
+        </button>
+    </div>
+    <div class="card-body" style="padding: 0;">
+        <div id="provisioning-logs-container" style="max-height: 400px; overflow-y: auto; background: #1a1a2e; padding: 16px; margin: 0;">
+            {% for log in provisioning_logs %}
+            <div class="log-entry log-{{ log.log_level|lower }}" style="padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 0.8rem;">
+                <span class="log-time" style="color: #6b7280; margin-right: 12px;">{{ log.created_at.strftime('%H:%M:%S') }}</span>
+                <span class="log-level" style="font-weight: 600; margin-right: 8px;
+                    {% if log.log_level == 'INFO' %}color: #10b981;{% endif %}
+                    {% if log.log_level == 'WARNING' %}color: #f59e0b;{% endif %}
+                    {% if log.log_level == 'ERROR' %}color: #ef4444;{% endif %}
+                    {% if log.log_level == 'DEBUG' %}color: #6b7280;{% endif %}
+                ">[{{ log.log_level }}]</span>
+                <span class="log-message" style="color: #e5e7eb;">{{ log.message }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Invoices -->
 {% if invoices %}
 <div class="card">
@@ -318,25 +352,74 @@ function toggleJobError(index) {
     }
 }
 
-// Try to pretty-print JSON errors
+function refreshProvisioningLogs() {
+    var customerId = {{ customer.id }};
+    fetch('/admin/api/provisioning-logs/' + customerId)
+        .then(response => response.json())
+        .then(data => {
+            if (data.logs && data.logs.length > 0) {
+                var container = document.getElementById('provisioning-logs-container');
+                container.innerHTML = '';
+                data.logs.forEach(function(log) {
+                    var div = document.createElement('div');
+                    div.className = 'log-entry log-' + log.log_level.toLowerCase();
+                    div.style.cssText = 'padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-family: Monaco, Menlo, Ubuntu Mono, monospace; font-size: 0.8rem;';
+
+                    var time = document.createElement('span');
+                    time.className = 'log-time';
+                    time.style.cssText = 'color: #6b7280; margin-right: 12px;';
+                    var date = new Date(log.created_at);
+                    time.textContent = date.toISOString().split('T')[1].split('.')[0];
+
+                    var level = document.createElement('span');
+                    level.className = 'log-level';
+                    level.style.cssText = 'font-weight: 600; margin-right: 8px;';
+                    if (log.log_level === 'INFO') level.style.color = '#10b981';
+                    else if (log.log_level === 'WARNING') level.style.color = '#f59e0b';
+                    else if (log.log_level === 'ERROR') level.style.color = '#ef4444';
+                    else if (log.log_level === 'DEBUG') level.style.color = '#6b7280';
+                    level.textContent = '[' + log.log_level + ']';
+
+                    var message = document.createElement('span');
+                    message.className = 'log-message';
+                    message.style.cssText = 'color: #e5e7eb;';
+                    message.textContent = log.message;
+
+                    div.appendChild(time);
+                    div.appendChild(level);
+                    div.appendChild(message);
+                    container.appendChild(div);
+                });
+            }
+        })
+        .catch(error => console.error('Error refreshing logs:', error));
+}
+
+var logRefreshInterval = null;
 document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('provisioning-logs-card')) {
+        logRefreshInterval = setInterval(refreshProvisioningLogs, 5000);
+    }
+
     document.querySelectorAll('.error-details').forEach(function(el) {
         var text = el.textContent.trim();
-        // Try to detect and format JSON
         if (text.startsWith('{') || text.startsWith('[')) {
             try {
                 var parsed = JSON.parse(text);
                 el.textContent = JSON.stringify(parsed, null, 2);
             } catch(e) {
-                // Not valid JSON, leave as-is
             }
         }
-        // Format Python/common stack traces
         else if (text.includes('Traceback') || text.includes('  File "')) {
-            // Already formatted, just ensure proper display
             el.style.whiteSpace = 'pre';
         }
     });
+});
+
+window.addEventListener('beforeunload', function() {
+    if (logRefreshInterval) {
+        clearInterval(logRefreshInterval);
+    }
 });
 </script>
 {% endblock %}

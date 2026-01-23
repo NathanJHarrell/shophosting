@@ -17,7 +17,7 @@ class AdminUser:
     """Admin user model for admin panel authentication"""
 
     def __init__(self, id=None, email=None, password_hash=None, full_name=None,
-                 role='admin', is_active=True, last_login_at=None,
+                 role='admin', is_active=True, must_change_password=False, last_login_at=None,
                  created_at=None, updated_at=None):
         self.id = id
         self.email = email
@@ -25,6 +25,7 @@ class AdminUser:
         self.full_name = full_name
         self.role = role
         self.is_active = is_active
+        self.must_change_password = must_change_password
         self.last_login_at = last_login_at
         self.created_at = created_at
         self.updated_at = updated_at
@@ -47,15 +48,15 @@ class AdminUser:
                 cursor.execute("""
                     UPDATE admin_users SET
                         email = %s, password_hash = %s, full_name = %s,
-                        role = %s, is_active = %s, last_login_at = %s
+                        role = %s, is_active = %s, must_change_password = %s, last_login_at = %s
                     WHERE id = %s
                 """, (self.email, self.password_hash, self.full_name,
-                      self.role, self.is_active, self.last_login_at, self.id))
+                      self.role, self.is_active, self.must_change_password, self.last_login_at, self.id))
             else:
                 cursor.execute("""
-                    INSERT INTO admin_users (email, password_hash, full_name, role, is_active)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (self.email, self.password_hash, self.full_name, self.role, self.is_active))
+                    INSERT INTO admin_users (email, password_hash, full_name, role, is_active, must_change_password)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (self.email, self.password_hash, self.full_name, self.role, self.is_active, self.must_change_password))
                 self.id = cursor.lastrowid
 
             conn.commit()
@@ -88,6 +89,7 @@ class AdminUser:
             'full_name': self.full_name,
             'role': self.role,
             'is_active': self.is_active,
+            'must_change_password': self.must_change_password,
             'last_login_at': self.last_login_at.isoformat() if self.last_login_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }

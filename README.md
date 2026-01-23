@@ -8,6 +8,8 @@ A multi-tenant Docker hosting platform that automatically provisions containeriz
 - **Multi-Platform Support**: WooCommerce (WordPress) and Magento 2 with Varnish caching
 - **Self-Service Dashboard**: Customers can view store status, credentials, and manage their stores
 - **Admin Panel**: Full-featured admin interface for system monitoring and customer management
+  - **Admin User Management**: Super admins can create, edit, and manage other admin users with role-based access control
+  - **Live Provisioning Logs**: Real-time persistent logs showing detailed provisioning progress on customer pages
 - **Background Job Processing**: Redis-backed queue system for reliable provisioning
 - **SSL/TLS Support**: Automatic certificate management with Let's Encrypt
 - **Resource Isolation**: Each customer gets isolated Docker containers with configurable resource limits
@@ -198,9 +200,10 @@ ShopHosting.io includes a comprehensive admin panel for system monitoring and cu
 
 ### Setup
 
-1. **Run the migration:**
+1. **Run the migrations:**
    ```bash
    mysql -u root -p shophosting_db < /opt/shophosting/migrations/002_add_admin_users.sql
+   mysql -u root -p shophosting_db < /opt/shophosting/migrations/005_add_admin_features.sql
    ```
 
 2. **Create your first admin user:**
@@ -224,6 +227,14 @@ ShopHosting.io includes a comprehensive admin panel for system monitoring and cu
   - Job status tracking: queued → started → finished/failed
   - Expandable, prettified error logs (auto-formats JSON and stack traces)
   - One-click retry for failed provisioning jobs
+  - **Live Provisioning Logs**: Real-time progress updates on customer detail page when provisioning is in progress (auto-refreshes every 5 seconds)
+- **Admin User Management**: Super admins can manage admin users
+  - View all admin users (all admin roles)
+  - Create new admin users with `admin` or `support` roles
+  - Edit existing admin details
+  - Reset passwords with automatic email notification
+  - Toggle admin active status
+  - Delete admin users
 - **System Health**: Service status, disk usage, backup status, port allocation
 - **Billing Overview**: MRR, subscription stats, recent invoices
 - **Log Viewer**: View webapp and worker logs directly from the admin panel
@@ -239,9 +250,19 @@ The dashboard includes quick action buttons for:
 
 ### Admin Roles
 
-- `super_admin`: Full access to all features
-- `admin`: Standard admin access
-- `support`: Limited access for support staff
+- `super_admin`: Full access to all features including admin user management
+- `admin`: Standard admin access (can view admin users, cannot modify)
+- `support`: Limited access for support staff (can view admin users, cannot modify)
+
+### Password Management
+
+- Admins can change their own password via the "Change Password" option in the sidebar
+- Super admins can reset other admin users' passwords via the Admin Users page
+- When a password is reset by a super admin:
+  - A temporary 16-character secure password is generated
+  - An email is sent to the admin user with the temporary password
+  - The admin is forced to change their password on next login
+  - The temporary password must be changed before accessing any other admin pages
 
 ## Backup System
 
@@ -370,13 +391,19 @@ Edit `/opt/shophosting/scripts/backup.sh` to customize:
 ├── webapp/                 # Flask web application
 │   ├── app.py              # Main routes and application
 │   ├── models.py           # Database models
+│   ├── email_service.py    # Email sending service
 │   ├── admin/              # Admin panel blueprint
 │   │   ├── __init__.py
-│   │   ├── routes.py       # Admin routes
+│   │   ├── routes.py       # Admin routes (includes admin user management)
 │   │   ├── models.py       # Admin user model
-│   │   └── api.py          # Admin API endpoints
-│   └── templates/          # Jinja2 HTML templates
-│       └── admin/          # Admin panel templates
+│   │   ├── api.py          # Admin API endpoints
+│   │   └── templates/      # Admin panel templates
+│   │       ├── base_admin.html
+│   │       ├── admins.html           # Admin users list
+│   │       ├── admin_form.html       # Create/edit admin form
+│   │       ├── change_password.html  # Password change form
+│   │       └── ...
+│   └── templates/          # Customer-facing templates
 ├── provisioning/           # Background worker
 │   └── provisioning_worker.py
 ├── templates/              # Docker Compose templates
@@ -384,6 +411,9 @@ Edit `/opt/shophosting/scripts/backup.sh` to customize:
 │   └── magento-compose.yml.j2
 ├── docker/                 # Custom Docker images
 ├── migrations/             # Database migrations
+│   ├── 002_add_admin_users.sql
+│   ├── 003_add_ticketing_system.sql
+│   └── 005_add_admin_features.sql   # Admin user management features
 ├── scripts/                # Utility scripts
 │   ├── backup.sh           # Daily backup script
 │   ├── restore.sh          # Restore tool

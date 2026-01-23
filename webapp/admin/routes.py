@@ -5,13 +5,14 @@ Handles all admin page routes and actions
 
 import os
 import subprocess
+import logging
 from functools import wraps
 from datetime import datetime, timedelta
 
 from flask import render_template, request, redirect, url_for, flash, session, jsonify
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField
-from wtforms.validators import DataRequired, Email
+from wtforms import StringField, PasswordField, SelectField, BooleanField, SubmitField
+from wtforms.validators import DataRequired, Email, Length, EqualTo
 
 from . import admin_bp
 from .models import AdminUser, log_admin_action
@@ -20,6 +21,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import Customer, PortManager, get_db_connection, PricingPlan, Subscription, Invoice
 from models import Ticket, TicketMessage, TicketAttachment, TicketCategory
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -108,7 +111,10 @@ def dashboard():
     """Main admin dashboard"""
     admin = get_current_admin()
 
-    # Get customer stats
+    if admin.must_change_password and request.endpoint != 'admin.force_password_change':
+        flash('You must change your password before accessing the admin panel.', 'warning')
+        return redirect(url_for('admin.force_password_change'))
+
     stats = get_customer_stats()
     port_usage = PortManager.get_port_usage()
     queue_stats = get_queue_stats()
@@ -174,11 +180,20 @@ def customer_detail(customer_id):
         flash('Customer not found.', 'error')
         return redirect(url_for('admin.customers'))
 
-    # Get related data
     subscription = Subscription.get_by_customer_id(customer_id)
     invoices = Invoice.get_by_customer_id(customer_id)
     jobs = get_provisioning_jobs(customer_id)
     audit_logs = get_customer_audit_logs(customer_id)
+    provisioning_logs = []
+
+    in_progress_job = None
+    for job in jobs:
+        if job['status'] == 'started':
+            in_progress_job = job
+            break
+
+    if in_progress_job:
+        provisioning_logs = get_provisioning_logs_by_job(in_progress_job['job_id'])
 
     return render_template('admin/customer_detail.html',
                            admin=admin,
@@ -186,7 +201,9 @@ def customer_detail(customer_id):
                            subscription=subscription,
                            invoices=invoices,
                            jobs=jobs,
-                           audit_logs=audit_logs)
+                           audit_logs=audit_logs,
+                           provisioning_logs=provisioning_logs,
+                           in_progress_job=in_progress_job)
 
 
 @admin_bp.route('/customers/<int:customer_id>/suspend', methods=['POST'])
@@ -901,6 +918,48 @@ def get_provisioning_jobs(customer_id):
         conn.close()
 
 
+def get_provisioning_logs_by_job(job_id):
+    """Get provisioning logs for a specific job"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT job_id, customer_id, log_level, message, step_name, created_at
+            FROM provisioning_logs
+            WHERE job_id = %s
+            ORDER BY created_at ASC
+        """, (job_id,))
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_provisioning_logs_by_customer(customer_id, limit=100):
+    """Get provisioning logs for a customer (most recent first)"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT pl.job_id, pl.customer_id, pl.log_level, pl.message, pl.step_name, pl.created_at
+            FROM provisioning_logs pl
+            INNER JOIN (
+                SELECT job_id, MAX(created_at) as max_date
+                FROM provisioning_logs
+                WHERE customer_id = %s
+                GROUP BY job_id
+            ) latest ON pl.job_id = latest.job_id
+            ORDER BY pl.created_at DESC
+            LIMIT %s
+        """, (customer_id, limit))
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def get_all_provisioning_jobs(limit=50):
     """Get all recent provisioning jobs"""
     conn = get_db_connection()
@@ -1476,45 +1535,385 @@ def delete_customer(customer_id):
 
     email = customer.email
     customer_path = f"/var/customers/customer-{customer_id}"
+    db_deleted = False
+    directory_deleted = False
 
     try:
-        # Stop and remove containers
+        # Stop and remove containers with volume removal
         if os.path.exists(customer_path):
-            subprocess.run(
-                ['docker', 'compose', 'down', '-v'],
+            result = subprocess.run(
+                ['docker', 'compose', 'down', '-v', '--remove-orphans'],
                 cwd=customer_path,
+                capture_output=True,
+                timeout=120
+            )
+            if result.returncode != 0:
+                logger.warning(f"Docker compose down failed: {result.stderr.decode()}")
+            
+            # Short delay to ensure volumes are unmounted
+            import time
+            time.sleep(2)
+            
+            # Change ownership of all files to current user before deletion
+            # This fixes permission issues with Docker-created root files
+            result = subprocess.run(
+                ['sudo', 'chmod', '-R', '777', customer_path],
+                capture_output=True,
+                timeout=30
+            )
+            if result.returncode != 0:
+                logger.warning(f"chmod failed: {result.stderr.decode()}")
+            
+            # Also fix individual problem files like license.txt
+            license_file = os.path.join(customer_path, 'license.txt')
+            if os.path.exists(license_file):
+                subprocess.run(['sudo', 'chmod', '777', license_file], capture_output=True)
+            
+            # Now remove the directory
+            result = subprocess.run(
+                ['sudo', 'rm', '-rf', customer_path],
                 capture_output=True,
                 timeout=60
             )
-            # Remove customer directory
-            import shutil
-            shutil.rmtree(customer_path)
+            if result.returncode != 0:
+                raise PermissionError(f"Failed to delete customer directory: {result.stderr.decode()}")
+            directory_deleted = True
 
         # Remove Nginx config
         nginx_available = f"/etc/nginx/sites-available/customer-{customer_id}.conf"
         nginx_enabled = f"/etc/nginx/sites-enabled/customer-{customer_id}.conf"
 
         if os.path.exists(nginx_enabled):
-            os.unlink(nginx_enabled)
+            result = subprocess.run(['sudo', 'rm', '-f', nginx_enabled], capture_output=True)
+            if result.returncode != 0:
+                logger.warning(f"Failed to remove nginx enabled config: {result.stderr.decode()}")
         if os.path.exists(nginx_available):
-            os.unlink(nginx_available)
+            result = subprocess.run(['sudo', 'rm', '-f', nginx_available], capture_output=True)
+            if result.returncode != 0:
+                logger.warning(f"Failed to remove nginx available config: {result.stderr.decode()}")
 
         # Reload nginx
-        subprocess.run(['sudo', 'systemctl', 'reload', 'nginx'], capture_output=True)
+        result = subprocess.run(['sudo', 'systemctl', 'reload', 'nginx'], capture_output=True)
+        if result.returncode != 0:
+            logger.warning(f"Nginx reload failed: {result.stderr.decode()}")
 
-        # Delete from database
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM provisioning_jobs WHERE customer_id = %s", (customer_id,))
-        cursor.execute("DELETE FROM customers WHERE id = %s", (customer_id,))
-        conn.commit()
-        cursor.close()
-        conn.close()
+        # Always try to delete from database
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM provisioning_jobs WHERE customer_id = %s", (customer_id,))
+            cursor.execute("DELETE FROM customers WHERE id = %s", (customer_id,))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            db_deleted = True
+        except Exception as db_error:
+            logger.error(f"Database deletion failed: {db_error}")
+            raise
 
         log_admin_action(admin.id, 'delete_customer', 'customer', customer_id,
                         f'Deleted customer {email} and removed containers', request.remote_addr)
         flash(f'Customer {email} and all associated resources deleted successfully.', 'success')
     except Exception as e:
-        flash(f'Error deleting customer: {str(e)}', 'error')
+        if directory_deleted and db_deleted:
+            log_admin_action(admin.id, 'delete_customer_partial', 'customer', customer_id,
+                            f'Deleted customer {email} but cleanup had issues: {str(e)}', request.remote_addr)
+            flash(f'Customer {email} was deleted but some cleanup steps failed: {str(e)}. Check logs for details.', 'warning')
+        elif directory_deleted:
+            log_admin_action(admin.id, 'delete_customer_directory_only', 'customer', customer_id,
+                            f'Deleted customer directory but database record remains: {str(e)}', request.remote_addr)
+            flash(f'Customer directory deleted but database record could not be removed: {str(e)}. Contact administrator.', 'error')
+        else:
+            flash(f'Error deleting customer: {str(e)}', 'error')
 
     return redirect(url_for('admin.manage_customers'))
+
+
+def super_admin_required(f):
+    """Require super admin role for access"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if session.get('admin_user_role') != 'super_admin':
+            flash('This action requires super admin privileges.', 'error')
+            return redirect(url_for('admin.dashboard'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+class AdminUserForm(FlaskForm):
+    """Form for creating/editing admin users"""
+    full_name = StringField('Full Name', validators=[DataRequired(), Length(max=255)])
+    email = StringField('Email', validators=[DataRequired(), Email(), Length(max=255)])
+    password = PasswordField('Password', validators=[Length(min=8)])
+    role = SelectField('Role', choices=[('admin', 'Admin'), ('support', 'Support'), ('super_admin', 'Super Admin')], default='admin')
+    is_active = BooleanField('Active', default=True)
+    submit = SubmitField('Save Admin User')
+
+    def __init__(self, admin_id=None, is_self=False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.admin_id = admin_id
+        self.is_self = is_self
+        if is_self:
+            self.role.render_kw = {'disabled': True}
+
+    def validate_email(self, email):
+        admin = AdminUser.get_by_email(email.data)
+        if admin and admin.id != self.admin_id:
+            raise ValidationError('Email already registered to another admin user.')
+
+
+class ChangePasswordForm(FlaskForm):
+    """Form for changing password"""
+    current_password = PasswordField('Current Password', validators=[DataRequired()])
+    new_password = PasswordField('New Password', validators=[
+        DataRequired(),
+        Length(min=8, message='Password must be at least 8 characters'),
+    ])
+    confirm_password = PasswordField('Confirm Password', validators=[
+        DataRequired(),
+        EqualTo('new_password', message='Passwords must match')
+    ])
+    submit = SubmitField('Change Password')
+
+    def __init__(self, admin_id, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.admin_id = admin_id
+
+
+@admin_bp.route('/admins')
+@admin_required
+def admins():
+    """List all admin users"""
+    admin = get_current_admin()
+    admins = AdminUser.get_all()
+
+    return render_template('admin/admins.html',
+                           admin=admin,
+                           admins=admins)
+
+
+@admin_bp.route('/admins/new', methods=['GET', 'POST'])
+@super_admin_required
+def new_admin():
+    """Create new admin user"""
+    admin = get_current_admin()
+    form = AdminUserForm()
+
+    if form.validate_on_submit():
+        existing = AdminUser.get_by_email(form.email.data)
+        if existing:
+            flash('An admin with this email already exists.', 'error')
+        else:
+            new_admin_user = AdminUser(
+                email=form.email.data,
+                full_name=form.full_name.data,
+                role=form.role.data,
+                is_active=form.is_active.data
+            )
+            if form.password.data:
+                new_admin_user.set_password(form.password.data)
+            else:
+                temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits + '!@#$%^&*') for _ in range(16))
+                new_admin_user.set_password(temp_password)
+                flash(f'Password not provided. A temporary password has been generated and will need to be reset.', 'warning')
+
+            new_admin_user.save()
+
+            log_admin_action(admin.id, 'create_admin', 'admin_user', new_admin_user.id,
+                           f'Created admin user {new_admin_user.email} with role {new_admin_user.role}', request.remote_addr)
+            flash(f'Admin user {new_admin_user.email} created successfully.', 'success')
+            return redirect(url_for('admin.admins'))
+
+    return render_template('admin/admin_form.html',
+                           admin=admin,
+                           form=form,
+                           is_new=True)
+
+
+@admin_bp.route('/admins/<int:admin_id>/edit', methods=['GET', 'POST'])
+@super_admin_required
+def edit_admin(admin_id):
+    """Edit existing admin user"""
+    admin = get_current_admin()
+    admin_user = AdminUser.get_by_id(admin_id)
+
+    if not admin_user:
+        flash('Admin user not found.', 'error')
+        return redirect(url_for('admin.admins'))
+
+    is_self = (admin_user.id == admin.id)
+    form = AdminUserForm(admin_id=admin_id, is_self=is_self, obj=admin_user)
+
+    if form.validate_on_submit():
+        admin_user.email = form.email.data
+        admin_user.full_name = form.full_name.data
+
+        if is_self and admin_user.role == 'super_admin':
+            admin_user.role = 'super_admin'
+            admin_user.is_active = True
+        else:
+            admin_user.role = form.role.data
+            admin_user.is_active = form.is_active.data
+
+        if form.password.data:
+            admin_user.set_password(form.password.data)
+
+        admin_user.save()
+
+        log_admin_action(admin.id, 'update_admin', 'admin_user', admin_id,
+                       f'Updated admin user {admin_user.email}', request.remote_addr)
+        flash(f'Admin user {admin_user.email} updated successfully.', 'success')
+        return redirect(url_for('admin.admins'))
+
+    return render_template('admin/admin_form.html',
+                           admin=admin,
+                           form=form,
+                           admin_user=admin_user,
+                           is_new=False,
+                           is_self=is_self)
+
+
+@admin_bp.route('/admins/<int:admin_id>/delete', methods=['POST'])
+@super_admin_required
+def delete_admin(admin_id):
+    """Delete admin user"""
+    admin = get_current_admin()
+    admin_user = AdminUser.get_by_id(admin_id)
+
+    if not admin_user:
+        flash('Admin user not found.', 'error')
+        return redirect(url_for('admin.admins'))
+
+    if admin_user.id == admin.id:
+        flash('You cannot delete your own account.', 'error')
+        return redirect(url_for('admin.admins'))
+
+    try:
+        email = admin_user.email
+        admin_user.delete()
+
+        log_admin_action(admin.id, 'delete_admin', 'admin_user', admin_id,
+                       f'Deleted admin user {email}', request.remote_addr)
+        flash(f'Admin user {email} deleted successfully.', 'success')
+    except Exception as e:
+        flash(f'Error deleting admin user: {str(e)}', 'error')
+
+    return redirect(url_for('admin.admins'))
+
+
+@admin_bp.route('/admins/<int:admin_id>/toggle-active', methods=['POST'])
+@super_admin_required
+def toggle_admin_active(admin_id):
+    """Toggle admin user active status"""
+    admin = get_current_admin()
+    admin_user = AdminUser.get_by_id(admin_id)
+
+    if not admin_user:
+        flash('Admin user not found.', 'error')
+        return redirect(url_for('admin.admins'))
+
+    if admin_user.id == admin.id:
+        flash('You cannot toggle your own active status.', 'error')
+        return redirect(url_for('admin.admins'))
+
+    admin_user.is_active = not admin_user.is_active
+    admin_user.save()
+
+    status = 'activated' if admin_user.is_active else 'deactivated'
+    log_admin_action(admin.id, f'{status}_admin', 'admin_user', admin_id,
+                   f'{status.title()} admin user {admin_user.email}', request.remote_addr)
+    flash(f'Admin user {admin_user.email} has been {status}.', 'success')
+
+    return redirect(url_for('admin.admins'))
+
+
+@admin_bp.route('/admins/<int:admin_id>/reset-password', methods=['POST'])
+@super_admin_required
+def reset_admin_password(admin_id):
+    """Reset admin password and send email"""
+    admin = get_current_admin()
+    admin_user = AdminUser.get_by_id(admin_id)
+
+    if not admin_user:
+        flash('Admin user not found.', 'error')
+        return redirect(url_for('admin.admins'))
+
+    if not admin_user.is_active:
+        flash('Cannot reset password for inactive admin user.', 'error')
+        return redirect(url_for('admin.admins'))
+
+    temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits + '!@#$%^&*') for _ in range(16))
+    admin_user.set_password(temp_password)
+    admin_user.must_change_password = True
+    admin_user.save()
+
+    try:
+        from email_service import email_service
+        email_service.send_admin_password_reset_email(admin_user.email, admin_user.full_name, temp_password)
+        email_sent = True
+    except Exception as e:
+        logger.error(f'Failed to send password reset email: {e}')
+        email_sent = False
+
+    log_admin_action(admin.id, 'reset_admin_password', 'admin_user', admin_id,
+                   f'Reset password for {admin_user.email}' + (' (email sent)' if email_sent else ' (email failed)'), request.remote_addr)
+
+    if email_sent:
+        flash(f'Password reset email sent to {admin_user.email}.', 'success')
+    else:
+        flash(f'Password reset but email failed to send. Temporary password: {temp_password}', 'warning')
+
+    return redirect(url_for('admin.admins'))
+
+
+@admin_bp.route('/change-password', methods=['GET', 'POST'])
+@admin_required
+def change_password():
+    """Change own password"""
+    admin = get_current_admin()
+    form = ChangePasswordForm(admin.id)
+
+    if form.validate_on_submit():
+        if not admin.check_password(form.current_password.data):
+            flash('Current password is incorrect.', 'error')
+        else:
+            admin.set_password(form.new_password.data)
+            admin.must_change_password = False
+            admin.save()
+
+            log_admin_action(admin.id, 'change_own_password', 'admin_user', admin.id,
+                           'Changed own password', request.remote_addr)
+            flash('Password changed successfully.', 'success')
+            return redirect(url_for('admin.dashboard'))
+
+    return render_template('admin/change_password.html',
+                           admin=admin,
+                           form=form,
+                           force_change=False)
+
+
+@admin_bp.route('/force-password-change', methods=['GET', 'POST'])
+@admin_required
+def force_password_change():
+    """Force password change page (redirected here if must_change_password is True)"""
+    admin = get_current_admin()
+
+    if not admin.must_change_password:
+        return redirect(url_for('admin.dashboard'))
+
+    form = ChangePasswordForm(admin.id)
+
+    if form.validate_on_submit():
+        admin.set_password(form.new_password.data)
+        admin.must_change_password = False
+        admin.save()
+
+        log_admin_action(admin.id, 'forced_password_change', 'admin_user', admin.id,
+                       'Completed forced password change', request.remote_addr)
+        flash('Password changed successfully. You can now access the admin panel.', 'success')
+        return redirect(url_for('admin.dashboard'))
+
+    return render_template('admin/change_password.html',
+                           admin=admin,
+                           form=form,
+                           force_change=True)
