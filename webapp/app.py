@@ -499,6 +499,147 @@ def api_credentials():
     return jsonify(credentials)
 
 
+@app.route('/api/backup', methods=['POST'])
+@login_required
+def api_backup():
+    """API endpoint for triggering a customer backup"""
+    import subprocess
+    import os
+    
+    customer = Customer.get_by_id(current_user.id)
+
+    if customer.status != 'active':
+        return jsonify({'error': 'Store not active, cannot backup'}), 400
+
+    customer_dir = f"/var/customers/customer-{customer.id}"
+    if not os.path.exists(customer_dir):
+        return jsonify({'error': 'Customer directory not found'}), 404
+
+    BACKUP_SCRIPT = "/opt/shophosting/scripts/customer-backup.sh"
+    BACKUP_LOG = "/var/log/shophosting-customer-backup.log"
+
+    try:
+        subprocess.Popen(
+            [BACKUP_SCRIPT, str(customer.id)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+        return jsonify({
+            'success': True,
+            'message': 'Backup started. This may take a few minutes.',
+            'note': 'Check back shortly for completion status.'
+        })
+    except Exception as e:
+        return jsonify({'error': f'Failed to start backup: {str(e)}'}), 500
+
+
+@app.route('/api/backup/status')
+@login_required
+def api_backup_status():
+    """API endpoint for checking backup status and recent snapshots"""
+    import subprocess
+    import json
+    
+    customer = Customer.get_by_id(current_user.id)
+
+    if customer.status != 'active':
+        return jsonify({'error': 'Store not active'}), 400
+
+    try:
+        result = subprocess.run(
+            [
+                'restic', 'snapshots', '--json',
+                '--tag', f'customer-{customer.id}',
+                '--latest', '20'
+            ],
+            capture_output=True, text=True,
+            env={**os.environ, 'RESTIC_REPOSITORY': 'sftp:sh-backup@15.204.249.219:/home/sh-backup/backups',
+                 'RESTIC_PASSWORD_FILE': '/root/.restic-password'}
+        )
+
+        if result.returncode == 0:
+            snapshots = json.loads(result.stdout) if result.stdout.strip() else []
+            snapshot_list = []
+            for snap in snapshots:
+                snapshot_list.append({
+                    'id': snap.get('id', '')[:8],
+                    'short_id': snap.get('id', ''),
+                    'time': snap.get('time', '').replace('T', ' ').replace('Z', ''),
+                    'paths': snap.get('paths', [])
+                })
+            return jsonify({
+                'success': True,
+                'snapshots': snapshot_list
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Could not fetch backup status'
+            })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/backup/restore', methods=['POST'])
+@login_required
+def api_backup_restore():
+    """API endpoint for restoring from a backup snapshot"""
+    import subprocess
+    import os
+    
+    customer = Customer.get_by_id(current_user.id)
+
+    if customer.status != 'active':
+        return jsonify({'error': 'Store not active'}), 400
+
+    data = request.get_json() or {}
+    snapshot_id = data.get('snapshot_id', '').strip()
+    restore_target = data.get('target', 'all')  # db, files, or all
+
+    if not snapshot_id:
+        return jsonify({'error': 'Snapshot ID is required'}), 400
+
+    if restore_target not in ['db', 'files', 'all']:
+        return jsonify({'error': 'Invalid restore target. Must be db, files, or all'}), 400
+
+    RESTORE_SCRIPT = "/opt/shophosting/scripts/customer-restore.sh"
+    BACKUP_LOG = "/var/log/shophosting-customer-restore.log"
+
+    try:
+        subprocess.Popen(
+            [RESTORE_SCRIPT, str(customer.id), snapshot_id, restore_target],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+
+        target_labels = {
+            'db': 'database only',
+            'files': 'files only',
+            'all': 'database and files'
+        }
+
+        return jsonify({
+            'success': True,
+            'message': f'Restore started. This will restore {target_labels[restore_target]}. Your store will be briefly unavailable during restore.',
+            'note': 'The restore process is running in the background. Your store will be back shortly.'
+        })
+    except Exception as e:
+        return jsonify({'error': f'Failed to start restore: {str(e)}'}), 500
+
+
+@app.route('/backup')
+@login_required
+def backup_page():
+    """Customer backup management page"""
+    customer = Customer.get_by_id(current_user.id)
+    credentials = customer.get_credentials() if customer.status == 'active' else None
+
+    return render_template('backup.html',
+                          customer=customer,
+                          credentials=credentials)
+
+
 # =============================================================================
 # Support Ticket Routes
 # =============================================================================

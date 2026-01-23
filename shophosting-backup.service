@@ -6,6 +6,8 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/opt/shophosting/scripts/backup.sh
+Environment=HOME=/root
+Environment=XDG_CACHE_HOME=/root/.cache
 StandardOutput=journal
 StandardError=journal
 

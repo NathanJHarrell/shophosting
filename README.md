@@ -10,10 +10,13 @@ A multi-tenant Docker hosting platform that automatically provisions containeriz
 - **Admin Panel**: Full-featured admin interface for system monitoring and customer management
   - **Admin User Management**: Super admins can create, edit, and manage other admin users with role-based access control
   - **Live Provisioning Logs**: Real-time persistent logs showing detailed provisioning progress on customer pages
+  - **CMS for Marketing Pages**: Full WYSIWYG editor for homepage, pricing, features, about, and contact pages with draft/publish workflow and version history
+  - **Stripe Pricing Sync**: Two-way sync between local pricing plans and Stripe with choice dialog for creating new prices or updating existing ones
 - **Background Job Processing**: Redis-backed queue system for reliable provisioning
 - **SSL/TLS Support**: Automatic certificate management with Let's Encrypt
 - **Resource Isolation**: Each customer gets isolated Docker containers with configurable resource limits
 - **Automated Backups**: Daily encrypted backups to remote server using restic with 30-day retention
+- **Customer Self-Service Backups**: Customers can create manual backups and restore from any snapshot with options for database-only, files-only, or full restore
 
 ## Requirements
 
@@ -250,7 +253,7 @@ The dashboard includes quick action buttons for:
 
 ### Admin Roles
 
-- `super_admin`: Full access to all features including admin user management
+- `super_admin`: Full access to all features including admin user management and CMS
 - `admin`: Standard admin access (can view admin users, cannot modify)
 - `support`: Limited access for support staff (can view admin users, cannot modify)
 
@@ -264,9 +267,55 @@ The dashboard includes quick action buttons for:
   - The admin is forced to change their password on next login
   - The temporary password must be changed before accessing any other admin pages
 
+## CMS - Site Pages Management
+
+The admin panel includes a full Content Management System for managing customer-facing marketing pages.
+
+### Access
+
+Navigate to `https://yourdomain.com/admin/pages` or click "Site Pages" in the admin sidebar under "Content".
+
+### Features
+
+- **WYSIWYG Editor**: TinyMCE 7 editor for rich text content editing
+- **Page Types**: Homepage, Pricing, Features, About, Contact
+- **Draft/Publish Workflow**: Save as draft or publish immediately
+- **Version History**: Every change is tracked with ability to rollback
+- **Preview Mode**: Preview pages in modal before publishing
+
+### Managing Pages
+
+1. Click "Edit" on any page to open the editor
+2. Edit content using the WYSIWYG editor or JSON fields
+3. Add a change summary (optional) to track what changed
+4. Save as Draft or Publish
+5. Use "Version History" to see all changes and rollback if needed
+
+### Rollback
+
+To rollback to a previous version:
+1. Go to the page's Version History
+2. Find the version you want to restore
+3. Click "Rollback" and confirm
+
+## Stripe Pricing Sync
+
+The pricing page integrates with Stripe for two-way pricing synchronization.
+
+### Sync Options
+
+When editing pricing on the pricing page:
+- **Create New Prices**: Archives old Stripe prices and creates new ones (use when you want to change pricing structure)
+- **Update Existing**: Updates the current Stripe price objects (use for simple price changes)
+
+### API Endpoints
+
+- `GET /admin/api/pricing/sync-options` - Get sync status for all pricing plans
+- `POST /admin/api/pricing/sync/<plan_id>` - Sync a plan to Stripe
+
 ## Backup System
 
-ShopHosting.io includes an automated backup system using [restic](https://restic.net/) that backs up all customer data to a remote server daily.
+ShopHosting.io includes an automated backup system using [restic](https://restic.net/) that backs up all customer data to a remote server daily, plus customer self-service backup management.
 
 ### What Gets Backed Up
 
@@ -315,10 +364,7 @@ ShopHosting.io includes an automated backup system using [restic](https://restic
 /opt/shophosting/scripts/backup.sh
 
 # List available snapshots
-/opt/shophosting/scripts/restore.sh list
-
-# Show snapshot contents
-/opt/shophosting/scripts/restore.sh show latest
+restic -r sftp:user@host:/backups snapshots
 
 # Check backup timer status
 systemctl status shophosting-backup.timer
@@ -327,17 +373,42 @@ systemctl status shophosting-backup.timer
 journalctl -u shophosting-backup.service
 ```
 
-### Restoring Data
+### Customer Self-Service Backups
+
+Customers can manage their own backups through the `/backup` page.
+
+**Features:**
+- **Create Backup**: Customers can trigger manual backups of their store
+- **View History**: See all available snapshots with dates
+- **Restore Options**: Restore from any snapshot with three options:
+  - **Database Only**: Restore just the database (products, orders, settings)
+  - **Files Only**: Restore just the store files (uploads, themes, plugins)
+  - **Database + Files**: Full restore of everything
+
+**Navigation:**
+- Customers access backups via "Backups" link in their navigation
+- Quick link on dashboard: "Manage Backups"
+
+**How Restore Works:**
+1. Customer selects a snapshot from the list
+2. Chooses restore type (db/files/all)
+3. Confirms the action
+4. Store containers are stopped temporarily
+5. Selected data is restored from snapshot
+6. Containers restart automatically
+
+**Retention:**
+- Customer backups are retained for 14 days
+- Daily system backups are retained for 30 days
+
+### Restore Commands (Admin)
 
 ```bash
 # Restore a specific customer
-/opt/shophosting/scripts/restore.sh restore-customer 12 latest
+/opt/shophosting/scripts/customer-restore.sh <customer_id> <snapshot_id> db|files|all
 
 # Restore a specific file or directory
-/opt/shophosting/scripts/restore.sh restore-file /var/customers/customer-12/wordpress latest
-
-# Restore a database from SQL dump
-/opt/shophosting/scripts/restore.sh restore-db shophosting_db latest
+restic -r sftp:user@host:/backups restore <snapshot_id> --target / --path /var/customers/customer-X
 
 # Full disaster recovery (use with caution)
 /opt/shophosting/scripts/restore.sh restore-all latest
@@ -392,6 +463,13 @@ Edit `/opt/shophosting/scripts/backup.sh` to customize:
 │   ├── app.py              # Main routes and application
 │   ├── models.py           # Database models
 │   ├── email_service.py    # Email sending service
+│   ├── stripe_integration/ # Stripe payment integration
+│   │   ├── __init__.py
+│   │   ├── config.py       # Stripe configuration
+│   │   ├── checkout.py     # Checkout sessions
+│   │   ├── webhooks.py     # Webhook handlers
+│   │   ├── portal.py       # Customer portal
+│   │   └── pricing.py      # Stripe pricing sync
 │   ├── admin/              # Admin panel blueprint
 │   │   ├── __init__.py
 │   │   ├── routes.py       # Admin routes (includes admin user management)
@@ -402,8 +480,15 @@ Edit `/opt/shophosting/scripts/backup.sh` to customize:
 │   │       ├── admins.html           # Admin users list
 │   │       ├── admin_form.html       # Create/edit admin form
 │   │       ├── change_password.html  # Password change form
+│   │       ├── pages.html            # CMS page list
+│   │       ├── page_edit.html        # CMS page editor
+│   │       ├── page_history.html     # CMS version history
 │   │       └── ...
 │   └── templates/          # Customer-facing templates
+│       ├── base.html
+│       ├── dashboard.html
+│       ├── backup.html     # Customer backup management
+│       └── ...
 ├── provisioning/           # Background worker
 │   └── provisioning_worker.py
 ├── templates/              # Docker Compose templates
@@ -413,10 +498,12 @@ Edit `/opt/shophosting/scripts/backup.sh` to customize:
 ├── migrations/             # Database migrations
 │   ├── 002_add_admin_users.sql
 │   ├── 003_add_ticketing_system.sql
-│   └── 005_add_admin_features.sql   # Admin user management features
+│   ├── 005_add_admin_features.sql
+│   └── 006_add_cms_tables.sql      # CMS and page versions
 ├── scripts/                # Utility scripts
-│   ├── backup.sh           # Daily backup script
-│   ├── restore.sh          # Restore tool
+│   ├── backup.sh           # Daily system backup script
+│   ├── customer-backup.sh  # Customer self-service backup script
+│   ├── customer-restore.sh # Customer self-service restore script
 │   ├── create_admin.py     # Create admin users
 │   └── setup_stripe_products.py
 ├── logs/                   # Application logs
