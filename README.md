@@ -303,7 +303,6 @@ Scale with zero ops overhead.
   "hours_saved": "9000+"
 }
 ```
-```
 
 Notes:
 - Use `## section: <section>.<field>` for structured text fields.
