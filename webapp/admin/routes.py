@@ -6,6 +6,7 @@ Handles all admin page routes and actions
 import os
 import subprocess
 import logging
+import re
 from functools import wraps
 from datetime import datetime, timedelta
 
@@ -1967,36 +1968,37 @@ def page_edit(slug):
         
         if request.method == 'POST':
             import json
-            
-            content_data = {}
-            for key in request.form:
-                if key.startswith('content_'):
-                    section = key.replace('content_', '')
-                    try:
-                        content_data[section] = json.loads(request.form[key])
-                    except (json.JSONDecodeError, TypeError):
-                        content_data[section] = request.form[key]
-            
+
+            raw_body = request.form.get('content_body', '')
+            content_data, error_message = parse_page_editor_content(raw_body)
+            if error_message:
+                flash(error_message, 'error')
+                return render_template('admin/page_edit.html',
+                                       admin=admin,
+                                       page=page,
+                                       editor_content=raw_body,
+                                       slug=slug)
+
             content_json = json.dumps(content_data)
             title = request.form.get('title', page['title'])
-            
+
             cursor.execute("""
                 UPDATE page_content 
                 SET title = %s, content = %s, updated_at = NOW()
                 WHERE id = %s
             """, (title, content_json, page['id']))
             conn.commit()
-            
+
             cursor.execute("""
                 INSERT INTO page_versions (page_id, content, changed_by_admin_id, change_summary)
                 VALUES (%s, %s, %s, %s)
             """, (page['id'], content_json, admin.id, request.form.get('change_summary', 'Content updated')))
             conn.commit()
-            
+
             log_admin_action(admin.id, 'page_edit', 'page_content', page['id'],
                            f'Edited page: {slug}', request.remote_addr)
             flash(f'Page "{page["title"]}" saved successfully.', 'success')
-            
+
             return redirect(url_for('admin.page_edit', slug=slug))
         
         import json
@@ -2004,18 +2006,20 @@ def page_edit(slug):
             page_content = json.loads(page['content'])
         else:
             page_content = page['content']
-        
+
+        editor_content = serialize_page_content(page_content or {})
+
         return render_template('admin/page_edit.html',
                                admin=admin,
                                page=page,
-                               content=page_content,
+                               editor_content=editor_content,
                                slug=slug)
     finally:
         cursor.close()
         conn.close()
 
 
-@admin_bp.route('/pages/<slug>/preview')
+@admin_bp.route('/pages/<slug>/preview', methods=['GET', 'POST'])
 @super_admin_required
 def page_preview(slug):
     """Preview page (draft or published) in modal"""
@@ -2027,21 +2031,29 @@ def page_preview(slug):
     try:
         cursor.execute("SELECT * FROM page_content WHERE page_slug = %s", (slug,))
         page = cursor.fetchone()
-        
+
         if not page:
             return jsonify({'error': 'Page not found'}), 404
-        
+
         import json
-        if page['content'] and isinstance(page['content'], str):
-            page_content = json.loads(page['content'])
+        if request.method == 'POST':
+            raw_body = request.form.get('content_body', '')
+            content_data, error_message = parse_page_editor_content(raw_body)
+            if error_message:
+                return jsonify({'success': False, 'error': error_message}), 400
+            content_data['title'] = request.form.get('title', page['title'])
+            page_content = content_data
         else:
-            page_content = page['content']
-        
+            if page['content'] and isinstance(page['content'], str):
+                page_content = json.loads(page['content'])
+            else:
+                page_content = page['content']
+
         preview_html = render_page_content(slug, page_content, preview=True)
-        
+
         return jsonify({
             'success': True,
-            'title': page['title'],
+            'title': page_content.get('title', page['title']) if isinstance(page_content, dict) else page['title'],
             'html': preview_html
         })
     finally:
@@ -2272,6 +2284,76 @@ def api_pricing_sync(plan_id):
 # =============================================================================
 # Page Rendering Helpers
 # =============================================================================
+
+def serialize_page_content(content):
+    """Convert structured page content into editor markdown."""
+    import json
+
+    if not content:
+        return ''
+
+    lines = []
+    for section, section_data in content.items():
+        if isinstance(section_data, dict):
+            for key, value in section_data.items():
+                lines.append(f"## section: {section}.{key}")
+                lines.append(str(value) if value is not None else '')
+                lines.append('')
+        elif isinstance(section_data, str):
+            lines.append(f"## section: {section}")
+            lines.append(section_data)
+            lines.append('')
+        else:
+            lines.append(f"## section: {section} (json)")
+            lines.append("```json")
+            lines.append(json.dumps(section_data, indent=2))
+            lines.append("```")
+            lines.append('')
+
+    return "\n".join(lines).strip() + "\n"
+
+
+def parse_page_editor_content(raw_text):
+    """Parse editor markdown into structured page content."""
+    import json
+
+    if not raw_text or not raw_text.strip():
+        return {}, 'Editor is empty. Add at least one section header.'
+
+    pattern = re.compile(r'^##\s+section:\s*(.+)$', re.MULTILINE)
+    matches = list(pattern.finditer(raw_text))
+    if not matches:
+        return {}, "No section headers found. Use '## section: <name>' to define sections."
+
+    content = {}
+    for index, match in enumerate(matches):
+        header = match.group(1).strip()
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(raw_text)
+        body = raw_text[start:end].strip('\n').strip()
+
+        is_json = header.lower().endswith('(json)')
+        if is_json:
+            header = header[:-6].strip()
+            json_text = body
+            if json_text.startswith('```'):
+                lines = json_text.splitlines()
+                if len(lines) >= 2 and lines[-1].strip().startswith('```'):
+                    json_text = "\n".join(lines[1:-1]).strip()
+            try:
+                value = json.loads(json_text) if json_text else {}
+            except json.JSONDecodeError as exc:
+                return {}, f"Invalid JSON in section '{header}': {exc.msg}."
+        else:
+            value = body
+
+        if '.' in header:
+            section, key = header.split('.', 1)
+            content.setdefault(section, {})[key] = value
+        else:
+            content[header] = value
+
+    return content, None
 
 def render_page_content(slug, content, preview=False):
     """Render page content to HTML based on page type"""

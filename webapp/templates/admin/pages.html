@@ -72,11 +72,12 @@
     </div>
 </div>
 
-<div id="previewModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 1000;">
-    <div style="position: absolute; top: 20px; right: 20px;">
+<div id="previewModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(6, 6, 10, 0.94); z-index: 1000; padding: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3 style="color: white; margin: 0;">Preview</h3>
         <button onclick="closePreview()" class="btn btn-secondary">Close Preview</button>
     </div>
-    <iframe id="previewFrame" style="width: 100%; height:: none;"></iframe>
+    <iframe id="previewFrame" style="width: 100%; height: calc(100% - 60px); border: none; border-radius: 12px; background: white;"></iframe>
 </div>
 
 <script>
