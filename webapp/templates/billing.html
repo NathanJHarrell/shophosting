@@ -233,12 +233,46 @@
             width: 100%;
         }
     }
+
+    /* Page Navigation */
+    .page-nav {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        font-size: 0.9rem;
+    }
+
+    .page-nav-link {
+        color: var(--text-secondary);
+        text-decoration: none;
+        transition: color 0.2s;
+    }
+
+    .page-nav-link:hover {
+        color: var(--accent-cyan);
+    }
+
+    .page-nav-separator {
+        color: var(--text-tertiary);
+    }
+
+    .page-nav-current {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container">
     <div class="billing-page">
+        <div class="page-nav">
+            <a href="{{ url_for('dashboard') }}" class="page-nav-link">Dashboard</a>
+            <span class="page-nav-separator">/</span>
+            <span class="page-nav-current">Billing</span>
+        </div>
+
         <div class="billing-header">
             <h1>Billing</h1>
             <p>Manage your subscription and payment methods</p>

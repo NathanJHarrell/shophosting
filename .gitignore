@@ -48,3 +48,4 @@ quick_provision.py
 
 # Docker environment files
 docker/wordpress/.env
+.system-restic-password

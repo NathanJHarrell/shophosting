@@ -191,11 +191,45 @@
         opacity: 0.5;
         pointer-events: none;
     }
+
+    /* Page Navigation */
+    .page-nav {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        font-size: 0.9rem;
+    }
+
+    .page-nav-link {
+        color: var(--text-secondary);
+        text-decoration: none;
+        transition: color 0.2s;
+    }
+
+    .page-nav-link:hover {
+        color: var(--accent-cyan);
+    }
+
+    .page-nav-separator {
+        color: var(--text-tertiary);
+    }
+
+    .page-nav-current {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container">
+    <div class="page-nav" style="margin-bottom: 16px;">
+        <a href="{{ url_for('dashboard') }}" class="page-nav-link">Dashboard</a>
+        <span class="page-nav-separator">/</span>
+        <span class="page-nav-current">Support</span>
+    </div>
+
     <div class="page-header">
         <h1 class="page-title">Support Tickets</h1>
         <a href="{{ url_for('create_ticket') }}" class="btn btn-primary">
