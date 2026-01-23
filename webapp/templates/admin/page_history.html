@@ -1,0 +1,115 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Version History: {{ page.title }} - Admin Panel{% endblock %}
+
+{% block page_title %}Version History: {{ page.title }}{% endblock %}
+
+{% block content %}
+<div class="action-bar" style="margin-bottom: 24px;">
+    <a href="{{ url_for('admin.page_edit', slug=slug) }}" class="btn btn-secondary">Back to Editor</a>
+    <a href="{{ url_for('admin.pages') }}" class="btn btn-secondary">All Pages</a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Version History</h2>
+        <span class="badge badge-info">{{ versions|length }} versions</span>
+    </div>
+    <div class="card-body">
+        {% if versions %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Version</th>
+                        <th>Changed By</th>
+                        <th>Summary</th>
+                        <th>Date</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for version in versions %}
+                    <tr>
+                        <td>
+                            <strong>v{{ version.id }}</strong>
+                        </td>
+                        <td>
+                            {% if version.changed_by_name %}
+                            {{ version.changed_by_name }}
+                            {% else %}
+                            <span class="text-muted">System</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ version.change_summary or '<span class="text-muted">No summary</span>'|safe }}
+                        </td>
+                        <td>
+                            {{ version.created_at }}
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="compareVersion({{ version.id }})">Compare</button>
+                                <form action="{{ url_for('admin.page_rollback', slug=slug, version_id=version.id) }}" method="POST" onsubmit="return confirmRollback();">
+                                    <button type="submit" class="btn btn-danger btn-sm">Rollback</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+            <p>No version history yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div id="compareModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 1000; padding: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3 style="color: white; margin: 0;">Version Comparison</h3>
+        <button onclick="closeCompare()" class="btn btn-secondary">Close</button>
+    </div>
+    <div id="compareContent" style="background: var(--bg-base); padding: 20px; border-radius: 8px; max-height: calc(100% - 80px); overflow: auto; font-family: monospace; font-size: 13px; color: #d4d4d4;"></div>
+</div>
+
+<script>
+function confirmRollback() {
+    return confirm('Are you sure you want to rollback to this version? This will create a new version with the old content.');
+}
+
+function compareVersion(versionId) {
+    const currentContent = {{ content|tojson }};
+    const versionContent = {{ versions|tojson }}.find(v => v.id === versionId);
+    
+    if (!versionContent) {
+        alert('Version not found');
+        return;
+    }
+    
+    let html = '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">';
+    
+    html += '<div><h4 style="color: var(--warning); margin-bottom: 12px;">Selected Version (v' + versionId + ')</h4>';
+    html += '<pre style="background: var(--bg-deep); padding: 16px; border-radius: 8px; white-space: pre-wrap; word-wrap: break-word;">';
+    html += JSON.stringify(JSON.parse(versionContent.content || '{}'), null, 2);
+    html += '</pre></div>';
+    
+    html += '<div><h4 style="color: var(--success); margin-bottom: 12px;">Current Version</h4>';
+    html += '<pre style="background: var(--bg-deep); padding: 16px; border-radius: 8px; white-space: pre-wrap; word-wrap: break-word;">';
+    html += JSON.stringify(currentContent, null, 2);
+    html += '</pre></div>';
+    
+    html += '</div>';
+    
+    document.getElementById('compareContent').innerHTML = html;
+    document.getElementById('compareModal').style.display = 'block';
+}
+
+function closeCompare() {
+    document.getElementById('compareModal').style.display = 'none';
+}
+</script>
+{% endblock %}

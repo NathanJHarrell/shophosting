@@ -7,6 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/7/tinymce.min.js" referrerpolicy="origin"></script>
     <style>
         :root {
             /* Dark greys */
@@ -504,6 +505,7 @@
             <nav>
                 {% if current_user.is_authenticated %}
                     <a href="{{ url_for('dashboard') }}">Dashboard</a>
+                    <a href="{{ url_for('backup_page') }}">Backups</a>
                     <a href="{{ url_for('billing') }}">Billing</a>
                     <a href="{{ url_for('support_tickets') }}">Support</a>
                     <a href="{{ url_for('logout') }}">Logout</a>

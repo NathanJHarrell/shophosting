@@ -1,0 +1,484 @@
+{% extends "base.html" %}
+
+{% block title %}Backups - ShopHosting.io{% endblock %}
+
+{% block extra_css %}
+<style>
+    .backup-page {
+        max-width: 1000px;
+        margin: 0 auto;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .page-header {
+        margin-bottom: 32px;
+    }
+
+    .page-header h1 {
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--text-primary);
+    }
+
+    .page-header p {
+        color: var(--text-tertiary);
+        margin-top: 6px;
+    }
+
+    /* Action Card */
+    .action-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 28px;
+        margin-bottom: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 20px;
+    }
+
+    .action-info h2 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 8px;
+    }
+
+    .action-info p {
+        color: var(--text-secondary);
+        font-size: 0.925rem;
+    }
+
+    /* Snapshots Table */
+    .snapshots-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+        margin-bottom: 24px;
+    }
+
+    .snapshots-card::before {
+        content: '';
+        position: absolute;
+        inset: -1px;
+        border-radius: inherit;
+        padding: 1px;
+        background: var(--gradient-border);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+    }
+
+    .snapshots-card:hover::before {
+        opacity: 1;
+    }
+
+    .snapshots-header {
+        padding: 20px 28px;
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .snapshots-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .snapshot-count {
+        font-size: 0.85rem;
+        color: var(--text-tertiary);
+    }
+
+    .snapshot-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 20px 28px;
+        border-bottom: 1px solid var(--border-subtle);
+        transition: background 0.2s ease;
+    }
+
+    .snapshot-item:last-child {
+        border-bottom: none;
+    }
+
+    .snapshot-item:hover {
+        background: var(--bg-surface);
+    }
+
+    .snapshot-info {
+        flex: 1;
+    }
+
+    .snapshot-date {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+    }
+
+    .snapshot-id {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.85rem;
+        color: var(--accent-cyan);
+    }
+
+    .snapshot-time {
+        font-size: 0.85rem;
+        color: var(--text-tertiary);
+    }
+
+    .snapshot-actions {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .restore-select {
+        padding: 10px 16px;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        color: var(--text-primary);
+        font-size: 0.875rem;
+        cursor: pointer;
+    }
+
+    .restore-select:focus {
+        outline: none;
+        border-color: var(--accent-blue);
+    }
+
+    /* Status Messages */
+    .status-message {
+        padding: 16px 20px;
+        border-radius: var(--radius-md);
+        margin-bottom: 20px;
+        font-weight: 500;
+        display: none;
+    }
+
+    .status-message.show {
+        display: block;
+        animation: slideIn 0.3s ease-out;
+    }
+
+    .status-message.success {
+        background: var(--success-muted);
+        color: var(--success);
+        border: 1px solid rgba(34, 197, 94, 0.2);
+    }
+
+    .status-message.error {
+        background: var(--error-muted);
+        color: var(--error);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .status-message.info {
+        background: var(--info-muted);
+        color: var(--accent-blue);
+        border: 1px solid rgba(0, 136, 255, 0.2);
+    }
+
+    /* Loading spinner */
+    .loading-spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid var(--text-muted);
+        border-top-color: var(--accent-cyan);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-right: 8px;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* Info box */
+    .info-box {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 20px;
+        margin-bottom: 24px;
+    }
+
+    .info-box h3 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+    }
+
+    .info-box ul {
+        margin: 0;
+        padding-left: 20px;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+
+    .info-box li {
+        margin-bottom: 6px;
+    }
+
+    /* Empty state */
+    .empty-state {
+        text-align: center;
+        padding: 60px 40px;
+        color: var(--text-tertiary);
+    }
+
+    .empty-state h3 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+    }
+
+    /* Warning box for restore */
+    .warning-box {
+        background: var(--warning-muted);
+        border: 1px solid rgba(245, 158, 11, 0.2);
+        border-radius: var(--radius-md);
+        padding: 16px 20px;
+        margin-bottom: 20px;
+        color: var(--warning);
+        font-size: 0.9rem;
+    }
+
+    .warning-box strong {
+        display: block;
+        margin-bottom: 4px;
+    }
+
+    @keyframes slideIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="backup-page">
+    <div class="page-header">
+        <h1>Backup Management</h1>
+        <p>Create backups and restore your store from previous snapshots</p>
+    </div>
+
+    {% if customer.status != 'active' %}
+    <div class="info-card" style="background: var(--warning-muted); border-color: rgba(245, 158, 11, 0.2);">
+        <div class="info-card-body" style="padding: 20px;">
+            <p style="color: var(--warning);">Backups are only available for active stores. Your store is currently in <strong>{{ customer.status }}</strong> status.</p>
+        </div>
+    </div>
+    {% else %}
+
+    <div id="status-message" class="status-message"></div>
+
+    <div class="action-card">
+        <div class="action-info">
+            <h2>Create New Backup</h2>
+            <p>Create a manual backup of your store. Backups include your database and all files.</p>
+        </div>
+        <button onclick="createBackup()" class="btn btn-primary" id="backup-btn">
+            Create Backup
+        </button>
+    </div>
+
+    <div class="warning-box" id="restore-warning" style="display: none;">
+        <strong>Restore Warning</strong>
+        <span id="restore-warning-text">Select a backup and restore option below. Your store will be briefly unavailable during restore.</span>
+    </div>
+
+    <div class="snapshots-card">
+        <div class="snapshots-header">
+            <h2 class="snapshots-title">Available Backups</h2>
+            <span class="snapshot-count" id="snapshot-count">Loading...</span>
+        </div>
+        <div id="snapshots-list">
+            <div class="empty-state">
+                <p>Loading backups...</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-box">
+        <h3>About Backups & Restores</h3>
+        <ul>
+            <li><strong>Database Restore:</strong> Restores only your store's database (products, orders, settings, etc.)</li>
+            <li><strong>Files Restore:</strong> Restores only your store's files (uploads, themes, plugins)</li>
+            <li><strong>Full Restore:</strong> Restores both database and files from the selected backup</li>
+            <li>Your store will be briefly unavailable during the restore process</li>
+            <li>Backups are stored for 14 days</li>
+        </ul>
+    </div>
+
+    {% endif %}
+</div>
+
+<script>
+    function showStatus(message, type) {
+        const el = document.getElementById('status-message');
+        el.textContent = message;
+        el.className = 'status-message show ' + type;
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function hideStatus() {
+        document.getElementById('status-message').className = 'status-message';
+    }
+
+    function createBackup() {
+        const btn = document.getElementById('backup-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-spinner"></span>Creating Backup...';
+        showStatus('Starting backup process... This may take a few minutes.', 'info');
+
+        fetch('{{ url_for("api_backup") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showStatus('Backup started successfully! It will appear in the list shortly.', 'success');
+                setTimeout(loadSnapshots, 5000);
+            } else {
+                showStatus('Error: ' + (data.error || 'Failed to start backup'), 'error');
+            }
+            btn.disabled = false;
+            btn.innerHTML = 'Create Backup';
+        })
+        .catch(err => {
+            showStatus('Error communicating with server.', 'error');
+            btn.disabled = false;
+            btn.innerHTML = 'Create Backup';
+        });
+    }
+
+    function restoreBackup(snapshotId) {
+        const select = document.getElementById('restore-' + snapshotId);
+        const target = select.value;
+
+        if (!target) {
+            showStatus('Please select what to restore.', 'error');
+            return;
+        }
+
+        const labels = {
+            'db': 'database only',
+            'files': 'files only',
+            'all': 'database and files'
+        };
+
+        if (!confirm('Are you sure you want to restore ' + labels[target] + ' from this backup? Your store will be briefly unavailable.')) {
+            return;
+        }
+
+        const btn = document.querySelector('#restore-' + snapshotId + '-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading-spinner"></span>Restoring...';
+
+        showStatus('Restore started. Please wait...', 'info');
+
+        fetch('{{ url_for("api_backup_restore") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                snapshot_id: snapshotId,
+                target: target
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showStatus('Restore started! Your store will be back shortly. ' + data.message, 'success');
+            } else {
+                showStatus('Error: ' + (data.error || 'Failed to start restore'), 'error');
+            }
+            btn.disabled = false;
+            btn.innerHTML = 'Restore';
+            select.value = '';
+        })
+        .catch(err => {
+            showStatus('Error communicating with server.', 'error');
+            btn.disabled = false;
+            btn.innerHTML = 'Restore';
+            select.value = '';
+        });
+    }
+
+    function loadSnapshots() {
+        fetch('{{ url_for("api_backup_status") }}')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('snapshots-list');
+            const countEl = document.getElementById('snapshot-count');
+
+            if (data.success && data.snapshots && data.snapshots.length > 0) {
+                countEl.textContent = data.snapshots.length + ' snapshot' + (data.snapshots.length !== 1 ? 's' : '');
+
+                let html = '';
+                data.snapshots.forEach(snap => {
+                    const date = new Date(snap.time.replace(' ', 'T'));
+                    const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+                    const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+                    html += `
+                    <div class="snapshot-item">
+                        <div class="snapshot-info">
+                            <div class="snapshot-date">${dateStr}</div>
+                            <div class="snapshot-id">${snap.id}</div>
+                            <div class="snapshot-time">${timeStr}</div>
+                        </div>
+                        <div class="snapshot-actions">
+                            <select id="restore-${snap.id}" class="restore-select">
+                                <option value="">Select restore...</option>
+                                <option value="db">Database Only</option>
+                                <option value="files">Files Only</option>
+                                <option value="all">Database + Files</option>
+                            </select>
+                            <button id="restore-${snap.id}-btn" onclick="restoreBackup('${snap.id}')" class="btn btn-secondary btn-sm">Restore</button>
+                        </div>
+                    </div>`;
+                });
+                container.innerHTML = html;
+            } else {
+                countEl.textContent = '0 snapshots';
+                container.innerHTML = `
+                <div class="empty-state">
+                    <h3>No Backups Yet</h3>
+                    <p>Create your first backup using the button above.</p>
+                </div>`;
+            }
+        })
+        .catch(err => {
+            document.getElementById('snapshots-list').innerHTML = `
+            <div class="empty-state">
+                <h3>Error Loading Backups</h3>
+                <p>Could not load backup history. Please try again later.</p>
+            </div>`;
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', loadSnapshots);
+</script>
+{% endblock %}

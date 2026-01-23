@@ -1,0 +1,107 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Site Pages - Admin Panel{% endblock %}
+
+{% block page_title %}Site Pages{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">All Pages</h2>
+        <span class="badge badge-info">{{ pages|length }} pages</span>
+    </div>
+    <div class="card-body">
+        {% if pages %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Page</th>
+                        <th>Status</th>
+                        <th>Last Updated</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for page in pages %}
+                    <tr>
+                        <td>
+                            <strong>{{ page.title }}</strong>
+                            <div class="text-muted" style="font-size: 0.85rem; margin-top: 4px;">/{{ page.page_slug }}</div>
+                        </td>
+                        <td>
+                            {% if page.is_published %}
+                            <span class="badge badge-active">Published</span>
+                            {% else %}
+                            <span class="badge badge-pending">Draft</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if page.updated_at %}
+                            {{ page.updated_at.strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                            <span class="text-muted">Never</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 8px;">
+                                <a href="{{ url_for('admin.page_edit', slug=page.page_slug) }}" class="btn btn-secondary btn-sm">Edit</a>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="previewPage('{{ page.page_slug }}')">Preview</button>
+                                <a href="{{ url_for('admin.page_history', slug=page.page_slug) }}" class="btn btn-secondary btn-sm">History</a>
+                                {% if page.is_published %}
+                                <form action="{{ url_for('admin.page_unpublish', slug=page.page_slug) }}" method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-danger btn-sm">Unpublish</button>
+                                </form>
+                                {% else %}
+                                <form action="{{ url_for('admin.page_publish', slug=page.page_slug) }}" method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-primary btn-sm">Publish</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+            <p>No pages found. The CMS tables may need to be initialized.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div id="previewModal" class="modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 1000;">
+    <div style="position: absolute; top: 20px; right: 20px;">
+        <button onclick="closePreview()" class="btn btn-secondary">Close Preview</button>
+    </div>
+    <iframe id="previewFrame" style="width: 100%; height:: none;"></iframe>
+</div>
+
+<script>
+function previewPage(slug) {
+    fetch('/admin/pages/' + slug + '/preview')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('previewFrame').srcdoc = data.html;
+                document.getElementById('previewModal').style.display = 'block';
+            } else {
+                alert('Error loading preview: ' + data.error);
+            }
+        })
+        .catch(e => alert('Error: ' + e));
+}
+
+function closePreview() {
+    document.getElementById('previewModal').style.display = 'none';
+}
+</script>
+
+<style>
+.modal {
+    display: none;
+}
+</style>
+{% endblock %}
