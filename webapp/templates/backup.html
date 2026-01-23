@@ -291,6 +291,8 @@
     </div>
     {% else %}
 
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
     <div id="status-message" class="status-message"></div>
 
     <div class="action-card">
@@ -335,6 +337,10 @@
 </div>
 
 <script>
+    function getCsrfToken() {
+        return document.querySelector('input[name="csrf_token"]')?.value || '';
+    }
+
     function showStatus(message, type) {
         const el = document.getElementById('status-message');
         el.textContent = message;
@@ -354,7 +360,10 @@
 
         fetch('{{ url_for("api_backup") }}', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            }
         })
         .then(r => r.json())
         .then(data => {
@@ -401,7 +410,10 @@
 
         fetch('{{ url_for("api_backup_restore") }}', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
             body: JSON.stringify({
                 snapshot_id: snapshotId,
                 target: target

@@ -313,6 +313,88 @@ When editing pricing on the pricing page:
 - `GET /admin/api/pricing/sync-options` - Get sync status for all pricing plans
 - `POST /admin/api/pricing/sync/<plan_id>` - Sync a plan to Stripe
 
+## Infrastructure Improvements
+
+Recent operational enhancements to improve reliability and isolation.
+
+### Per-Customer Automated Backups
+
+Every customer now gets automatic scheduled backups to the remote restic repository.
+
+**How it works:**
+- Step 10 of provisioning sets up a cron job for each customer
+- Backups run every 6 hours (configurable)
+- 14-day retention policy for customer backups
+- Backups include database and all customer files
+
+**Configuration:**
+```bash
+# Backup script location
+/opt/shophosting/scripts/customer-backup.sh
+
+# Backup logs
+/var/log/shophosting-customer-backup.log
+
+# Cron schedule (every 6 hours)
+0 */6 * * * /opt/shophosting/scripts/customer-backup.sh {customer_id}
+```
+
+**Manual backup (customers can do this from their dashboard):**
+```bash
+/opt/shophosting/scripts/customer-backup.sh 6  # For customer 6
+```
+
+### Idempotent Provisioning
+
+The provisioning system now handles retries correctly without crashing on existing resources.
+
+**What was fixed:**
+- Directory creation checks for existing directories before creating
+- Existing containers are cleaned up before reprovisioning
+- Retry button in admin panel now works correctly for failed jobs
+- No more "directory already exists" errors on retry
+
+**How it works:**
+```python
+# In create_customer_directory()
+if customer_path.exists():
+    logger.info(f"Directory {customer_path} already exists, cleaning up first")
+    # Stop existing containers first
+    subprocess.run(['docker', 'compose', 'down', '-v', '--remove-orphans'], ...)
+    # Then proceed with creation (exist_ok=True)
+    customer_path.mkdir(parents=True, exist_ok=True)
+```
+
+### Docker Resource Limits
+
+All customer containers now have memory and CPU limits enforced via Docker's deploy.resources.
+
+**Resource limits per service (WooCommerce):**
+| Service | Memory | CPU |
+|---------|--------|-----|
+| db | 512m | 0.5 |
+| redis | 256m | 0.25 |
+| wordpress | From pricing plan | From pricing plan |
+| phpmyadmin | 256m | 0.25 |
+
+**Resource limits per service (Magento):**
+| Service | Memory | CPU |
+|---------|--------|-----|
+| varnish | 512m | 0.5 |
+| web | From pricing plan | From pricing plan |
+| db | 1g | 1.0 |
+| elasticsearch | 1g | 0.5 |
+| redis | 256m | 0.25 |
+
+**Configuration:**
+Limits are passed from the `pricing_plans` table:
+```python
+config = {
+    'memory_limit': job_data.get('memory_limit', '1g'),
+    'cpu_limit': job_data.get('cpu_limit', '1.0')
+}
+```
+
 ## Backup System
 
 ShopHosting.io includes an automated backup system using [restic](https://restic.net/) that backs up all customer data to a remote server daily, plus customer self-service backup management.

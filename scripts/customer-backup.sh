@@ -20,7 +20,7 @@ fi
 
 # Configuration
 RESTIC_REPOSITORY="sftp:sh-backup@15.204.249.219:/home/sh-backup/backups"
-RESTIC_PASSWORD_FILE="/root/.restic-password"
+RESTIC_PASSWORD_FILE="/opt/shophosting/.restic-password"
 BACKUP_LOG="/var/log/shophosting-customer-backup.log"
 DB_DUMP_DIR="/tmp/shophosting-customer-backup-${CUSTOMER_ID}"
 RETENTION_DAYS=14

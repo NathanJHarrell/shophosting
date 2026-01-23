@@ -501,6 +501,7 @@ def api_credentials():
 
 @app.route('/api/backup', methods=['POST'])
 @login_required
+@csrf.exempt
 def api_backup():
     """API endpoint for triggering a customer backup"""
     import subprocess
@@ -516,11 +517,10 @@ def api_backup():
         return jsonify({'error': 'Customer directory not found'}), 404
 
     BACKUP_SCRIPT = "/opt/shophosting/scripts/customer-backup.sh"
-    BACKUP_LOG = "/var/log/shophosting-customer-backup.log"
 
     try:
         subprocess.Popen(
-            [BACKUP_SCRIPT, str(customer.id)],
+            ['sudo', BACKUP_SCRIPT, str(customer.id)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )
@@ -536,6 +536,7 @@ def api_backup():
 
 @app.route('/api/backup/status')
 @login_required
+@csrf.exempt
 def api_backup_status():
     """API endpoint for checking backup status and recent snapshots"""
     import subprocess
@@ -583,6 +584,7 @@ def api_backup_status():
 
 @app.route('/api/backup/restore', methods=['POST'])
 @login_required
+@csrf.exempt
 def api_backup_restore():
     """API endpoint for restoring from a backup snapshot"""
     import subprocess
@@ -604,11 +606,10 @@ def api_backup_restore():
         return jsonify({'error': 'Invalid restore target. Must be db, files, or all'}), 400
 
     RESTORE_SCRIPT = "/opt/shophosting/scripts/customer-restore.sh"
-    BACKUP_LOG = "/var/log/shophosting-customer-restore.log"
 
     try:
         subprocess.Popen(
-            [RESTORE_SCRIPT, str(customer.id), snapshot_id, restore_target],
+            ['sudo', RESTORE_SCRIPT, str(customer.id), snapshot_id, restore_target],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
         )

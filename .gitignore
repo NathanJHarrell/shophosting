@@ -3,6 +3,7 @@
 .htpasswd
 *.pem
 *.key
+.restic-password
 
 # Virtual environments
 venv/
