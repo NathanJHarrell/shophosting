@@ -277,19 +277,47 @@ Navigate to `https://yourdomain.com/admin/pages` or click "Site Pages" in the ad
 
 ### Features
 
-- **WYSIWYG Editor**: TinyMCE 7 editor for rich text content editing
+- **Structured Markdown Editor**: Single full-page editor with Markdown + preview for all sections
+- **Section Preservation**: Section headers keep existing page layouts intact
 - **Page Types**: Homepage, Pricing, Features, About, Contact
 - **Draft/Publish Workflow**: Save as draft or publish immediately
 - **Version History**: Every change is tracked with ability to rollback
 - **Preview Mode**: Preview pages in modal before publishing
 
+### Editor Format
+
+The editor uses section headers to map Markdown back into the structured JSON used by the layout renderers.
+
+```
+## section: hero.headline
+Launch on managed hosting.
+
+## section: hero.subheadline
+Scale with zero ops overhead.
+
+## section: stats (json)
+```json
+{
+  "stores_count": "120+",
+  "uptime": "99.99%",
+  "hours_saved": "9000+"
+}
+```
+```
+
+Notes:
+- Use `## section: <section>.<field>` for structured text fields.
+- Use `## section: <section> (json)` plus a fenced JSON block for structured objects.
+- Keep all sections you want to preserve in the page layout.
+
 ### Managing Pages
 
 1. Click "Edit" on any page to open the editor
-2. Edit content using the WYSIWYG editor or JSON fields
-3. Add a change summary (optional) to track what changed
-4. Save as Draft or Publish
-5. Use "Version History" to see all changes and rollback if needed
+2. Update the section Markdown and keep the section headers intact
+3. Use the preview button to validate changes before saving
+4. Add a change summary (optional) to track what changed
+5. Save as Draft or Publish
+6. Use "Version History" to see all changes and rollback if needed
 
 ### Rollback
 
