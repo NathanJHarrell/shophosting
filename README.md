@@ -318,6 +318,8 @@ ShopHosting.io includes a comprehensive admin panel for system monitoring and cu
 - **System Health**: Service status, disk usage, backup status, port allocation
 - **Billing Overview**: MRR, subscription stats, recent invoices
 - **Log Viewer**: View webapp and worker logs directly from the admin panel
+- **Consultation Appointments**: Manage prospect consultations and sales pipeline
+- **Pricing Plans Management**: Edit pricing plans directly from the admin panel
 
 ### Quick Actions
 
@@ -343,6 +345,44 @@ The dashboard includes quick action buttons for:
   - An email is sent to the admin user with the temporary password
   - The admin is forced to change their password on next login
   - The temporary password must be changed before accessing any other admin pages
+
+### Consultation Appointments
+
+Manage prospect consultations from the scheduler form on the marketing site.
+
+**Access:** Navigate to `https://yourdomain.com/admin/appointments` or click "Appointments" in the admin sidebar.
+
+**Features:**
+- **Dashboard Stats**: View total appointments, today's count, this week, pending, and confirmed
+- **Filtering**: Search by name/email/phone, filter by status and date range
+- **Status Workflow**: Track appointments through: pending → confirmed → completed/cancelled/no_show
+- **Assignment**: Assign consultations to specific admin users
+- **Notes**: Add internal notes to each appointment
+- **Quick Actions**: Email or call prospects directly from the detail view
+
+**Setup:**
+```bash
+mysql -u root -p shophosting_db < /opt/shophosting/migrations/007_add_consultations_table.sql
+```
+
+### Pricing Plans Management
+
+Edit WooCommerce and Magento pricing plans directly from the admin panel.
+
+**Access:** Navigate to `https://yourdomain.com/admin/pricing-plans` or click "Pricing Plans" in the admin sidebar under "Billing".
+
+**Features:**
+- **View Plans**: See all plans organized by platform (WooCommerce, Magento)
+- **Edit Plan Details**: Name, monthly price, store limit, display order
+- **Resource Allocation**: Configure memory (1-16GB) and CPU limits (0.5-8 cores)
+- **Feature Toggles**: Enable/disable plan features:
+  - Daily Backups, Email Support, Premium Plugins
+  - 24/7 Support, Redis Cache, Staging Environment
+  - SLA Uptime, Advanced Security, White Label
+- **Stripe Integration**: View linked Stripe product/price IDs (read-only)
+- **Active/Inactive Status**: Toggle plan visibility
+
+**Note:** Price changes do not affect existing subscriptions until renewal. Use the Stripe sync API to update Stripe prices after changes.
 
 ## CMS - Site Pages Management
 
@@ -608,6 +648,41 @@ Edit `/opt/shophosting/scripts/backup.sh` to customize:
 
 **Important:** Keep `/root/.restic-password` safe - without it, backups cannot be restored.
 
+### Application Code Backup
+
+In addition to customer data backups, a separate backup system protects the application code in `/opt/shophosting`.
+
+**What Gets Backed Up:**
+- Application source code
+- Configuration templates
+- Migration scripts
+- Static assets
+
+**Schedule:** Daily at 2:30 AM (with up to 5 minutes random delay)
+
+**Setup:**
+```bash
+# Install systemd units
+sudo cp /opt/shophosting/shophosting-dir-backup.service /etc/systemd/system/
+sudo cp /opt/shophosting/shophosting-dir-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now shophosting-dir-backup.timer
+```
+
+**Management:**
+```bash
+# Run manual backup
+/opt/shophosting/scripts/shophosting-dir-backup.sh
+
+# List application snapshots
+restic -r sftp:user@host:/backups snapshots --tag "shophosting-dir"
+
+# View backup logs
+cat /var/log/shophosting-dir-backup.log
+```
+
+**Retention:** 30 daily snapshots (configurable in `scripts/restic-backup-config.sh`)
+
 ## Architecture
 
 ```
@@ -669,6 +744,10 @@ Edit `/opt/shophosting/scripts/backup.sh` to customize:
 │   │       ├── pages.html            # CMS page list
 │   │       ├── page_edit.html        # CMS page editor
 │   │       ├── page_history.html     # CMS version history
+│   │       ├── appointments.html     # Consultation appointments list
+│   │       ├── appointment_detail.html # Appointment detail view
+│   │       ├── pricing_plans.html    # Pricing plans list
+│   │       ├── pricing_plan_edit.html # Pricing plan editor
 │   │       └── ...
 │   └── templates/          # Customer-facing templates
 │       ├── base.html
@@ -685,9 +764,12 @@ Edit `/opt/shophosting/scripts/backup.sh` to customize:
 │   ├── 002_add_admin_users.sql
 │   ├── 003_add_ticketing_system.sql
 │   ├── 005_add_admin_features.sql
-│   └── 006_add_cms_tables.sql      # CMS and page versions
+│   ├── 006_add_cms_tables.sql      # CMS and page versions
+│   └── 007_add_consultations_table.sql  # Consultation appointments
 ├── scripts/                # Utility scripts
-│   ├── backup.sh           # Daily system backup script
+│   ├── backup.sh           # Daily customer data backup script
+│   ├── shophosting-dir-backup.sh  # Application code backup script
+│   ├── restic-backup-config.sh    # Backup configuration
 │   ├── customer-backup.sh  # Customer self-service backup script
 │   ├── customer-restore.sh # Customer self-service restore script
 │   ├── create_admin.py     # Create admin users
@@ -696,8 +778,10 @@ Edit `/opt/shophosting/scripts/backup.sh` to customize:
 │   ├── webapp.log          # Application logs
 │   └── security.log        # Security audit trail
 ├── schema.sql              # Database schema
-├── shophosting-backup.service   # Backup systemd service
-├── shophosting-backup.timer     # Backup systemd timer
+├── shophosting-backup.service   # Customer data backup systemd service
+├── shophosting-backup.timer     # Customer data backup systemd timer
+├── shophosting-dir-backup.service  # App code backup systemd service
+├── shophosting-dir-backup.timer    # App code backup systemd timer
 ├── SECURITY.md             # Security documentation
 ├── .github/workflows/      # CI/CD pipeline
 │   └── ci.yml              # Lint, test, security scan

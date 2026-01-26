@@ -5,11 +5,17 @@
 set -euo pipefail
 
 # Configuration
-RESTIC_REPOSITORY="sftp:sh-backup@15.204.249.219:/home/sh-backup/backups"
-RESTIC_PASSWORD_FILE="/root/.restic-password"
+CONFIG_FILE="/opt/shophosting/scripts/restic-backup-config.sh"
+if [ -f "$CONFIG_FILE" ]; then
+    # shellcheck source=/opt/shophosting/scripts/restic-backup-config.sh
+    source "$CONFIG_FILE"
+else
+    RESTIC_REPOSITORY="sftp:sh-backup@15.204.249.219:/home/sh-backup/backups"
+    RESTIC_PASSWORD_FILE="/root/.restic-password"
+    RETENTION_DAYS=30
+fi
 BACKUP_LOG="/var/log/shophosting-backup.log"
 DB_DUMP_DIR="/tmp/shophosting-db-dumps"
-RETENTION_DAYS=30
 
 # Load environment variables from .env file (without sourcing as shell script)
 load_env() {
