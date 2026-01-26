@@ -10,7 +10,7 @@ Group=agileweb
 WorkingDirectory=/opt/shophosting/webapp
 Environment="PATH=/opt/shophosting/webapp/venv/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=/opt/shophosting/.env
-ExecStart=/opt/shophosting/webapp/venv/bin/gunicorn --workers 4 --bind 127.0.0.1:5000 app:app
+ExecStart=/opt/shophosting/webapp/venv/bin/gunicorn --config gunicorn.conf.py app:app
 Restart=always
 RestartSec=10
 

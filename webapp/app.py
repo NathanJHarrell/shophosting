@@ -12,23 +12,29 @@ from functools import wraps
 
 import uuid
 import mimetypes
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, abort, g
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_wtf import FlaskForm
 from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_talisman import Talisman
 from wtforms import StringField, PasswordField, SelectField, SubmitField, HiddenField, TextAreaField
 from werkzeug.utils import secure_filename
 from wtforms.validators import DataRequired, Email, Length, EqualTo, ValidationError
 from dotenv import load_dotenv
+import redis
+import time
 
 # Add provisioning module to path
 sys.path.insert(0, '/opt/shophosting/provisioning')
 
-from models import Customer, PortManager, PricingPlan, Subscription, Invoice, init_db_pool
-from models import Ticket, TicketMessage, TicketAttachment, TicketCategory
+from models import Customer, PortManager, PricingPlan, Subscription, Invoice, init_db_pool, get_db_connection
+from models import Ticket, TicketMessage, TicketAttachment, TicketCategory, ConsultationAppointment
 from enqueue_provisioning import ProvisioningQueue
 from stripe_integration import init_stripe, create_checkout_session, process_webhook, create_portal_session
 from stripe_integration.checkout import get_checkout_session
+from email_utils import send_contact_notification, send_consultation_confirmation, send_consultation_notification_to_sales
 
 # Load environment variables
 load_dotenv('/opt/shophosting/.env')
@@ -44,12 +50,274 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
+# Security logger for audit trail
+security_logger = logging.getLogger('security')
+security_handler = logging.FileHandler('/opt/shophosting/logs/security.log')
+security_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+security_logger.addHandler(security_handler)
+security_logger.setLevel(logging.INFO)
+
+
+# =============================================================================
+# Configuration Validation - Fail-fast on missing secrets
+# =============================================================================
+
+def validate_required_config():
+    """Validate that required configuration is present. Fail fast if missing."""
+    required_vars = {
+        'SECRET_KEY': 'Flask secret key for session security',
+        'DB_PASSWORD': 'Database password',
+    }
+
+    missing = []
+    insecure = []
+
+    for var, description in required_vars.items():
+        value = os.getenv(var)
+        if not value:
+            missing.append(f"  - {var}: {description}")
+        elif var == 'SECRET_KEY' and 'change-this' in value.lower():
+            insecure.append(f"  - {var}: Using insecure default value")
+
+    if missing or insecure:
+        error_msg = "\n\nCRITICAL CONFIGURATION ERROR\n" + "=" * 40 + "\n"
+        if missing:
+            error_msg += "Missing required environment variables:\n" + "\n".join(missing) + "\n"
+        if insecure:
+            error_msg += "Insecure configuration detected:\n" + "\n".join(insecure) + "\n"
+        error_msg += "\nPlease configure these in /opt/shophosting/.env\n"
+
+        # In production, fail fast. In development, warn but continue.
+        if os.getenv('FLASK_ENV') == 'production' or os.getenv('FLASK_DEBUG', '').lower() != 'true':
+            logger.critical(error_msg)
+            raise RuntimeError(error_msg)
+        else:
+            logger.warning(error_msg)
+
+
+# Validate configuration on startup
+validate_required_config()
+
+
+# =============================================================================
+# Initialize Flask app with secure configuration
+# =============================================================================
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'change-this-in-production-use-a-real-secret')
+
+# Secret key - must be set in environment
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
+if not app.config['SECRET_KEY']:
+    # Only for development - production validated above
+    app.config['SECRET_KEY'] = os.urandom(32).hex()
+    logger.warning("Using randomly generated SECRET_KEY - sessions will not persist across restarts")
+
 app.config['WTF_CSRF_ENABLED'] = True
 
-# Initialize extensions
+# Request size limits to prevent DoS attacks
+# 50MB max for regular requests, file uploads handled separately
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
+
+# Session security configuration
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('FLASK_ENV') == 'production'  # HTTPS only in production
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
+
+
+# =============================================================================
+# Security Headers with Flask-Talisman
+# =============================================================================
+
+# Content Security Policy - balanced for security while allowing Bootstrap/jQuery
+csp = {
+    'default-src': "'self'",
+    'script-src': [
+        "'self'",
+        "'unsafe-inline'",  # Required for some Bootstrap functionality
+        "https://js.stripe.com",
+        "https://cdn.jsdelivr.net",
+    ],
+    'style-src': [
+        "'self'",
+        "'unsafe-inline'",  # Required for Bootstrap
+        "https://cdn.jsdelivr.net",
+        "https://fonts.googleapis.com",
+    ],
+    'font-src': [
+        "'self'",
+        "https://fonts.gstatic.com",
+        "https://cdn.jsdelivr.net",
+    ],
+    'img-src': [
+        "'self'",
+        "data:",
+        "https:",
+    ],
+    'frame-src': [
+        "'self'",
+        "https://js.stripe.com",
+        "https://hooks.stripe.com",
+    ],
+    'connect-src': [
+        "'self'",
+        "https://api.stripe.com",
+    ],
+}
+
+# Initialize Talisman with security headers
+# Only force HTTPS in production
+talisman = Talisman(
+    app,
+    force_https=os.getenv('FLASK_ENV') == 'production',
+    strict_transport_security=True,
+    strict_transport_security_max_age=31536000,  # 1 year
+    strict_transport_security_include_subdomains=True,
+    content_security_policy=csp,
+    content_security_policy_nonce_in=['script-src'],
+    referrer_policy='strict-origin-when-cross-origin',
+    feature_policy={
+        'geolocation': "'none'",
+        'camera': "'none'",
+        'microphone': "'none'",
+    }
+)
+
+
+# =============================================================================
+# Rate Limiting with Flask-Limiter
+# =============================================================================
+
+def get_rate_limit_key():
+    """Get rate limit key - use user ID if authenticated, otherwise IP"""
+    if current_user and current_user.is_authenticated:
+        return f"user:{current_user.id}"
+    return get_remote_address()
+
+
+# Configure Redis storage for rate limiting (shared across workers)
+redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
+
+limiter = Limiter(
+    key_func=get_rate_limit_key,
+    app=app,
+    storage_uri=redis_url,
+    storage_options={"socket_connect_timeout": 5},
+    default_limits=["200 per day", "50 per hour"],  # Global defaults
+    strategy="fixed-window",
+)
+
+
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    """Handle rate limit exceeded"""
+    security_logger.warning(
+        f"Rate limit exceeded: IP={request.remote_addr} "
+        f"endpoint={request.endpoint} "
+        f"user_agent={request.user_agent.string[:100]}"
+    )
+    if request.is_json:
+        return jsonify({
+            'error': 'Rate limit exceeded',
+            'message': 'Too many requests. Please try again later.',
+            'retry_after': e.description
+        }), 429
+    flash('Too many requests. Please slow down and try again.', 'error')
+    return redirect(request.referrer or url_for('index')), 429
+
+
+# =============================================================================
+# Request Logging for Security Forensics
+# =============================================================================
+
+# Session idle timeout (30 minutes)
+SESSION_IDLE_TIMEOUT = int(os.getenv('SESSION_IDLE_TIMEOUT', '1800'))  # 30 minutes default
+
+
+@app.before_request
+def check_session_timeout():
+    """Check for session idle timeout and enforce re-authentication"""
+    # Skip for static files and public endpoints
+    if request.endpoint in ['static', 'health_check', 'readiness_check', None]:
+        return
+
+    # Check for customer session timeout
+    if current_user.is_authenticated:
+        last_activity = session.get('last_activity')
+        if last_activity:
+            idle_time = time.time() - last_activity
+            if idle_time > SESSION_IDLE_TIMEOUT:
+                security_logger.info(
+                    f"SESSION_TIMEOUT: user={current_user.id} email={current_user.email} "
+                    f"idle_time={idle_time:.0f}s IP={request.remote_addr}"
+                )
+                logout_user()
+                session.clear()
+                flash('Your session has expired due to inactivity. Please log in again.', 'info')
+                return redirect(url_for('login'))
+        session['last_activity'] = time.time()
+
+    # Check for admin session timeout
+    admin_id = session.get('admin_user_id')
+    if admin_id:
+        last_admin_activity = session.get('admin_last_activity')
+        if last_admin_activity:
+            idle_time = time.time() - last_admin_activity
+            if idle_time > SESSION_IDLE_TIMEOUT:
+                security_logger.info(
+                    f"ADMIN_SESSION_TIMEOUT: admin_id={admin_id} "
+                    f"idle_time={idle_time:.0f}s IP={request.remote_addr}"
+                )
+                session.pop('admin_user_id', None)
+                session.pop('admin_user_name', None)
+                session.pop('admin_user_role', None)
+                session.pop('admin_last_activity', None)
+                flash('Your admin session has expired due to inactivity. Please log in again.', 'info')
+                return redirect(url_for('admin.login'))
+        session['admin_last_activity'] = time.time()
+
+
+@app.before_request
+def log_request_info():
+    """Log request information for security forensics on public endpoints"""
+    g.request_start_time = time.time()
+
+    # Log authentication attempts and sensitive endpoints
+    sensitive_endpoints = ['login', 'signup', 'stripe_webhook', 'api_backup', 'api_backup_restore']
+
+    if request.endpoint in sensitive_endpoints:
+        security_logger.info(
+            f"REQUEST: {request.method} {request.path} "
+            f"IP={request.remote_addr} "
+            f"user_agent={request.user_agent.string[:100]} "
+            f"referrer={request.referrer or '-'}"
+        )
+
+
+@app.after_request
+def log_response_info(response):
+    """Log response information for failed requests"""
+    if hasattr(g, 'request_start_time'):
+        elapsed = time.time() - g.request_start_time
+
+        # Log failed authentication attempts
+        if response.status_code in [401, 403] or (
+            request.endpoint in ['login', 'signup'] and response.status_code >= 400
+        ):
+            security_logger.warning(
+                f"FAILED REQUEST: {request.method} {request.path} "
+                f"status={response.status_code} "
+                f"IP={request.remote_addr} "
+                f"elapsed={elapsed:.3f}s"
+            )
+
+    return response
+
+
+# =============================================================================
+# Initialize Extensions
+# =============================================================================
+
 csrf = CSRFProtect(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -64,6 +332,11 @@ init_stripe()
 # Register admin blueprint
 from admin import admin_bp
 app.register_blueprint(admin_bp, url_prefix='/admin')
+
+# Apply rate limiting to admin login (stricter than customer login)
+# Admin accounts are high-value targets, so we limit more aggressively
+limiter.limit("3 per minute")(app.view_functions['admin.login'])
+limiter.limit("10 per hour")(app.view_functions['admin.login'])
 
 
 @login_manager.user_loader
@@ -200,6 +473,7 @@ def contact():
 
 
 @app.route('/contact', methods=['POST'])
+@limiter.limit("5 per hour", error_message="Too many contact submissions. Please try again later.")
 def contact_submit():
     """Handle contact form submission"""
     name = request.form.get('name')
@@ -211,14 +485,78 @@ def contact_submit():
     # Log the contact form submission
     logger.info(f"Contact form submission: {name} ({email}) - Subject: {subject}")
 
-    # TODO: Send email notification to support team
-    # For now, just flash a success message
+    # Send email notification to support team
+    success, msg = send_contact_notification(name, email, subject, website, message)
+    if not success:
+        logger.warning(f"Failed to send contact notification email: {msg}")
+
     flash('Thanks for reaching out! We\'ll get back to you within one business day.', 'success')
     return redirect(url_for('contact'))
 
 
+@app.route('/api/schedule-consultation', methods=['POST'])
+@limiter.limit("5 per hour", error_message="Too many consultation requests. Please try again later.")
+def schedule_consultation():
+    """Handle consultation scheduling form submission"""
+    data = request.get_json()
+
+    first_name = data.get('first_name')
+    last_name = data.get('last_name')
+    email = data.get('email')
+    phone = data.get('phone')
+    date = data.get('date')
+    time = data.get('time')
+
+    # Validate required fields
+    if not all([first_name, last_name, email, phone, date, time]):
+        return jsonify({'success': False, 'message': 'All fields are required.'}), 400
+
+    # Save to database
+    try:
+        appointment = ConsultationAppointment(
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            phone=phone,
+            scheduled_date=date,
+            scheduled_time=time,
+            timezone='EST',
+            status='pending'
+        )
+        appointment.save()
+
+        # Log the consultation request
+        logger.info(f"Consultation scheduled (ID: {appointment.id}): {first_name} {last_name} ({email}, {phone}) - {date} at {time} EST")
+
+        # Send confirmation email to prospect
+        confirm_success, confirm_msg = send_consultation_confirmation(appointment)
+        if not confirm_success:
+            logger.warning(f"Failed to send consultation confirmation email: {confirm_msg}")
+
+        # Send notification to sales team
+        notify_success, notify_msg = send_consultation_notification_to_sales(appointment)
+        if not notify_success:
+            logger.warning(f"Failed to send sales team notification: {notify_msg}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Consultation scheduled successfully.',
+            'data': {
+                'id': appointment.id,
+                'name': f'{first_name} {last_name}',
+                'email': email,
+                'date': date,
+                'time': time
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error scheduling consultation: {str(e)}")
+        return jsonify({'success': False, 'message': 'An error occurred. Please try again.'}), 500
+
+
 @app.route('/signup', methods=['GET', 'POST'])
 @app.route('/signup/<plan_slug>', methods=['GET', 'POST'])
+@limiter.limit("10 per hour", error_message="Too many signup attempts. Please try again later.")
 def signup(plan_slug=None):
     """Customer signup page with payment integration"""
     if current_user.is_authenticated:
@@ -308,6 +646,8 @@ def signup(plan_slug=None):
 
 
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("5 per minute", error_message="Too many login attempts. Please wait a minute.")
+@limiter.limit("20 per hour", error_message="Too many login attempts. Please try again later.")
 def login():
     """Customer login page"""
     if current_user.is_authenticated:
@@ -470,6 +810,74 @@ def dashboard():
 
 
 # =============================================================================
+# Health Check Endpoints
+# =============================================================================
+
+@app.route('/health')
+@limiter.exempt  # Health checks should not be rate limited
+def health_check():
+    """
+    Health check endpoint for load balancers and monitoring.
+    Returns 200 if the application can connect to its dependencies.
+    """
+    health_status = {
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat() + 'Z',
+        'checks': {}
+    }
+    overall_healthy = True
+
+    # Check database connectivity
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+        cursor.close()
+        conn.close()
+        health_status['checks']['database'] = {'status': 'healthy'}
+    except Exception as e:
+        health_status['checks']['database'] = {
+            'status': 'unhealthy',
+            'error': str(e)[:100]  # Truncate error message
+        }
+        overall_healthy = False
+
+    # Check Redis connectivity
+    try:
+        redis_client = redis.from_url(redis_url, socket_connect_timeout=2)
+        redis_client.ping()
+        health_status['checks']['redis'] = {'status': 'healthy'}
+    except Exception as e:
+        health_status['checks']['redis'] = {
+            'status': 'unhealthy',
+            'error': str(e)[:100]
+        }
+        overall_healthy = False
+
+    if not overall_healthy:
+        health_status['status'] = 'unhealthy'
+        return jsonify(health_status), 503
+
+    return jsonify(health_status), 200
+
+
+@app.route('/ready')
+@limiter.exempt  # Readiness checks should not be rate limited
+def readiness_check():
+    """
+    Readiness probe for Kubernetes/orchestration.
+    Indicates if the app is ready to receive traffic.
+    """
+    # For readiness, we just check if the app is initialized
+    # Health check handles dependency verification
+    return jsonify({
+        'status': 'ready',
+        'timestamp': datetime.utcnow().isoformat() + 'Z'
+    }), 200
+
+
+# =============================================================================
 # API Endpoints
 # =============================================================================
 
@@ -501,11 +909,12 @@ def api_credentials():
 
 @app.route('/api/backup', methods=['POST'])
 @login_required
+@limiter.limit("3 per hour", error_message="Too many backup requests. Please try again later.")
 def api_backup():
     """API endpoint for triggering a customer backup"""
     import subprocess
     import os
-    
+
     customer = Customer.get_by_id(current_user.id)
 
     if customer.status != 'active':
@@ -516,7 +925,11 @@ def api_backup():
         return jsonify({'error': 'Customer directory not found'}), 404
 
     BACKUP_SCRIPT = "/opt/shophosting/scripts/customer-backup.sh"
-    BACKUP_LOG = "/var/log/shophosting-customer-backup.log"
+
+    # Verify backup script exists and is executable
+    if not os.path.isfile(BACKUP_SCRIPT) or not os.access(BACKUP_SCRIPT, os.X_OK):
+        logger.error(f"Backup script not found or not executable: {BACKUP_SCRIPT}")
+        return jsonify({'error': 'Backup service unavailable'}), 503
 
     try:
         subprocess.Popen(
@@ -525,13 +938,20 @@ def api_backup():
             stderr=subprocess.DEVNULL
         )
 
+        # Audit log for backup operation
+        security_logger.info(
+            f"BACKUP_STARTED: customer={customer.id} email={customer.email} "
+            f"domain={customer.domain} IP={request.remote_addr}"
+        )
+
         return jsonify({
             'success': True,
             'message': 'Backup started. This may take a few minutes.',
             'note': 'Check back shortly for completion status.'
         })
     except Exception as e:
-        return jsonify({'error': f'Failed to start backup: {str(e)}'}), 500
+        logger.error(f"Failed to start backup for customer {customer.id}: {str(e)}")
+        return jsonify({'error': 'Failed to start backup. Please try again later.'}), 500
 
 
 @app.route('/api/backup/status')
@@ -546,6 +966,14 @@ def api_backup_status():
     if customer.status != 'active':
         return jsonify({'error': 'Store not active'}), 400
 
+    # Get backup configuration from environment
+    restic_repo = os.getenv('RESTIC_REPOSITORY')
+    restic_password_file = os.getenv('RESTIC_PASSWORD_FILE')
+
+    if not restic_repo or not restic_password_file:
+        logger.error("Backup configuration missing: RESTIC_REPOSITORY or RESTIC_PASSWORD_FILE not set")
+        return jsonify({'error': 'Backup service not configured'}), 503
+
     try:
         result = subprocess.run(
             [
@@ -554,8 +982,9 @@ def api_backup_status():
                 '--latest', '20'
             ],
             capture_output=True, text=True,
-            env={**os.environ, 'RESTIC_REPOSITORY': 'sftp:sh-backup@15.204.249.219:/home/sh-backup/backups',
-                 'RESTIC_PASSWORD_FILE': '/root/.restic-password'}
+            env={**os.environ, 'RESTIC_REPOSITORY': restic_repo,
+                 'RESTIC_PASSWORD_FILE': restic_password_file},
+            timeout=30  # Add timeout to prevent hanging
         )
 
         if result.returncode == 0:
@@ -583,11 +1012,12 @@ def api_backup_status():
 
 @app.route('/api/backup/restore', methods=['POST'])
 @login_required
+@limiter.limit("2 per hour", error_message="Too many restore requests. Please try again later.")
 def api_backup_restore():
     """API endpoint for restoring from a backup snapshot"""
     import subprocess
     import os
-    
+
     customer = Customer.get_by_id(current_user.id)
 
     if customer.status != 'active':
@@ -600,17 +1030,36 @@ def api_backup_restore():
     if not snapshot_id:
         return jsonify({'error': 'Snapshot ID is required'}), 400
 
+    # Validate snapshot_id format - restic uses hex strings (8-64 chars for short/full IDs)
+    if not re.match(r'^[a-f0-9]{8,64}$', snapshot_id):
+        security_logger.warning(
+            f"Invalid snapshot_id format attempted: customer={customer.id} "
+            f"snapshot_id={snapshot_id[:20]}... IP={request.remote_addr}"
+        )
+        return jsonify({'error': 'Invalid snapshot ID format'}), 400
+
     if restore_target not in ['db', 'files', 'all']:
         return jsonify({'error': 'Invalid restore target. Must be db, files, or all'}), 400
 
     RESTORE_SCRIPT = "/opt/shophosting/scripts/customer-restore.sh"
-    BACKUP_LOG = "/var/log/shophosting-customer-restore.log"
+
+    # Verify restore script exists and is executable
+    if not os.path.isfile(RESTORE_SCRIPT) or not os.access(RESTORE_SCRIPT, os.X_OK):
+        logger.error(f"Restore script not found or not executable: {RESTORE_SCRIPT}")
+        return jsonify({'error': 'Restore service unavailable'}), 503
 
     try:
         subprocess.Popen(
             [RESTORE_SCRIPT, str(customer.id), snapshot_id, restore_target],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL
+        )
+
+        # Audit log for restore operation (critical operation)
+        security_logger.warning(
+            f"RESTORE_STARTED: customer={customer.id} email={customer.email} "
+            f"domain={customer.domain} snapshot={snapshot_id} target={restore_target} "
+            f"IP={request.remote_addr}"
         )
 
         target_labels = {
@@ -625,7 +1074,8 @@ def api_backup_restore():
             'note': 'The restore process is running in the background. Your store will be back shortly.'
         })
     except Exception as e:
-        return jsonify({'error': f'Failed to start restore: {str(e)}'}), 500
+        logger.error(f"Failed to start restore for customer {customer.id}: {str(e)}")
+        return jsonify({'error': 'Failed to start restore. Please try again later.'}), 500
 
 
 @app.route('/backup')
@@ -645,7 +1095,7 @@ def backup_page():
 # =============================================================================
 
 def save_ticket_attachment(file, ticket, customer_id=None, admin_id=None, message_id=None):
-    """Save uploaded file and create attachment record"""
+    """Save uploaded file and create attachment record with security validation"""
     if not file or file.filename == '':
         return None, "No file selected"
 
@@ -659,6 +1109,53 @@ def save_ticket_attachment(file, ticket, customer_id=None, admin_id=None, messag
 
     if size > TicketAttachment.MAX_FILE_SIZE:
         return None, "File too large (max 10MB)"
+
+    # Validate file content using magic numbers (not just extension)
+    try:
+        import magic
+        file_content = file.read(2048)  # Read first 2KB for magic number detection
+        file.seek(0)  # Reset file pointer
+
+        detected_mime = magic.from_buffer(file_content, mime=True)
+
+        # Map of allowed extensions to their expected MIME types
+        allowed_mimes = {
+            'image/png': ['png'],
+            'image/jpeg': ['jpg', 'jpeg'],
+            'image/gif': ['gif'],
+            'application/pdf': ['pdf'],
+            'text/plain': ['txt'],
+            'application/msword': ['doc'],
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['docx'],
+            'application/zip': ['zip'],
+            'application/x-zip-compressed': ['zip'],
+        }
+
+        # Get claimed extension
+        ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+
+        # Check if detected MIME type is in allowed list
+        if detected_mime not in allowed_mimes:
+            security_logger.warning(
+                f"File upload blocked - invalid MIME type: claimed_ext={ext} "
+                f"detected_mime={detected_mime} filename={file.filename[:50]}"
+            )
+            return None, "File content does not match allowed types"
+
+        # Verify extension matches detected type
+        if ext not in allowed_mimes.get(detected_mime, []):
+            security_logger.warning(
+                f"File upload blocked - extension mismatch: claimed_ext={ext} "
+                f"detected_mime={detected_mime} filename={file.filename[:50]}"
+            )
+            return None, "File extension does not match content type"
+
+    except ImportError:
+        # python-magic not installed, fall back to extension-only validation
+        logger.warning("python-magic not installed, using extension-only validation")
+    except Exception as e:
+        logger.error(f"Error validating file type: {str(e)}")
+        return None, "Error validating file type"
 
     # Generate unique filename
     original_filename = secure_filename(file.filename)
@@ -676,8 +1173,15 @@ def save_ticket_attachment(file, ticket, customer_id=None, admin_id=None, messag
     full_path = os.path.join(TICKET_UPLOAD_PATH, file_path)
     file.save(full_path)
 
-    # Get mime type
-    mime_type = mimetypes.guess_type(original_filename)[0] or 'application/octet-stream'
+    # Set restrictive permissions on uploaded file (no execute)
+    os.chmod(full_path, 0o644)
+
+    # Get mime type from detection or filename
+    try:
+        import magic
+        mime_type = magic.from_file(full_path, mime=True)
+    except (ImportError, Exception):
+        mime_type = mimetypes.guess_type(original_filename)[0] or 'application/octet-stream'
 
     # Create attachment record
     attachment = TicketAttachment(

@@ -17,13 +17,21 @@ def init_db_pool():
     """Initialize database connection pool"""
     global db_pool
 
+    # Validate required database configuration
+    db_password = os.getenv('DB_PASSWORD')
+    if not db_password:
+        raise RuntimeError(
+            "CRITICAL: DB_PASSWORD environment variable is required. "
+            "Please set it in /opt/shophosting/.env"
+        )
+
     db_config = {
         'host': os.getenv('DB_HOST', 'localhost'),
         'user': os.getenv('DB_USER', 'shophosting_app'),
-        'password': os.getenv('DB_PASSWORD', 'YourSecurePasswordHere123!'),
+        'password': db_password,
         'database': os.getenv('DB_NAME', 'shophosting_db'),
         'pool_name': 'shophosting_pool',
-        'pool_size': 5
+        'pool_size': int(os.getenv('DB_POOL_SIZE', '5'))
     }
 
     db_pool = pooling.MySQLConnectionPool(**db_config)
@@ -480,6 +488,29 @@ class PricingPlan:
             conn.close()
 
     @staticmethod
+    def get_all():
+        """Get all pricing plans (including inactive)"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT * FROM pricing_plans
+                ORDER BY platform, display_order
+            """)
+            rows = cursor.fetchall()
+            import json
+            plans = []
+            for row in rows:
+                if row.get('features') and isinstance(row['features'], str):
+                    row['features'] = json.loads(row['features'])
+                plans.append(PricingPlan(**row))
+            return plans
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
     def get_all_active():
         """Get all active pricing plans"""
         conn = get_db_connection()
@@ -545,6 +576,45 @@ class PricingPlan:
             'memory_limit': self.memory_limit,
             'cpu_limit': self.cpu_limit
         }
+
+    def update(self):
+        """Update pricing plan in database"""
+        import json
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            features_json = json.dumps(self.features) if self.features else '{}'
+            cursor.execute("""
+                UPDATE pricing_plans SET
+                    name = %s,
+                    price_monthly = %s,
+                    store_limit = %s,
+                    features = %s,
+                    memory_limit = %s,
+                    cpu_limit = %s,
+                    is_active = %s,
+                    display_order = %s
+                WHERE id = %s
+            """, (
+                self.name,
+                self.price_monthly,
+                self.store_limit,
+                features_json,
+                self.memory_limit,
+                self.cpu_limit,
+                self.is_active,
+                self.display_order,
+                self.id
+            ))
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cursor.close()
+            conn.close()
 
     def __repr__(self):
         return f"<PricingPlan {self.id}: {self.slug}>"
@@ -1381,3 +1451,163 @@ class TicketAttachment:
 
     def __repr__(self):
         return f"<TicketAttachment {self.id}: {self.original_filename}>"
+
+
+class ConsultationAppointment:
+    """Model for consultation appointments scheduled via the website"""
+
+    def __init__(self, id=None, first_name=None, last_name=None, email=None,
+                 phone=None, scheduled_date=None, scheduled_time=None,
+                 timezone='EST', status='pending', notes=None,
+                 assigned_admin_id=None, created_at=None, updated_at=None):
+        self.id = id
+        self.first_name = first_name
+        self.last_name = last_name
+        self.email = email
+        self.phone = phone
+        self.scheduled_date = scheduled_date
+        self.scheduled_time = scheduled_time
+        self.timezone = timezone
+        self.status = status
+        self.notes = notes
+        self.assigned_admin_id = assigned_admin_id
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
+
+    def save(self):
+        """Insert or update appointment"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            if self.id is None:
+                cursor.execute("""
+                    INSERT INTO consultation_appointments
+                    (first_name, last_name, email, phone, scheduled_date, scheduled_time,
+                     timezone, status, notes, assigned_admin_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (self.first_name, self.last_name, self.email, self.phone,
+                      self.scheduled_date, self.scheduled_time, self.timezone,
+                      self.status, self.notes, self.assigned_admin_id))
+                self.id = cursor.lastrowid
+            else:
+                cursor.execute("""
+                    UPDATE consultation_appointments SET
+                        first_name = %s, last_name = %s, email = %s, phone = %s,
+                        scheduled_date = %s, scheduled_time = %s, timezone = %s,
+                        status = %s, notes = %s, assigned_admin_id = %s
+                    WHERE id = %s
+                """, (self.first_name, self.last_name, self.email, self.phone,
+                      self.scheduled_date, self.scheduled_time, self.timezone,
+                      self.status, self.notes, self.assigned_admin_id, self.id))
+            conn.commit()
+            return self
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_id(appointment_id):
+        """Get appointment by ID"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM consultation_appointments WHERE id = %s", (appointment_id,))
+            row = cursor.fetchone()
+            return ConsultationAppointment(**row) if row else None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_all_filtered(status=None, search=None, date_from=None, date_to=None,
+                         page=1, per_page=20):
+        """Get appointments with filtering and pagination"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            where_clauses = ["1=1"]
+            params = []
+
+            if status:
+                where_clauses.append("status = %s")
+                params.append(status)
+            if search:
+                where_clauses.append(
+                    "(first_name LIKE %s OR last_name LIKE %s OR email LIKE %s OR phone LIKE %s)"
+                )
+                search_param = f"%{search}%"
+                params.extend([search_param, search_param, search_param, search_param])
+            if date_from:
+                where_clauses.append("scheduled_date >= %s")
+                params.append(date_from)
+            if date_to:
+                where_clauses.append("scheduled_date <= %s")
+                params.append(date_to)
+
+            where_sql = " AND ".join(where_clauses)
+
+            # Get count
+            cursor.execute(f"SELECT COUNT(*) as count FROM consultation_appointments WHERE {where_sql}", params)
+            total = cursor.fetchone()['count']
+
+            # Get paginated results
+            offset = (page - 1) * per_page
+            cursor.execute(f"""
+                SELECT * FROM consultation_appointments
+                WHERE {where_sql}
+                ORDER BY scheduled_date DESC, scheduled_time DESC
+                LIMIT %s OFFSET %s
+            """, params + [per_page, offset])
+
+            appointments = [ConsultationAppointment(**row) for row in cursor.fetchall()]
+            return appointments, total
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_stats():
+        """Get appointment statistics"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                    SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+                    SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) as no_show,
+                    SUM(CASE WHEN scheduled_date = CURDATE() THEN 1 ELSE 0 END) as today,
+                    SUM(CASE WHEN scheduled_date > CURDATE() AND scheduled_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) as this_week
+                FROM consultation_appointments
+            """)
+            return cursor.fetchone()
+        finally:
+            cursor.close()
+            conn.close()
+
+    def to_dict(self):
+        """Convert to dictionary for JSON serialization"""
+        return {
+            'id': self.id,
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'full_name': self.full_name,
+            'email': self.email,
+            'phone': self.phone,
+            'scheduled_date': str(self.scheduled_date) if self.scheduled_date else None,
+            'scheduled_time': self.scheduled_time,
+            'timezone': self.timezone,
+            'status': self.status,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+    def __repr__(self):
+        return f"<ConsultationAppointment {self.id}: {self.full_name} on {self.scheduled_date}>"

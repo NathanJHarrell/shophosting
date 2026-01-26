@@ -1,0 +1,1 @@
+# ShopHosting.io Test Suite

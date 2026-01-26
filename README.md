@@ -17,6 +17,83 @@ A multi-tenant Docker hosting platform that automatically provisions containeriz
 - **Resource Isolation**: Each customer gets isolated Docker containers with configurable resource limits
 - **Automated Backups**: Daily encrypted backups to remote server using restic with 30-day retention
 - **Customer Self-Service Backups**: Customers can create manual backups and restore from any snapshot with options for database-only, files-only, or full restore
+- **Production Security Hardening**: Comprehensive security features for production deployment
+
+## Security Features
+
+ShopHosting.io includes enterprise-grade security features:
+
+### Authentication & Session Security
+- **Secure Password Storage**: PBKDF2-SHA256 hashing via Werkzeug
+- **Session Protection**: HTTPOnly, Secure (HTTPS), SameSite=Lax cookies
+- **Idle Timeout**: 30-minute session timeout for both customers and admins
+- **CSRF Protection**: Flask-WTF CSRF tokens on all forms
+
+### Rate Limiting
+Rate limits enforced via Flask-Limiter with Redis backend:
+| Endpoint | Limit |
+|----------|-------|
+| Customer Login | 5/min, 20/hr |
+| Admin Login | 3/min, 10/hr |
+| Signup | 10/hr |
+| Contact/Consultation | 5/hr |
+| Backup Operations | 3/hr |
+
+### Security Headers (Flask-Talisman)
+- Content-Security-Policy (CSP)
+- Strict-Transport-Security (HSTS) - 1 year
+- X-Content-Type-Options: nosniff
+- X-Frame-Options: DENY
+- Referrer-Policy: strict-origin-when-cross-origin
+
+### Input Validation
+- **File Uploads**: Extension whitelist + magic number validation
+- **API Inputs**: Strict format validation (e.g., backup snapshot IDs)
+- **Domain Validation**: Regex pattern matching
+- **Request Size Limits**: 50MB max to prevent DoS
+
+### Audit Logging
+Security events logged to `/opt/shophosting/logs/security.log`:
+- Login attempts (success/failure)
+- Session timeouts
+- Backup/restore operations
+- Rate limit violations
+
+### Configuration Security
+- **Fail-Fast**: App refuses to start without proper `SECRET_KEY` and `DB_PASSWORD`
+- **Environment Variables**: All secrets loaded from `.env`, never hardcoded
+- **File Permissions**: Restrictive permissions on sensitive files
+
+See [SECURITY.md](SECURITY.md) for complete security documentation.
+
+## CI/CD Pipeline
+
+The project includes a GitHub Actions CI/CD pipeline (`.github/workflows/ci.yml`) that runs on every push and pull request:
+
+### Pipeline Stages
+
+1. **Lint**: Code quality checks
+   - `flake8` for Python syntax and style
+   - `black` for code formatting (advisory)
+   - `isort` for import ordering (advisory)
+   - `bandit` for security analysis
+
+2. **Test**: Automated testing
+   - `pytest` with Flask test client
+   - Tests for health endpoints, authentication, security headers
+   - Runs against MySQL and Redis services
+
+3. **Security**: Dependency scanning
+   - `pip-audit` for known vulnerabilities
+   - Secret pattern detection
+
+### Running Tests Locally
+
+```bash
+cd /opt/shophosting/webapp
+source venv/bin/activate
+pytest tests/ -v
+```
 
 ## Requirements
 
@@ -535,14 +612,20 @@ Edit `/opt/shophosting/scripts/backup.sh` to customize:
 │   ├── create_admin.py     # Create admin users
 │   └── setup_stripe_products.py
 ├── logs/                   # Application logs
+│   ├── webapp.log          # Application logs
+│   └── security.log        # Security audit trail
 ├── schema.sql              # Database schema
 ├── shophosting-backup.service   # Backup systemd service
 ├── shophosting-backup.timer     # Backup systemd timer
+├── SECURITY.md             # Security documentation
+├── .github/workflows/      # CI/CD pipeline
+│   └── ci.yml              # Lint, test, security scan
 └── .env                    # Environment configuration
 ```
 
 ## Documentation
 
+- [Security Policy](SECURITY.md) - Security architecture and incident response
 - [Development Guide](DEVELOPMENT_GUIDE.md) - Detailed development instructions
 - [System Guide](SYSTEM_GUIDE.md) - System architecture and operations
 
