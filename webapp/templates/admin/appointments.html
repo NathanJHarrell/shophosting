@@ -1,0 +1,255 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Consultation Appointments{% endblock %}
+{% block page_title %}Consultation Appointments{% endblock %}
+
+{% block extra_css %}
+<style>
+    .badge-pending { background: var(--warning-muted); color: var(--warning); }
+    .badge-confirmed { background: var(--info-muted); color: var(--accent-blue); }
+    .badge-completed { background: var(--success-muted); color: var(--success); }
+    .badge-cancelled { background: var(--bg-surface); color: var(--text-tertiary); }
+    .badge-no_show { background: var(--error-muted); color: var(--error); }
+
+    .appointment-row {
+        cursor: pointer;
+    }
+
+    .appointment-row:hover td {
+        background: var(--bg-hover);
+    }
+
+    .contact-info {
+        font-size: 0.85rem;
+    }
+
+    .contact-name {
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .contact-email {
+        color: var(--text-secondary);
+    }
+
+    .contact-phone {
+        color: var(--text-tertiary);
+    }
+
+    .datetime-info {
+        font-size: 0.9rem;
+    }
+
+    .datetime-date {
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .datetime-time {
+        color: var(--text-secondary);
+    }
+
+    .filters {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .filter-label {
+        font-size: 0.75rem;
+        color: var(--text-tertiary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .filter-group .form-control {
+        min-width: 140px;
+    }
+
+    .search-group .form-control {
+        min-width: 220px;
+    }
+
+    .filter-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .today-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: var(--success);
+        border-radius: 50%;
+        margin-right: 6px;
+    }
+
+    .upcoming-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: var(--accent-blue);
+        border-radius: 50%;
+        margin-right: 6px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Stats -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Total Appointments</div>
+        <div class="stat-value">{{ stats.total or 0 }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Today</div>
+        <div class="stat-value success">{{ stats.today or 0 }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">This Week</div>
+        <div class="stat-value info">{{ stats.this_week or 0 }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Pending</div>
+        <div class="stat-value warning">{{ stats.pending or 0 }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Confirmed</div>
+        <div class="stat-value info">{{ stats.confirmed or 0 }}</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('admin.appointments') }}">
+            <div class="filters">
+                <div class="filter-group search-group">
+                    <label class="filter-label">Search</label>
+                    <input type="text" name="search" class="form-control" placeholder="Name, email, phone..." value="{{ search }}">
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">Status</label>
+                    <select name="status" class="form-control">
+                        <option value="">All Statuses</option>
+                        <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+                        <option value="confirmed" {% if status_filter == 'confirmed' %}selected{% endif %}>Confirmed</option>
+                        <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+                        <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                        <option value="no_show" {% if status_filter == 'no_show' %}selected{% endif %}>No Show</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">From Date</label>
+                    <input type="date" name="date_from" class="form-control" value="{{ date_from }}">
+                </div>
+                <div class="filter-group">
+                    <label class="filter-label">To Date</label>
+                    <input type="date" name="date_to" class="form-control" value="{{ date_to }}">
+                </div>
+                <div class="filter-actions">
+                    <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+                    <a href="{{ url_for('admin.appointments') }}" class="btn btn-secondary btn-sm">Clear</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Appointments Table -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">
+            {% if search or status_filter or date_from or date_to %}
+                Filtered Results ({{ total }})
+            {% else %}
+                All Appointments ({{ total }})
+            {% endif %}
+        </h3>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Contact</th>
+                    <th>Scheduled</th>
+                    <th>Status</th>
+                    <th>Assigned To</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for appt in appointments %}
+                    <tr class="appointment-row" onclick="window.location='{{ url_for('admin.appointment_detail', appointment_id=appt.id) }}'">
+                        <td class="mono">#{{ appt.id }}</td>
+                        <td class="contact-info">
+                            <div class="contact-name">{{ appt.first_name }} {{ appt.last_name }}</div>
+                            <div class="contact-email">{{ appt.email }}</div>
+                            <div class="contact-phone">{{ appt.phone }}</div>
+                        </td>
+                        <td class="datetime-info">
+                            <div class="datetime-date">
+                                {% set today = now.date() %}
+                                {% if appt.scheduled_date == today %}
+                                    <span class="today-indicator"></span>
+                                {% elif appt.scheduled_date > today %}
+                                    <span class="upcoming-indicator"></span>
+                                {% endif %}
+                                {{ appt.scheduled_date.strftime('%b %d, %Y') if appt.scheduled_date else '-' }}
+                            </div>
+                            <div class="datetime-time">{{ appt.scheduled_time }} {{ appt.timezone }}</div>
+                        </td>
+                        <td><span class="badge badge-{{ appt.status }}">{{ appt.status|replace('_', ' ') }}</span></td>
+                        <td>
+                            {% if appt.assigned_admin_id %}
+                                {% for a in admins if a.id == appt.assigned_admin_id %}
+                                    {{ a.full_name }}
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">Unassigned</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-muted">{{ appt.created_at.strftime('%b %d, %H:%M') }}</td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+                            No appointments found
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if total_pages > 1 %}
+    <div class="pagination">
+        {% if page > 1 %}
+            <a href="{{ url_for('admin.appointments', page=page-1, status=status_filter, date_from=date_from, date_to=date_to, search=search) }}">&larr; Previous</a>
+        {% endif %}
+
+        {% for p in range(1, total_pages + 1) %}
+            {% if p == page %}
+                <span class="active">{{ p }}</span>
+            {% else %}
+                <a href="{{ url_for('admin.appointments', page=p, status=status_filter, date_from=date_from, date_to=date_to, search=search) }}">{{ p }}</a>
+            {% endif %}
+        {% endfor %}
+
+        {% if page < total_pages %}
+            <a href="{{ url_for('admin.appointments', page=page+1, status=status_filter, date_from=date_from, date_to=date_to, search=search) }}">Next &rarr;</a>
+        {% endif %}
+    </div>
+{% endif %}
+{% endblock %}

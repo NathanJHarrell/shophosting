@@ -10,8 +10,10 @@ import re
 from functools import wraps
 from datetime import datetime, timedelta
 
-from flask import render_template, request, redirect, url_for, flash, session, jsonify
+from flask import render_template, request, redirect, url_for, flash, session, jsonify, current_app
 from flask_wtf import FlaskForm
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from wtforms import StringField, PasswordField, SelectField, BooleanField, SubmitField
 from wtforms.validators import DataRequired, Email, Length, EqualTo
 
@@ -21,9 +23,12 @@ from .models import AdminUser, log_admin_action
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import Customer, PortManager, get_db_connection, PricingPlan, Subscription, Invoice
-from models import Ticket, TicketMessage, TicketAttachment, TicketCategory
+from models import Ticket, TicketMessage, TicketAttachment, TicketCategory, ConsultationAppointment
 
 logger = logging.getLogger(__name__)
+
+# Security logger for admin actions
+security_logger = logging.getLogger('security')
 
 
 # =============================================================================
@@ -63,9 +68,25 @@ class AdminLoginForm(FlaskForm):
 # Authentication Routes
 # =============================================================================
 
+def get_admin_limiter():
+    """Get the limiter from the current app context"""
+    from flask import current_app
+    return current_app.extensions.get('limiter')
+
+
 @admin_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    """Admin login page"""
+    """Admin login page with rate limiting"""
+    # Apply rate limiting for admin login (stricter than customer login)
+    limiter = get_admin_limiter()
+    if limiter:
+        # Check rate limit manually - 3 attempts per minute, 10 per hour
+        key = f"admin_login:{get_remote_address()}"
+        try:
+            limiter.check()
+        except Exception:
+            pass  # Let Flask-Limiter handle the 429 response
+
     if session.get('admin_user_id'):
         return redirect(url_for('admin.dashboard'))
 
@@ -80,9 +101,18 @@ def login():
             session['admin_user_role'] = admin.role
             admin.update_last_login()
             log_admin_action(admin.id, 'admin_login', ip_address=request.remote_addr)
+            security_logger.info(
+                f"ADMIN_LOGIN_SUCCESS: admin={admin.id} email={admin.email} "
+                f"IP={request.remote_addr}"
+            )
             flash('Welcome back, {}!'.format(admin.full_name), 'success')
             return redirect(url_for('admin.dashboard'))
         else:
+            # Log failed attempt
+            security_logger.warning(
+                f"ADMIN_LOGIN_FAILED: email={form.email.data} "
+                f"IP={request.remote_addr} user_agent={request.user_agent.string[:50]}"
+            )
             flash('Invalid email or password.', 'error')
 
     return render_template('admin/login.html', form=form)
@@ -781,6 +811,152 @@ def serve_ticket_attachment(attachment_id):
         download_name=attachment.original_filename,
         as_attachment=True
     )
+
+
+# =============================================================================
+# Consultation Appointments
+# =============================================================================
+
+@admin_bp.route('/appointments')
+@admin_required
+def appointments():
+    """List all consultation appointments"""
+    admin = get_current_admin()
+
+    # Get filter parameters
+    status = request.args.get('status', '')
+    search = request.args.get('search', '').strip()
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+    page = int(request.args.get('page', 1))
+    per_page = 20
+
+    # Get filtered appointments
+    appointments_list, total = ConsultationAppointment.get_all_filtered(
+        status=status or None,
+        search=search or None,
+        date_from=date_from or None,
+        date_to=date_to or None,
+        page=page,
+        per_page=per_page
+    )
+
+    total_pages = (total + per_page - 1) // per_page
+
+    # Get stats
+    stats = ConsultationAppointment.get_stats()
+
+    # Get all admins for assignment dropdown
+    admins = AdminUser.get_all()
+
+    return render_template('admin/appointments.html',
+                           admin=admin,
+                           appointments=appointments_list,
+                           stats=stats,
+                           admins=admins,
+                           status_filter=status,
+                           search=search,
+                           date_from=date_from,
+                           date_to=date_to,
+                           page=page,
+                           total_pages=total_pages,
+                           total=total)
+
+
+@admin_bp.route('/appointments/<int:appointment_id>')
+@admin_required
+def appointment_detail(appointment_id):
+    """View appointment detail"""
+    admin = get_current_admin()
+    appointment = ConsultationAppointment.get_by_id(appointment_id)
+
+    if not appointment:
+        flash('Appointment not found.', 'error')
+        return redirect(url_for('admin.appointments'))
+
+    # Get all admins for assignment dropdown
+    admins = AdminUser.get_all()
+
+    return render_template('admin/appointment_detail.html',
+                           admin=admin,
+                           appointment=appointment,
+                           admins=admins)
+
+
+@admin_bp.route('/appointments/<int:appointment_id>/status', methods=['POST'])
+@admin_required
+def appointment_status(appointment_id):
+    """Update appointment status"""
+    admin = get_current_admin()
+    appointment = ConsultationAppointment.get_by_id(appointment_id)
+
+    if not appointment:
+        flash('Appointment not found.', 'error')
+        return redirect(url_for('admin.appointments'))
+
+    new_status = request.form.get('status', '')
+    if new_status in ['pending', 'confirmed', 'completed', 'cancelled', 'no_show']:
+        old_status = appointment.status
+        appointment.status = new_status
+        appointment.save()
+
+        log_admin_action(admin.id, 'appointment_status_change', 'appointment', appointment_id,
+                         f'Changed status from {old_status} to {new_status}', request.remote_addr)
+        flash(f'Status updated to {new_status}.', 'success')
+    else:
+        flash('Invalid status.', 'error')
+
+    return redirect(url_for('admin.appointment_detail', appointment_id=appointment_id))
+
+
+@admin_bp.route('/appointments/<int:appointment_id>/assign', methods=['POST'])
+@admin_required
+def appointment_assign(appointment_id):
+    """Assign appointment to an admin"""
+    admin = get_current_admin()
+    appointment = ConsultationAppointment.get_by_id(appointment_id)
+
+    if not appointment:
+        flash('Appointment not found.', 'error')
+        return redirect(url_for('admin.appointments'))
+
+    admin_id = request.form.get('admin_id', '')
+    appointment.assigned_admin_id = int(admin_id) if admin_id else None
+    appointment.save()
+
+    if admin_id:
+        assigned_admin = AdminUser.get_by_id(int(admin_id))
+        log_admin_action(admin.id, 'appointment_assign', 'appointment', appointment_id,
+                         f'Assigned to {assigned_admin.full_name if assigned_admin else "Unknown"}', request.remote_addr)
+        flash('Appointment assigned.', 'success')
+    else:
+        log_admin_action(admin.id, 'appointment_unassign', 'appointment', appointment_id,
+                         'Removed assignment', request.remote_addr)
+        flash('Assignment removed.', 'success')
+
+    return redirect(url_for('admin.appointment_detail', appointment_id=appointment_id))
+
+
+@admin_bp.route('/appointments/<int:appointment_id>/notes', methods=['POST'])
+@admin_required
+def appointment_notes(appointment_id):
+    """Update appointment notes"""
+    admin = get_current_admin()
+    appointment = ConsultationAppointment.get_by_id(appointment_id)
+
+    if not appointment:
+        flash('Appointment not found.', 'error')
+        return redirect(url_for('admin.appointments'))
+
+    notes = request.form.get('notes', '').strip()
+    appointment.notes = notes
+    appointment.save()
+
+    log_admin_action(admin.id, 'appointment_notes_update', 'appointment', appointment_id,
+                     'Updated notes', request.remote_addr)
+    flash('Notes saved.', 'success')
+
+    return redirect(url_for('admin.appointment_detail', appointment_id=appointment_id))
 
 
 # =============================================================================
@@ -2253,6 +2429,73 @@ def api_page_content(slug):
 
 
 # =============================================================================
+# Pricing Plans Management (Super Admin Only)
+# =============================================================================
+
+@admin_bp.route('/pricing')
+@super_admin_required
+def pricing_plans():
+    """List all pricing plans"""
+    admin = get_current_admin()
+    plans = PricingPlan.get_all()
+
+    # Group by platform
+    woocommerce_plans = [p for p in plans if p.platform == 'woocommerce']
+    magento_plans = [p for p in plans if p.platform == 'magento']
+
+    return render_template('admin/pricing_plans.html',
+                           admin=admin,
+                           woocommerce_plans=woocommerce_plans,
+                           magento_plans=magento_plans)
+
+
+@admin_bp.route('/pricing/<int:plan_id>/edit', methods=['GET', 'POST'])
+@super_admin_required
+def pricing_plan_edit(plan_id):
+    """Edit a pricing plan"""
+    admin = get_current_admin()
+    plan = PricingPlan.get_by_id(plan_id)
+
+    if not plan:
+        flash('Pricing plan not found.', 'error')
+        return redirect(url_for('admin.pricing_plans'))
+
+    if request.method == 'POST':
+        try:
+            # Update basic fields
+            plan.name = request.form.get('name', plan.name)
+            plan.price_monthly = float(request.form.get('price_monthly', plan.price_monthly))
+            plan.store_limit = int(request.form.get('store_limit', plan.store_limit))
+            plan.memory_limit = request.form.get('memory_limit', plan.memory_limit)
+            plan.cpu_limit = request.form.get('cpu_limit', plan.cpu_limit)
+            plan.display_order = int(request.form.get('display_order', plan.display_order))
+            plan.is_active = request.form.get('is_active') == 'on'
+
+            # Update features from checkboxes
+            feature_keys = [
+                'daily_backups', 'email_support', 'premium_plugins', 'support_24_7',
+                'redis_cache', 'staging', 'sla_uptime', 'advanced_security',
+                'centralized_management', 'white_label', 'dedicated_support'
+            ]
+            plan.features = {key: request.form.get(f'feature_{key}') == 'on' for key in feature_keys}
+
+            plan.update()
+
+            log_admin_action(admin.id, 'pricing_plan_edit', f"Updated pricing plan: {plan.name} (ID: {plan.id})")
+            flash(f'Pricing plan "{plan.name}" updated successfully.', 'success')
+            return redirect(url_for('admin.pricing_plans'))
+
+        except ValueError as e:
+            flash(f'Invalid value: {str(e)}', 'error')
+        except Exception as e:
+            flash(f'Error updating plan: {str(e)}', 'error')
+
+    return render_template('admin/pricing_plan_edit.html',
+                           admin=admin,
+                           plan=plan)
+
+
+# =============================================================================
 # Stripe Pricing Sync API
 # =============================================================================
 
@@ -2296,8 +2539,15 @@ def serialize_page_content(content):
     for section, section_data in content.items():
         if isinstance(section_data, dict):
             for key, value in section_data.items():
-                lines.append(f"## section: {section}.{key}")
-                lines.append(str(value) if value is not None else '')
+                # Handle nested complex types (lists, dicts) as JSON
+                if isinstance(value, (list, dict)):
+                    lines.append(f"## section: {section}.{key} (json)")
+                    lines.append("```json")
+                    lines.append(json.dumps(value, indent=2))
+                    lines.append("```")
+                else:
+                    lines.append(f"## section: {section}.{key}")
+                    lines.append(str(value) if value is not None else '')
                 lines.append('')
         elif isinstance(section_data, str):
             lines.append(f"## section: {section}")

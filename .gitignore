@@ -1,8 +1,15 @@
 # Environment and secrets
 .env
+.env.local
+.env.production
 .htpasswd
 *.pem
 *.key
+.system-restic-password
+*-password
+*-password.txt
+*.secret
+secrets/
 .restic-password
 
 # Virtual environments
@@ -42,8 +49,7 @@ Thumbs.db
 DEVELOPMENT_GUIDE.md
 SYSTEM_GUIDE.md
 
-# Test files
-test_*.py
+# Test utility scripts (not the test suite)
 run_e2e_test.py
 quick_provision.py
 
