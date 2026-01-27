@@ -475,6 +475,82 @@ def system():
 
 
 # =============================================================================
+# System Backups
+# =============================================================================
+
+@admin_bp.route('/system/backups')
+@admin_required
+def system_backups():
+    """System backups management page"""
+    admin = get_current_admin()
+
+    # Get restic snapshots
+    snapshots = []
+    try:
+        result = subprocess.run(
+            ['sudo', 'restic', '-r', 'sftp:sh-backup@15.204.249.219:/home/sh-backup/system',
+             '--password-file', '/opt/shophosting/.system-restic-password',
+             'snapshots', '--json'],
+            capture_output=True, text=True, timeout=30,
+            env={**os.environ, 'HOME': '/root', 'XDG_CACHE_HOME': '/root/.cache'}
+        )
+        if result.returncode == 0 and result.stdout:
+            import json
+            snapshots = json.loads(result.stdout)
+            # Sort by time descending
+            snapshots.sort(key=lambda x: x.get('time', ''), reverse=True)
+    except Exception as e:
+        flash(f'Error fetching snapshots: {str(e)}', 'error')
+
+    return render_template('admin/system_backups.html',
+                           admin=admin,
+                           snapshots=snapshots)
+
+
+@admin_bp.route('/system/backup/create', methods=['POST'])
+@admin_required
+def system_backup_create():
+    """Create a new system backup"""
+    admin = get_current_admin()
+
+    try:
+        # Run backup in background
+        subprocess.Popen(
+            ['sudo', '/opt/shophosting/scripts/system-backup.sh'],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        log_admin_action(admin.id, 'create_system_backup', ip_address=request.remote_addr)
+        return {'success': True, 'message': 'Backup started in background'}
+    except Exception as e:
+        return {'success': False, 'message': str(e)}, 500
+
+
+@admin_bp.route('/system/backup/restore/<snapshot_id>', methods=['POST'])
+@admin_required
+def system_backup_restore(snapshot_id):
+    """Restore from a system backup snapshot"""
+    admin = get_current_admin()
+
+    # Get restore target from form
+    target = request.form.get('target', 'all')
+
+    try:
+        log_admin_action(admin.id, 'restore_system_backup', 'snapshot', snapshot_id,
+                        f'Restoring backup target={target}', request.remote_addr)
+
+        # Run restore script in background
+        subprocess.Popen(
+            ['sudo', '/opt/shophosting/scripts/system-restore.sh', snapshot_id, '--target', target],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        return {'success': True, 'message': f'Restore started for snapshot {snapshot_id}'}
+    except Exception as e:
+        return {'success': False, 'message': str(e)}, 500
+
+
+# =============================================================================
 # Billing Overview
 # =============================================================================
 
