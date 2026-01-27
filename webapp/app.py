@@ -1084,6 +1084,166 @@ def backup_page():
 
 
 # =============================================================================
+# Staging Environment Routes
+# =============================================================================
+
+@app.route('/staging')
+@login_required
+def staging_list():
+    """List customer's staging environments"""
+    customer = Customer.get_by_id(current_user.id)
+    staging_envs = StagingEnvironment.get_by_customer(customer.id)
+    can_create = StagingEnvironment.can_create_staging(customer.id)
+
+    return render_template('staging.html',
+                          customer=customer,
+                          staging_envs=staging_envs,
+                          can_create=can_create,
+                          max_staging=StagingEnvironment.MAX_STAGING_PER_CUSTOMER)
+
+
+@app.route('/staging/create', methods=['POST'])
+@login_required
+def staging_create():
+    """Create a new staging environment"""
+    customer = Customer.get_by_id(current_user.id)
+
+    if customer.status != 'active':
+        flash('Your production site must be active before creating staging environments.', 'error')
+        return redirect(url_for('staging_list'))
+
+    if not StagingEnvironment.can_create_staging(customer.id):
+        flash(f'Maximum of {StagingEnvironment.MAX_STAGING_PER_CUSTOMER} staging environments allowed.', 'error')
+        return redirect(url_for('staging_list'))
+
+    staging_name = request.form.get('staging_name', '').strip()
+    if not staging_name:
+        staging_name = None  # Will auto-generate
+
+    try:
+        # Import and enqueue the staging creation job
+        from redis import Redis
+        from rq import Queue
+
+        redis_host = os.getenv('REDIS_HOST', 'localhost')
+        redis_conn = Redis(host=redis_host, port=6379)
+        queue = Queue('staging', connection=redis_conn)
+
+        # Enqueue the job
+        from staging_worker import create_staging_job
+        job = queue.enqueue(create_staging_job, customer.id, staging_name,
+                           job_timeout=600, result_ttl=3600)
+
+        flash('Staging environment is being created. This may take a few minutes.', 'success')
+        logger.info(f"Staging creation queued for customer {customer.id}, job {job.id}")
+
+    except Exception as e:
+        logger.error(f"Failed to queue staging creation: {e}")
+        flash('Failed to create staging environment. Please try again later.', 'error')
+
+    return redirect(url_for('staging_list'))
+
+
+@app.route('/staging/<int:staging_id>')
+@login_required
+def staging_detail(staging_id):
+    """View staging environment details"""
+    staging = StagingEnvironment.get_by_id(staging_id)
+
+    if not staging or staging.customer_id != current_user.id:
+        flash('Staging environment not found.', 'error')
+        return redirect(url_for('staging_list'))
+
+    customer = Customer.get_by_id(current_user.id)
+    sync_history = staging.get_sync_history(limit=10)
+
+    return render_template('staging_detail.html',
+                          customer=customer,
+                          staging=staging,
+                          sync_history=sync_history)
+
+
+@app.route('/staging/<int:staging_id>/push', methods=['POST'])
+@login_required
+def staging_push(staging_id):
+    """Push staging changes to production"""
+    staging = StagingEnvironment.get_by_id(staging_id)
+
+    if not staging or staging.customer_id != current_user.id:
+        return jsonify({'success': False, 'message': 'Staging environment not found'}), 404
+
+    if staging.status != 'active':
+        return jsonify({'success': False, 'message': 'Staging must be active to push'}), 400
+
+    sync_type = request.form.get('sync_type', 'all')
+    if sync_type not in ['files', 'db', 'all']:
+        return jsonify({'success': False, 'message': 'Invalid sync type'}), 400
+
+    try:
+        from redis import Redis
+        from rq import Queue
+
+        redis_host = os.getenv('REDIS_HOST', 'localhost')
+        redis_conn = Redis(host=redis_host, port=6379)
+        queue = Queue('staging', connection=redis_conn)
+
+        from staging_worker import push_to_production_job
+        job = queue.enqueue(push_to_production_job, staging_id, sync_type,
+                           job_timeout=600, result_ttl=3600)
+
+        logger.info(f"Push to production queued for staging {staging_id}, type={sync_type}, job {job.id}")
+        return jsonify({'success': True, 'message': 'Push to production started'})
+
+    except Exception as e:
+        logger.error(f"Failed to queue push to production: {e}")
+        return jsonify({'success': False, 'message': 'Failed to start push'}), 500
+
+
+@app.route('/staging/<int:staging_id>/delete', methods=['POST'])
+@login_required
+def staging_delete(staging_id):
+    """Delete a staging environment"""
+    staging = StagingEnvironment.get_by_id(staging_id)
+
+    if not staging or staging.customer_id != current_user.id:
+        flash('Staging environment not found.', 'error')
+        return redirect(url_for('staging_list'))
+
+    try:
+        from redis import Redis
+        from rq import Queue
+
+        redis_host = os.getenv('REDIS_HOST', 'localhost')
+        redis_conn = Redis(host=redis_host, port=6379)
+        queue = Queue('staging', connection=redis_conn)
+
+        from staging_worker import delete_staging_job
+        job = queue.enqueue(delete_staging_job, staging_id,
+                           job_timeout=300, result_ttl=3600)
+
+        flash('Staging environment is being deleted.', 'success')
+        logger.info(f"Staging deletion queued for staging {staging_id}, job {job.id}")
+
+    except Exception as e:
+        logger.error(f"Failed to queue staging deletion: {e}")
+        flash('Failed to delete staging environment.', 'error')
+
+    return redirect(url_for('staging_list'))
+
+
+@app.route('/api/staging/<int:staging_id>/status')
+@login_required
+def staging_status(staging_id):
+    """API endpoint for checking staging status"""
+    staging = StagingEnvironment.get_by_id(staging_id)
+
+    if not staging or staging.customer_id != current_user.id:
+        return jsonify({'error': 'Not found'}), 404
+
+    return jsonify(staging.to_dict())
+
+
+# =============================================================================
 # Support Ticket Routes
 # =============================================================================
 

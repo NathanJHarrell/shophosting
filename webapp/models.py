@@ -127,7 +127,7 @@ class Customer:
                  domain=None, platform=None, status='pending', web_port=None,
                  db_name=None, db_user=None, db_password=None,
                  admin_user=None, admin_password=None, error_message=None,
-                 stripe_customer_id=None, plan_id=None,
+                 stripe_customer_id=None, plan_id=None, staging_count=None,
                  created_at=None, updated_at=None):
         self.id = id
         self.email = email
@@ -145,6 +145,7 @@ class Customer:
         self.error_message = error_message
         self.stripe_customer_id = stripe_customer_id
         self.plan_id = plan_id
+        self.staging_count = staging_count or 0
         self.created_at = created_at or datetime.now()
         self.updated_at = updated_at or datetime.now()
 

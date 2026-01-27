@@ -1,0 +1,432 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Staging Details - Admin Panel{% endblock %}
+
+{% block extra_css %}
+<style>
+    .staging-detail-page {
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 24px;
+        font-size: 0.9rem;
+    }
+
+    .breadcrumb a {
+        color: var(--text-secondary);
+        text-decoration: none;
+    }
+
+    .breadcrumb a:hover {
+        color: var(--accent-blue);
+    }
+
+    .breadcrumb-separator {
+        color: var(--text-tertiary);
+    }
+
+    .breadcrumb-current {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 32px;
+    }
+
+    .page-title {
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--text-primary);
+    }
+
+    .page-subtitle {
+        color: var(--text-tertiary);
+        margin-top: 6px;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .status-badge.active {
+        background: var(--success-muted);
+        color: var(--accent-green);
+    }
+
+    .status-badge.creating {
+        background: var(--warning-muted);
+        color: var(--accent-yellow);
+    }
+
+    .status-badge.syncing {
+        background: var(--info-muted);
+        color: var(--accent-blue);
+    }
+
+    .status-badge.failed {
+        background: var(--error-muted);
+        color: var(--accent-red);
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 24px;
+        margin-bottom: 32px;
+    }
+
+    .info-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+    }
+
+    .info-card-header {
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--border-subtle);
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .info-card-body {
+        padding: 0;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 24px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .info-row:last-child {
+        border-bottom: none;
+    }
+
+    .info-label {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+
+    .info-value {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .info-value a {
+        color: var(--accent-blue);
+        text-decoration: none;
+    }
+
+    .info-value a:hover {
+        text-decoration: underline;
+    }
+
+    .full-width {
+        grid-column: 1 / -1;
+    }
+
+    .sync-history {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+    }
+
+    .sync-history-header {
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--border-subtle);
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .sync-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 24px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .sync-item:last-child {
+        border-bottom: none;
+    }
+
+    .sync-type {
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .sync-meta {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .sync-date {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+    }
+
+    .sync-status {
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .sync-status.completed {
+        background: var(--success-muted);
+        color: var(--accent-green);
+    }
+
+    .sync-status.running {
+        background: var(--info-muted);
+        color: var(--accent-blue);
+    }
+
+    .sync-status.failed {
+        background: var(--error-muted);
+        color: var(--accent-red);
+    }
+
+    .sync-status.pending {
+        background: var(--warning-muted);
+        color: var(--accent-yellow);
+    }
+
+    .empty-history {
+        padding: 40px 24px;
+        text-align: center;
+        color: var(--text-tertiary);
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 12px;
+        margin-top: 24px;
+    }
+
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        border-radius: var(--radius-md);
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        border: none;
+    }
+
+    .btn-secondary {
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
+    }
+
+    .btn-secondary:hover {
+        background: var(--bg-surface);
+    }
+
+    .btn-danger {
+        background: var(--error-muted);
+        color: var(--accent-red);
+    }
+
+    .btn-danger:hover {
+        background: rgba(255, 68, 68, 0.2);
+    }
+
+    @media (max-width: 768px) {
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="staging-detail-page">
+    <div class="breadcrumb">
+        <a href="{{ url_for('admin.dashboard') }}">Dashboard</a>
+        <span class="breadcrumb-separator">/</span>
+        <a href="{{ url_for('admin.staging_list') }}">Staging</a>
+        <span class="breadcrumb-separator">/</span>
+        <span class="breadcrumb-current">{{ staging.name or 'Staging Details' }}</span>
+    </div>
+
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">{{ staging.name or 'Staging Environment' }}</h1>
+            <p class="page-subtitle">{{ staging.staging_domain }}</p>
+        </div>
+        <span class="status-badge {{ staging.status }}">{{ staging.status|capitalize }}</span>
+    </div>
+
+    <div class="info-grid">
+        <div class="info-card">
+            <div class="info-card-header">Staging Information</div>
+            <div class="info-card-body">
+                <div class="info-row">
+                    <span class="info-label">Staging URL</span>
+                    <span class="info-value">
+                        <a href="https://{{ staging.staging_domain }}" target="_blank">{{ staging.staging_domain }}</a>
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Port</span>
+                    <span class="info-value">{{ staging.web_port }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Created</span>
+                    <span class="info-value">{{ staging.created_at.strftime('%B %d, %Y at %I:%M %p') }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Cloned From Production</span>
+                    <span class="info-value">
+                        {% if staging.source_snapshot_date %}
+                            {{ staging.source_snapshot_date.strftime('%B %d, %Y at %I:%M %p') }}
+                        {% else %}
+                            Unknown
+                        {% endif %}
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Last Push to Production</span>
+                    <span class="info-value">
+                        {% if staging.last_push_date %}
+                            {{ staging.last_push_date.strftime('%B %d, %Y at %I:%M %p') }}
+                        {% else %}
+                            Never
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-card">
+            <div class="info-card-header">Customer Information</div>
+            <div class="info-card-body">
+                <div class="info-row">
+                    <span class="info-label">Customer</span>
+                    <span class="info-value">
+                        <a href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}">{{ customer.email }}</a>
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Company</span>
+                    <span class="info-value">{{ customer.company_name }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Production Domain</span>
+                    <span class="info-value">
+                        <a href="https://{{ customer.domain }}" target="_blank">{{ customer.domain }}</a>
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Platform</span>
+                    <span class="info-value">{{ customer.platform|capitalize }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Production Status</span>
+                    <span class="info-value">{{ customer.status|capitalize }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-card">
+            <div class="info-card-header">Database Credentials</div>
+            <div class="info-card-body">
+                <div class="info-row">
+                    <span class="info-label">Database Name</span>
+                    <span class="info-value">{{ staging.db_name }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Database User</span>
+                    <span class="info-value">{{ staging.db_user }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Database Password</span>
+                    <span class="info-value" style="font-family: monospace;">{{ staging.db_password }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sync-history">
+        <div class="sync-history-header">Sync History</div>
+        {% if sync_history %}
+            {% for sync in sync_history %}
+            <div class="sync-item">
+                <span class="sync-type">
+                    {% if sync.sync_type == 'create' %}
+                        Created from production
+                    {% elif sync.sync_type == 'push_files' %}
+                        Pushed files to production
+                    {% elif sync.sync_type == 'push_db' %}
+                        Pushed database to production
+                    {% elif sync.sync_type == 'push_all' %}
+                        Pushed everything to production
+                    {% else %}
+                        {{ sync.sync_type }}
+                    {% endif %}
+                    {% if sync.error_message %}
+                        <span style="color: var(--accent-red); font-size: 0.85rem; margin-left: 8px;">
+                            {{ sync.error_message[:100] }}{% if sync.error_message|length > 100 %}...{% endif %}
+                        </span>
+                    {% endif %}
+                </span>
+                <div class="sync-meta">
+                    <span class="sync-date">{{ sync.created_at.strftime('%b %d, %Y %I:%M %p') }}</span>
+                    <span class="sync-status {{ sync.status }}">{{ sync.status|capitalize }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-history">No sync history yet</div>
+        {% endif %}
+    </div>
+
+    <div class="action-buttons">
+        <a href="{{ url_for('admin.staging_list') }}" class="btn btn-secondary">
+            Back to Staging List
+        </a>
+        <a href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}" class="btn btn-secondary">
+            View Customer
+        </a>
+        {% if staging.status != 'deleted' %}
+        <form method="POST" action="{{ url_for('admin.staging_delete', staging_id=staging.id) }}"
+              style="display: inline;"
+              onsubmit="return confirm('Are you sure you want to delete this staging environment?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger">Delete Staging Environment</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

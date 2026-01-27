@@ -990,6 +990,7 @@ if __name__ == '__main__':
     redis_conn = redis.Redis(host=redis_host, port=redis_port, db=0)
 
     # Removed Connection context manager as it's no longer supported
-    worker = Worker(['provisioning'], connection=redis_conn)
-    logger.info(f"ShopHosting.io Provisioning worker started (Redis: {redis_host}:{redis_port})")
+    # Listen to both provisioning and staging queues
+    worker = Worker(['provisioning', 'staging'], connection=redis_conn)
+    logger.info(f"ShopHosting.io Provisioning worker started (Redis: {redis_host}:{redis_port}, queues: provisioning, staging)")
     worker.work()

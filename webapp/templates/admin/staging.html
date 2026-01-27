@@ -1,0 +1,383 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Staging Environments - Admin Panel{% endblock %}
+
+{% block extra_css %}
+<style>
+    .staging-page {
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 32px;
+    }
+
+    .page-title {
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--text-primary);
+    }
+
+    .page-subtitle {
+        color: var(--text-tertiary);
+        margin-top: 6px;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px;
+        margin-bottom: 32px;
+    }
+
+    .stat-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 20px 24px;
+    }
+
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .stat-label {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+        margin-top: 4px;
+    }
+
+    .stat-card.active .stat-value { color: var(--accent-green); }
+    .stat-card.creating .stat-value { color: var(--accent-yellow); }
+    .stat-card.failed .stat-value { color: var(--accent-red); }
+
+    .data-table {
+        width: 100%;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+    }
+
+    .data-table th {
+        background: var(--bg-surface);
+        padding: 14px 20px;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--text-secondary);
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .data-table td {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border-subtle);
+        vertical-align: middle;
+    }
+
+    .data-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .data-table tr:hover td {
+        background: var(--bg-surface);
+    }
+
+    .staging-name {
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .staging-domain {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+    }
+
+    .staging-domain a {
+        color: var(--accent-blue);
+        text-decoration: none;
+    }
+
+    .staging-domain a:hover {
+        text-decoration: underline;
+    }
+
+    .customer-info {
+        font-size: 0.9rem;
+    }
+
+    .customer-email {
+        color: var(--text-primary);
+    }
+
+    .customer-domain {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+
+    .status-badge.active {
+        background: var(--success-muted);
+        color: var(--accent-green);
+    }
+
+    .status-badge.creating {
+        background: var(--warning-muted);
+        color: var(--accent-yellow);
+    }
+
+    .status-badge.syncing {
+        background: var(--info-muted);
+        color: var(--accent-blue);
+    }
+
+    .status-badge.failed {
+        background: var(--error-muted);
+        color: var(--accent-red);
+    }
+
+    .status-badge.deleted {
+        background: var(--bg-surface);
+        color: var(--text-tertiary);
+    }
+
+    .platform-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        background: var(--bg-surface);
+        color: var(--text-secondary);
+    }
+
+    .actions-cell {
+        display: flex;
+        gap: 8px;
+    }
+
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: var(--radius-md);
+        font-size: 0.8rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        border: none;
+    }
+
+    .btn-secondary {
+        background: var(--bg-surface);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
+    }
+
+    .btn-secondary:hover {
+        background: var(--bg-elevated);
+    }
+
+    .btn-danger {
+        background: var(--error-muted);
+        color: var(--accent-red);
+    }
+
+    .btn-danger:hover {
+        background: rgba(255, 68, 68, 0.2);
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 40px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+    }
+
+    .empty-state-text {
+        color: var(--text-secondary);
+        font-size: 1rem;
+    }
+
+    .port-usage {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 20px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        margin-bottom: 24px;
+    }
+
+    .port-bar {
+        flex: 1;
+        height: 8px;
+        background: var(--bg-surface);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .port-bar-fill {
+        height: 100%;
+        background: var(--gradient-primary);
+        transition: width 0.3s ease;
+    }
+
+    .port-text {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+
+    .port-text strong {
+        color: var(--text-primary);
+    }
+
+    @media (max-width: 1200px) {
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 768px) {
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .data-table {
+            display: block;
+            overflow-x: auto;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="staging-page">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Staging Environments</h1>
+            <p class="page-subtitle">Manage customer staging environments</p>
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.total or 0 }}</div>
+            <div class="stat-label">Total Staging Environments</div>
+        </div>
+        <div class="stat-card active">
+            <div class="stat-value">{{ stats.active_count or 0 }}</div>
+            <div class="stat-label">Active</div>
+        </div>
+        <div class="stat-card creating">
+            <div class="stat-value">{{ stats.creating_count or 0 }}</div>
+            <div class="stat-label">Creating</div>
+        </div>
+        <div class="stat-card failed">
+            <div class="stat-value">{{ stats.failed_count or 0 }}</div>
+            <div class="stat-label">Failed</div>
+        </div>
+    </div>
+
+    <div class="port-usage">
+        <span class="port-text">Staging Port Usage:</span>
+        <div class="port-bar">
+            <div class="port-bar-fill" style="width: {{ (staging_port_usage.used / staging_port_usage.total * 100)|round(1) }}%;"></div>
+        </div>
+        <span class="port-text">
+            <strong>{{ staging_port_usage.used }}</strong> / {{ staging_port_usage.total }} ports used
+            ({{ staging_port_usage.available }} available)
+        </span>
+    </div>
+
+    {% if staging_envs %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Staging Environment</th>
+                <th>Customer</th>
+                <th>Platform</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for staging in staging_envs %}
+            <tr>
+                <td>
+                    <div class="staging-name">{{ staging.name or 'Staging' }}</div>
+                    <div class="staging-domain">
+                        <a href="https://{{ staging.staging_domain }}" target="_blank">
+                            {{ staging.staging_domain }}
+                        </a>
+                    </div>
+                </td>
+                <td>
+                    <div class="customer-info">
+                        <div class="customer-email">
+                            <a href="{{ url_for('admin.customer_detail', customer_id=staging.customer_id) }}">
+                                {{ staging.customer_email }}
+                            </a>
+                        </div>
+                        <div class="customer-domain">{{ staging.production_domain }}</div>
+                    </div>
+                </td>
+                <td>
+                    <span class="platform-badge">{{ staging.platform|capitalize }}</span>
+                </td>
+                <td>
+                    <span class="status-badge {{ staging.status }}">{{ staging.status|capitalize }}</span>
+                </td>
+                <td>{{ staging.created_at.strftime('%b %d, %Y') }}</td>
+                <td class="actions-cell">
+                    <a href="{{ url_for('admin.staging_detail', staging_id=staging.id) }}" class="btn btn-secondary">
+                        View
+                    </a>
+                    {% if staging.status != 'deleted' %}
+                    <form method="POST" action="{{ url_for('admin.staging_delete', staging_id=staging.id) }}"
+                          style="display: inline;"
+                          onsubmit="return confirm('Delete staging {{ staging.staging_domain }}?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger">Delete</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p class="empty-state-text">No staging environments found.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
