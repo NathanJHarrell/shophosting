@@ -7,6 +7,7 @@ A multi-tenant Docker hosting platform that automatically provisions containeriz
 - **Automated Provisioning**: Customers sign up and receive a fully configured online store within minutes
 - **Multi-Platform Support**: WooCommerce (WordPress) and Magento 2 with Varnish caching
 - **Self-Service Dashboard**: Customers can view store status, credentials, and manage their stores
+- **Staging Environments**: Customers can create isolated staging copies of their production sites to test changes before deploying
 - **Admin Panel**: Full-featured admin interface for system monitoring and customer management
   - **Admin User Management**: Super admins can create, edit, and manage other admin users with role-based access control
   - **Live Provisioning Logs**: Real-time persistent logs showing detailed provisioning progress on customer pages
@@ -263,6 +264,77 @@ The dashboard includes quick action buttons for:
   - An email is sent to the admin user with the temporary password
   - The admin is forced to change their password on next login
   - The temporary password must be changed before accessing any other admin pages
+
+## Staging Environments
+
+ShopHosting.io allows customers to create isolated staging copies of their production sites, similar to WP Engine's staging feature. This enables safe testing of changes before deploying to production.
+
+### Features
+
+- **Isolated Environments**: Each staging site runs in separate Docker containers with its own database
+- **Production Cloning**: Staging environments are created by cloning the production site's files and database
+- **Selective Push to Production**: Push files only, database only, or both back to production
+- **Automatic SSL**: Staging domains automatically receive Let's Encrypt SSL certificates
+- **Up to 3 Staging Sites**: Each customer can have up to 3 staging environments
+
+### Setup
+
+1. **Run the staging migration:**
+   ```bash
+   mysql -u root -p shophosting_db < /opt/shophosting/migrations/006_add_staging_environments.sql
+   ```
+
+2. **Configure wildcard DNS:**
+   Add a wildcard A record for staging subdomains:
+   - **Record**: `*.shophosting.io` (or your domain)
+   - **Type**: A
+   - **Value**: Your server IP
+
+3. **Ensure the worker is running:**
+   The provisioning worker handles both production provisioning and staging operations:
+   ```bash
+   sudo systemctl status provisioning-worker
+   ```
+
+### Staging Domain Format
+
+Staging environments use the subdomain format: `cust{customer_id}-staging-{n}.yourdomain.com`
+
+Example: `cust9-staging-1.shophosting.io`
+
+### Port Allocation
+
+- **Production sites**: Ports 8001-8100 (web), 9001-9100 (phpMyAdmin)
+- **Staging sites**: Ports 10001-10100 (web), 11001-11100 (phpMyAdmin)
+
+### Customer Usage
+
+Customers can manage staging environments from their dashboard:
+
+1. **Create Staging**: Click "Create Staging Environment" and enter a name
+2. **Access Staging**: Click the staging URL to view the staging site
+3. **Make Changes**: Edit the staging site freely without affecting production
+4. **Push to Production**: Choose to push files, database, or both
+5. **Delete Staging**: Remove staging environments when no longer needed
+
+### Admin Management
+
+Admins can view and manage all staging environments across customers:
+- Navigate to Admin Panel → Staging Environments
+- View staging stats (total, active, creating, failed)
+- Monitor port usage
+- Delete staging environments if needed
+
+### Technical Details
+
+| Component | Location |
+|-----------|----------|
+| Database migration | `migrations/006_add_staging_environments.sql` |
+| Staging models | `webapp/models.py` (StagingEnvironment, StagingPortManager) |
+| Staging worker | `provisioning/staging_worker.py` |
+| Docker templates | `templates/woocommerce-staging-compose.yml.j2`, `templates/magento-staging-compose.yml.j2` |
+| Customer routes | `webapp/app.py` (/staging/*) |
+| Admin routes | `webapp/admin/routes.py` (/admin/staging/*) |
 
 ## Backup System
 
@@ -541,15 +613,19 @@ Backrest will now manage all backup scheduling and retention.
 │   │       └── ...
 │   └── templates/          # Customer-facing templates
 ├── provisioning/           # Background worker
-│   └── provisioning_worker.py
+│   ├── provisioning_worker.py
+│   └── staging_worker.py   # Staging environment operations
 ├── templates/              # Docker Compose templates
 │   ├── woocommerce-compose.yml.j2
-│   └── magento-compose.yml.j2
+│   ├── magento-compose.yml.j2
+│   ├── woocommerce-staging-compose.yml.j2
+│   └── magento-staging-compose.yml.j2
 ├── docker/                 # Custom Docker images
 ├── migrations/             # Database migrations
 │   ├── 002_add_admin_users.sql
 │   ├── 003_add_ticketing_system.sql
-│   └── 005_add_admin_features.sql   # Admin user management features
+│   ├── 005_add_admin_features.sql   # Admin user management features
+│   └── 006_add_staging_environments.sql  # Staging environments
 ├── scripts/                # Utility scripts
 │   ├── backup.sh           # Daily backup script
 │   ├── restore.sh          # Restore tool
