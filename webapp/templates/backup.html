@@ -336,7 +336,7 @@
     {% endif %}
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
     function getCsrfToken() {
         return document.querySelector('input[name="csrf_token"]')?.value || '';
     }

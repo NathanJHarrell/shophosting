@@ -346,7 +346,7 @@
     </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
     function showStatus(message, type) {
         const el = document.getElementById('status-message');
         el.textContent = message;

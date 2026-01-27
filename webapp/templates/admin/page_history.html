@@ -76,7 +76,7 @@
     <div id="compareContent" style="background: var(--bg-base); padding: 20px; border-radius: 8px; max-height: calc(100% - 80px); overflow: auto; font-family: monospace; font-size: 13px; color: #d4d4d4;"></div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 function confirmRollback() {
     return confirm('Are you sure you want to rollback to this version? This will create a new version with the old content.');
 }

@@ -536,7 +536,7 @@
 
 {% block extra_js %}
 {% if customer.status == 'pending' or customer.status == 'provisioning' %}
-<script>
+<script nonce="{{ csp_nonce() }}">
     // Auto-refresh page every 15 seconds while provisioning
     setTimeout(function() {
         location.reload();

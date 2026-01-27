@@ -80,7 +80,7 @@
     <iframe id="previewFrame" style="width: 100%; height: calc(100% - 60px); border: none; border-radius: 12px; background: white;"></iframe>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 function previewPage(slug) {
     fetch('/admin/pages/' + slug + '/preview')
         .then(r => r.json())

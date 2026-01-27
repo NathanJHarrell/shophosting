@@ -473,7 +473,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce() }}">
     const fileInput = document.getElementById('attachment');
     const selectedFile = document.getElementById('selected-file');
 

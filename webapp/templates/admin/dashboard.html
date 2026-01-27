@@ -216,7 +216,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 // Auto-refresh dashboard every 30 seconds
 setTimeout(function() {
     location.reload();

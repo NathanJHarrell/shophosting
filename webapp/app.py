@@ -137,6 +137,7 @@ csp = {
         "'unsafe-inline'",  # Required for some Bootstrap functionality
         "https://js.stripe.com",
         "https://cdn.jsdelivr.net",
+        "https://cdn.tiny.cloud",  # TinyMCE for CMS editor
     ],
     'style-src': [
         "'self'",
