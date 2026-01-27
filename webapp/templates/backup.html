@@ -1,10 +1,12 @@
-{% extends "admin/base_admin.html" %}
+{% extends "base.html" %}
 
-{% block title %}System Backups - Admin Panel{% endblock %}
+{% block title %}Backups - ShopHosting.io{% endblock %}
 
 {% block extra_css %}
 <style>
     .backup-page {
+        max-width: 1000px;
+        margin: 0 auto;
         animation: fadeIn 0.5s ease-out;
     }
 
@@ -14,39 +16,22 @@
     }
 
     .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
         margin-bottom: 32px;
     }
 
-    .page-title {
+    .page-header h1 {
         font-size: 2rem;
         font-weight: 700;
         letter-spacing: -0.02em;
         color: var(--text-primary);
     }
 
-    .page-subtitle {
+    .page-header p {
         color: var(--text-tertiary);
         margin-top: 6px;
     }
 
-    .backup-info {
-        background: var(--info-muted);
-        border: 1px solid rgba(0, 136, 255, 0.2);
-        border-radius: var(--radius-md);
-        padding: 16px 20px;
-        margin-bottom: 24px;
-        color: var(--accent-blue);
-        font-size: 0.9rem;
-    }
-
-    .backup-info strong {
-        display: block;
-        margin-bottom: 4px;
-    }
-
+    /* Action Card */
     .action-card {
         background: var(--bg-elevated);
         border: 1px solid var(--border-subtle);
@@ -72,12 +57,33 @@
         font-size: 0.925rem;
     }
 
+    /* Snapshots Table */
     .snapshots-card {
         background: var(--bg-elevated);
         border: 1px solid var(--border-subtle);
         border-radius: var(--radius-lg);
         overflow: hidden;
         margin-bottom: 24px;
+    }
+
+    .snapshots-card::before {
+        content: '';
+        position: absolute;
+        inset: -1px;
+        border-radius: inherit;
+        padding: 1px;
+        background: var(--gradient-border);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+    }
+
+    .snapshots-card:hover::before {
+        opacity: 1;
     }
 
     .snapshots-header {
@@ -158,6 +164,7 @@
         border-color: var(--accent-blue);
     }
 
+    /* Status Messages */
     .status-message {
         padding: 16px 20px;
         border-radius: var(--radius-md);
@@ -189,6 +196,7 @@
         border: 1px solid rgba(0, 136, 255, 0.2);
     }
 
+    /* Loading spinner */
     .loading-spinner {
         display: inline-block;
         width: 16px;
@@ -204,6 +212,7 @@
         to { transform: rotate(360deg); }
     }
 
+    /* Info box */
     .info-box {
         background: var(--bg-surface);
         border: 1px solid var(--border-subtle);
@@ -230,6 +239,7 @@
         margin-bottom: 6px;
     }
 
+    /* Empty state */
     .empty-state {
         text-align: center;
         padding: 60px 40px;
@@ -243,6 +253,7 @@
         margin-bottom: 8px;
     }
 
+    /* Warning box for restore */
     .warning-box {
         background: var(--warning-muted);
         border: 1px solid rgba(245, 158, 11, 0.2);
@@ -265,29 +276,29 @@
 </style>
 {% endblock %}
 
-{% block page_title %}System Backups{% endblock %}
-
 {% block content %}
 <div class="backup-page">
     <div class="page-header">
-        <div>
-            <h1 class="page-title">System Backups</h1>
-            <p class="page-subtitle">Backup and restore application code, configs, and nginx sites</p>
-        </div>
-        <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+        <h1>Backup Management</h1>
+        <p>Create backups and restore your store from previous snapshots</p>
     </div>
+
+    {% if customer.status != 'active' %}
+    <div class="info-card" style="background: var(--warning-muted); border-color: rgba(245, 158, 11, 0.2);">
+        <div class="info-card-body" style="padding: 20px;">
+            <p style="color: var(--warning);">Backups are only available for active stores. Your store is currently in <strong>{{ customer.status }}</strong> status.</p>
+        </div>
+    </div>
+    {% else %}
+
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <div id="status-message" class="status-message"></div>
 
-    <div class="backup-info">
-        <strong>System Backup Repository</strong>
-        Remote: sftp:sh-backup@15.204.249.219:/home/sh-backup/system
-    </div>
-
     <div class="action-card">
         <div class="action-info">
-            <h2>Create System Backup</h2>
-            <p>Backup application code, nginx configs, and database to remote repository.</p>
+            <h2>Create New Backup</h2>
+            <p>Create a manual backup of your store. Backups include your database and all files.</p>
         </div>
         <button onclick="createBackup()" class="btn btn-primary" id="backup-btn">
             Create Backup
@@ -296,57 +307,40 @@
 
     <div class="warning-box" id="restore-warning" style="display: none;">
         <strong>Restore Warning</strong>
-        <span id="restore-warning-text">Select a backup and restore option below. Services will be restarted during restore.</span>
+        <span id="restore-warning-text">Select a backup and restore option below. Your store will be briefly unavailable during restore.</span>
     </div>
 
     <div class="snapshots-card">
         <div class="snapshots-header">
-            <h2 class="snapshots-title">Available Snapshots</h2>
-            <span class="snapshot-count" id="snapshot-count">{{ snapshots|length }} snapshots</span>
+            <h2 class="snapshots-title">Available Backups</h2>
+            <span class="snapshot-count" id="snapshot-count">Loading...</span>
         </div>
         <div id="snapshots-list">
-            {% if snapshots %}
-            {% for snap in snapshots %}
-            <div class="snapshot-item">
-                <div class="snapshot-info">
-                    <div class="snapshot-date">{{ snap.time.split('.')[0].replace('T', ' ') }}</div>
-                    <div class="snapshot-id">{{ snap.id }}</div>
-                    <div class="snapshot-time">Host: {{ snap.hostname or 'Unknown' }}</div>
-                </div>
-                <div class="snapshot-actions">
-                    <select id="restore-{{ snap.id }}" class="restore-select">
-                        <option value="">Select restore...</option>
-                        <option value="all">All (App + Nginx + DB)</option>
-                        <option value="app">Application Code Only</option>
-                        <option value="nginx">Nginx Configs Only</option>
-                        <option value="db">Database Only</option>
-                    </select>
-                    <button id="restore-{{ snap.id }}-btn" onclick="restoreBackup('{{ snap.id }}')" class="btn btn-secondary btn-sm">Restore</button>
-                </div>
-            </div>
-            {% endfor %}
-            {% else %}
             <div class="empty-state">
-                <h3>No Backups Yet</h3>
-                <p>Create your first backup using the button above.</p>
+                <p>Loading backups...</p>
             </div>
-            {% endif %}
         </div>
     </div>
 
     <div class="info-box">
-        <h3>About System Backups</h3>
+        <h3>About Backups & Restores</h3>
         <ul>
-            <li><strong>Application Code:</strong> Backs up /opt/shophosting directory</li>
-            <li><strong>Nginx Configs:</strong> Backs up /etc/nginx/sites-available</li>
-            <li><strong>Database:</strong> Dumps shophosting_db to SQL file</li>
-            <li><strong>Retention:</strong> 7 daily snapshots kept</li>
-            <li><strong>Restore:</strong> Services will be restarted during restore</li>
+            <li><strong>Database Restore:</strong> Restores only your store's database (products, orders, settings, etc.)</li>
+            <li><strong>Files Restore:</strong> Restores only your store's files (uploads, themes, plugins)</li>
+            <li><strong>Full Restore:</strong> Restores both database and files from the selected backup</li>
+            <li>Your store will be briefly unavailable during the restore process</li>
+            <li>Backups are stored for 14 days</li>
         </ul>
     </div>
+
+    {% endif %}
 </div>
 
 <script nonce="{{ csp_nonce() }}">
+    function getCsrfToken() {
+        return document.querySelector('input[name="csrf_token"]')?.value || '';
+    }
+
     function showStatus(message, type) {
         const el = document.getElementById('status-message');
         el.textContent = message;
@@ -354,22 +348,28 @@
         el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
+    function hideStatus() {
+        document.getElementById('status-message').className = 'status-message';
+    }
+
     function createBackup() {
         const btn = document.getElementById('backup-btn');
         btn.disabled = true;
-        btn.innerHTML = '<span class="loading-spinner"></span>Starting Backup...';
-        showStatus('Starting system backup... This may take a few minutes.', 'info');
+        btn.innerHTML = '<span class="loading-spinner"></span>Creating Backup...';
+        showStatus('Starting backup process... This may take a few minutes.', 'info');
 
-        fetch('{{ url_for("admin.system_backup_create") }}', {
+        fetch('{{ url_for("api_backup") }}', {
             method: 'POST',
             headers: {
-                'X-CSRFToken': '{{ csrf_token() }}'
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
             }
         })
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                showStatus('Backup started successfully! Refresh the page in a few minutes to see the new snapshot.', 'success');
+                showStatus('Backup started successfully! It will appear in the list shortly.', 'success');
+                setTimeout(loadSnapshots, 5000);
             } else {
                 showStatus('Error: ' + (data.error || 'Failed to start backup'), 'error');
             }
@@ -392,14 +392,13 @@
             return;
         }
 
-        const targetLabels = {
-            'all': 'all components (app, nginx, database)',
-            'app': 'application code only',
-            'nginx': 'nginx configurations only',
-            'db': 'database only'
+        const labels = {
+            'db': 'database only',
+            'files': 'files only',
+            'all': 'database and files'
         };
 
-        if (!confirm('Are you sure you want to restore ' + targetLabels[target] + ' from this backup? Services will be restarted.')) {
+        if (!confirm('Are you sure you want to restore ' + labels[target] + ' from this backup? Your store will be briefly unavailable.')) {
             return;
         }
 
@@ -407,22 +406,23 @@
         btn.disabled = true;
         btn.innerHTML = '<span class="loading-spinner"></span>Restoring...';
 
-        showStatus('Restore started. Services will be restarted.', 'info');
+        showStatus('Restore started. Please wait...', 'info');
 
-        const formData = new FormData();
-        formData.append('target', target);
-
-        fetch('{{ url_for("admin.system_backup_restore", snapshot_id="REPLACE_ME") }}'.replace('REPLACE_ME', snapshotId), {
+        fetch('{{ url_for("api_backup_restore") }}', {
             method: 'POST',
             headers: {
-                'X-CSRFToken': '{{ csrf_token() }}'
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
             },
-            body: formData
+            body: JSON.stringify({
+                snapshot_id: snapshotId,
+                target: target
+            })
         })
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                showStatus('Restore started! Services are being restarted.', 'success');
+                showStatus('Restore started! Your store will be back shortly. ' + data.message, 'success');
             } else {
                 showStatus('Error: ' + (data.error || 'Failed to start restore'), 'error');
             }
@@ -437,5 +437,60 @@
             select.value = '';
         });
     }
+
+    function loadSnapshots() {
+        fetch('{{ url_for("api_backup_status") }}')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('snapshots-list');
+            const countEl = document.getElementById('snapshot-count');
+
+            if (data.success && data.snapshots && data.snapshots.length > 0) {
+                countEl.textContent = data.snapshots.length + ' snapshot' + (data.snapshots.length !== 1 ? 's' : '');
+
+                let html = '';
+                data.snapshots.forEach(snap => {
+                    const date = new Date(snap.time.replace(' ', 'T'));
+                    const dateStr = date.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+                    const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+                    html += `
+                    <div class="snapshot-item">
+                        <div class="snapshot-info">
+                            <div class="snapshot-date">${dateStr}</div>
+                            <div class="snapshot-id">${snap.id}</div>
+                            <div class="snapshot-time">${timeStr}</div>
+                        </div>
+                        <div class="snapshot-actions">
+                            <select id="restore-${snap.id}" class="restore-select">
+                                <option value="">Select restore...</option>
+                                <option value="db">Database Only</option>
+                                <option value="files">Files Only</option>
+                                <option value="all">Database + Files</option>
+                            </select>
+                            <button id="restore-${snap.id}-btn" onclick="restoreBackup('${snap.id}')" class="btn btn-secondary btn-sm">Restore</button>
+                        </div>
+                    </div>`;
+                });
+                container.innerHTML = html;
+            } else {
+                countEl.textContent = '0 snapshots';
+                container.innerHTML = `
+                <div class="empty-state">
+                    <h3>No Backups Yet</h3>
+                    <p>Create your first backup using the button above.</p>
+                </div>`;
+            }
+        })
+        .catch(err => {
+            document.getElementById('snapshots-list').innerHTML = `
+            <div class="empty-state">
+                <h3>Error Loading Backups</h3>
+                <p>Could not load backup history. Please try again later.</p>
+            </div>`;
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', loadSnapshots);
 </script>
 {% endblock %}

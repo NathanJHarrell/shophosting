@@ -63,7 +63,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 // Scroll to bottom of logs
 document.querySelector('.log-container').scrollTop = document.querySelector('.log-container').scrollHeight;
 </script>

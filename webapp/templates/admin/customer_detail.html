@@ -323,7 +323,7 @@
 </div>
 {% endif %}
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 function toggleErrorDetails(id) {
     var el = document.getElementById(id);
     var btn = el.previousElementSibling.querySelector('button') || el.parentElement.querySelector('button');

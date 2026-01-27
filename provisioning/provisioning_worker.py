@@ -255,18 +255,38 @@ class ProvisioningWorker:
         customer_path = self.base_path / f"customer-{customer_id}"
 
         try:
-            customer_path.mkdir(exist_ok=False)
-            (customer_path / "volumes").mkdir()
-            (customer_path / "volumes" / "db").mkdir()
-            (customer_path / "volumes" / "files").mkdir()
-            (customer_path / "logs").mkdir()
+            # Check if directory already exists - clean up if so (idempotent provisioning)
+            if customer_path.exists():
+                logger.info(f"Customer directory {customer_path} already exists, cleaning up first")
+                try:
+                    subprocess.run(
+                        ['docker', 'compose', 'down', '-v', '--remove-orphans'],
+                        cwd=str(customer_path),
+                        capture_output=True,
+                        timeout=60
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to stop existing containers: {e}")
+                
+                check_result = subprocess.run(
+                    ['docker', 'ps', '-a', '--format', '{{.Names}}'],
+                    capture_output=True, text=True
+                )
+                if f"customer-{customer_id}" in check_result.stdout:
+                    logger.warning(f"Containers for customer {customer_id} still exist, will be removed during retry")
+            
+            # Create directory structure (exist_ok=True for idempotency)
+            customer_path.mkdir(parents=True, exist_ok=True)
+            (customer_path / "volumes").mkdir(exist_ok=True)
+            (customer_path / "volumes" / "db").mkdir(exist_ok=True)
+            (customer_path / "volumes" / "files").mkdir(exist_ok=True)
+            (customer_path / "logs").mkdir(exist_ok=True)
 
             # Create Varnish directory and config for Magento
             if platform == 'magento':
                 varnish_dir = customer_path / "volumes" / "varnish"
-                varnish_dir.mkdir()
+                varnish_dir.mkdir(exist_ok=True)
 
-                # Copy VCL template
                 vcl_template = Path('/opt/shophosting/templates/magento-varnish.vcl.j2')
                 if vcl_template.exists():
                     import shutil
@@ -275,7 +295,6 @@ class ProvisioningWorker:
                         shutil.rmtree(dest)
                     shutil.copy(vcl_template, dest)
             
-            # Set appropriate permissions
             os.chmod(customer_path, 0o755)
             
             logger.info(f"Created directory structure for customer {customer_id}")
@@ -701,6 +720,57 @@ class ProvisioningWorker:
             logger.warning(f"Failed to send welcome email: {e}")
             return False
     
+    def setup_backup_cron(self, customer_id, customer_path):
+        """Step 10: Configure automated backups for customer data"""
+        logger.info(f"Setting up automated backups for customer {customer_id}")
+        
+        try:
+            BACKUP_SCRIPT = "/opt/shophosting/scripts/customer-backup.sh"
+            
+            # Verify backup script exists
+            if not os.path.exists(BACKUP_SCRIPT):
+                logger.warning(f"Backup script not found at {BACKUP_SCRIPT}")
+                return False
+            
+            # Create crontab entry for this customer
+            # Run backup every 6 hours
+            cron_entry = f"0 */6 * * * {BACKUP_SCRIPT} {customer_id} >> /var/log/shophosting-customer-backup.log 2>&1"
+            
+            # Get existing crontab
+            result = subprocess.run(
+                ['crontab', '-l'],
+                capture_output=True,
+                text=True
+            )
+            existing_cron = result.stdout if result.returncode == 0 else ""
+            
+            # Check if entry already exists
+            if f"customer-backup.sh {customer_id}" in existing_cron:
+                logger.info(f"Backup cron already exists for customer {customer_id}")
+                return True
+            
+            # Add new crontab entry
+            new_cron = existing_cron.strip() + "\n" + cron_entry + "\n"
+            
+            # Write new crontab
+            process = subprocess.run(
+                ['crontab', '-'],
+                input=new_cron,
+                text=True,
+                capture_output=True
+            )
+            
+            if process.returncode == 0:
+                logger.info(f"Backup cron configured for customer {customer_id} (every 6 hours)")
+                return True
+            else:
+                logger.warning(f"Failed to configure backup cron: {process.stderr}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to setup backup cron for customer {customer_id}: {e}")
+            return False
+    
     def rollback(self, customer_id, customer_path):
         """Rollback provisioning in case of failure"""
         logger.warning(f"Rolling back provisioning for customer {customer_id}")
@@ -845,6 +915,10 @@ class ProvisioningWorker:
             
             logger.info(f"Sending welcome email to {config['email']}")
             self.send_welcome_email(config)
+            
+            # Step 10: Configure automated backups for this customer
+            logger.info(f"Setting up automated backups for customer {customer_id}")
+            self.setup_backup_cron(customer_id, customer_path)
             
             logger.info(f"Provisioning completed successfully for customer {customer_id}")
             self.update_customer_status(customer_id, 'active')

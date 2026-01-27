@@ -1,0 +1,231 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Edit {{ page.title }} - Admin Panel{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@codemirror/view@6/dist/style.css">
+<style>
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; margin-bottom: 8px; font-weight: 500; color: var(--text-secondary); font-size: 0.9rem; }
+    .form-control { width: 100%; padding: 12px 16px; background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-sm); font-size: 0.95rem; color: var(--text-primary); font-family: inherit; }
+    .form-control:focus { outline: none; border-color: var(--accent-blue); box-shadow: 0 0 0 3px rgba(0, 136, 255, 0.15); }
+    textarea.form-control { min-height: 120px; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; }
+    .preview-badge { display: inline-block; padding: 4px 10px; background: var(--warning-muted); color: var(--warning); border-radius: 999px; font-size: 0.75rem; margin-left: 12px; }
+    .action-bar {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 24px;
+        padding: 16px;
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        background: var(--bg-surface);
+        position: sticky;
+        top: 16px;
+        z-index: 5;
+    }
+    .save-status { font-size: 0.85rem; color: var(--text-tertiary); }
+    .save-status.dirty { color: var(--warning); font-weight: 600; }
+    .editor-panel { border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); padding: 18px; background: var(--bg-elevated); }
+    .markdown-field .field-label { display: flex; align-items: center; gap: 8px; }
+    .field-helper { font-size: 0.8rem; color: var(--text-tertiary); margin-bottom: 10px; }
+    .markdown-toolbar { display: none; margin-bottom: 10px; }
+    .markdown-split {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 16px;
+    }
+    .markdown-editor,
+    .markdown-preview {
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        background: var(--bg-surface);
+        min-height: 520px;
+        height: 60vh;
+    }
+    .markdown-editor .cm-editor { height: 100%; min-height: 520px; }
+    .editor-fallback {
+        min-height: 520px;
+        height: 60vh;
+        resize: vertical;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.9rem;
+    }
+    .markdown-preview {
+        padding: 16px;
+        overflow: auto;
+        color: var(--text-primary);
+    }
+    .markdown-preview h1,
+    .markdown-preview h2,
+    .markdown-preview h3 { margin: 0 0 12px; }
+    .markdown-preview p { margin: 0 0 12px; color: var(--text-secondary); }
+    .markdown-preview ul,
+    .markdown-preview ol { padding-left: 20px; margin: 0 0 12px; }
+    .markdown-preview code { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; }
+    .markdown-preview pre { background: var(--bg-deep); padding: 12px; border-radius: 8px; overflow-x: auto; }
+    @media (max-width: 900px) {
+        .markdown-split { grid-template-columns: 1fr; }
+        .markdown-preview { display: none; }
+        .markdown-field.show-preview .markdown-preview { display: block; }
+        .markdown-toolbar { display: flex; justify-content: flex-end; }
+    }
+</style>
+{% endblock %}
+
+{% block page_title %}Edit: {{ page.title }}{% endblock %}
+
+{% block content %}
+<form method="POST" id="pageForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    
+    <div class="action-bar">
+        <a href="{{ url_for('admin.pages') }}" class="btn btn-secondary">Back to Pages</a>
+        <button type="button" class="btn btn-secondary" onclick="previewPage()">Preview</button>
+        <span id="saveStatus" class="save-status">All changes saved</span>
+        <div style="flex: 1;"></div>
+        <a href="{{ url_for('admin.page_history', slug=slug) }}" class="btn btn-secondary">Version History</a>
+        <button type="submit" name="action" value="draft" class="btn btn-secondary">Save Draft</button>
+        <button type="submit" name="action" value="publish" class="btn btn-primary">Publish</button>
+    </div>
+
+    <div class="form-group">
+        <label for="title">Page Title</label>
+        <input type="text" name="title" id="title" class="form-control" value="{{ page.title }}">
+    </div>
+
+    <div class="form-group">
+        <label for="change_summary">Change Summary (optional)</label>
+        <input type="text" name="change_summary" id="change_summary" class="form-control" placeholder="Brief description of changes...">
+    </div>
+
+    <div class="form-group markdown-field editor-panel">
+        <div class="field-label">
+            <label for="content_body">Page Content</label>
+            <span class="preview-badge">Markdown supported</span>
+        </div>
+        <div class="field-helper">
+            Keep section headers to preserve layouts. Format with <code>## section: hero.headline</code> and use <code>## section: stats (json)</code> with JSON fenced between <code>```json</code> and <code>```</code>.
+        </div>
+        <div class="markdown-toolbar">
+            <button type="button" class="btn btn-secondary btn-sm preview-toggle">Show Preview</button>
+        </div>
+        <div class="markdown-split">
+            <div class="markdown-editor" data-for="content_body"></div>
+            <div class="markdown-preview" data-preview-for="content_body"></div>
+        </div>
+        <textarea name="content_body" id="content_body" class="markdown-source form-control editor-fallback">{{ editor_content|default('') }}</textarea>
+    </div>
+</form>
+
+<div id="previewModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(6, 6, 10, 0.94); z-index: 1000; padding: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3 style="color: white; margin: 0;">Preview: {{ page.title }}</h3>
+        <button onclick="closePreview()" class="btn btn-secondary">Close Preview</button>
+    </div>
+    <iframe id="previewFrame" style="width: 100%; height: calc(100% - 60px); border: none; border-radius: 12px; background: white;"></iframe>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script type="module">
+import { EditorView } from "https://esm.sh/@codemirror/view";
+import { EditorState } from "https://esm.sh/@codemirror/state";
+import { basicSetup } from "https://esm.sh/@codemirror/basic-setup";
+import { markdown } from "https://esm.sh/@codemirror/lang-markdown";
+
+const saveStatus = document.getElementById('saveStatus');
+let isDirty = false;
+
+const markDirty = () => {
+    if (!isDirty) {
+        isDirty = true;
+        saveStatus.textContent = 'Unsaved changes';
+        saveStatus.classList.add('dirty');
+    }
+};
+
+document.getElementById('pageForm').addEventListener('submit', () => {
+    saveStatus.textContent = 'Saving...';
+    saveStatus.classList.remove('dirty');
+});
+
+document.querySelectorAll('input, textarea, select').forEach(field => {
+    field.addEventListener('input', markDirty);
+});
+
+const buildPreview = (markdownText) => {
+    if (window.marked && typeof window.marked.parse === 'function') {
+        return window.marked.parse(markdownText || '');
+    }
+    return markdownText || '';
+};
+
+document.querySelectorAll('.markdown-field').forEach(container => {
+    const textarea = container.querySelector('.markdown-source');
+    if (!textarea) {
+        return;
+    }
+    const editorHost = container.querySelector('.markdown-editor');
+    const preview = container.querySelector('.markdown-preview');
+    const toggle = container.querySelector('.preview-toggle');
+
+    const updatePreview = (text) => {
+        preview.innerHTML = buildPreview(text);
+    };
+
+    const editor = new EditorView({
+        state: EditorState.create({
+            doc: textarea.value,
+            extensions: [
+                basicSetup,
+                markdown(),
+                EditorView.updateListener.of(update => {
+                    if (update.docChanged) {
+                        const text = update.state.doc.toString();
+                        textarea.value = text;
+                        updatePreview(text);
+                        markDirty();
+                    }
+                })
+            ]
+        }),
+        parent: editorHost
+    });
+
+    textarea.style.display = 'none';
+
+    updatePreview(textarea.value);
+
+    if (toggle) {
+        toggle.addEventListener('click', () => {
+            container.classList.toggle('show-preview');
+            toggle.textContent = container.classList.contains('show-preview') ? 'Hide Preview' : 'Show Preview';
+        });
+    }
+});
+
+window.previewPage = () => {
+    const form = document.getElementById('pageForm');
+    const formData = new FormData(form);
+
+    fetch('/admin/pages/{{ slug }}/preview', {
+        method: 'POST',
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('previewFrame').srcdoc = data.html;
+            document.getElementById('previewModal').style.display = 'block';
+        } else {
+            alert('Error loading preview: ' + data.error);
+        }
+    })
+    .catch(e => alert('Error: ' + e));
+};
+
+window.closePreview = () => {
+    document.getElementById('previewModal').style.display = 'none';
+};
+</script>
+{% endblock %}

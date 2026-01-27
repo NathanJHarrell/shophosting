@@ -6,11 +6,14 @@ Handles all admin page routes and actions
 import os
 import subprocess
 import logging
+import re
 from functools import wraps
 from datetime import datetime, timedelta
 
-from flask import render_template, request, redirect, url_for, flash, session, jsonify
+from flask import render_template, request, redirect, url_for, flash, session, jsonify, current_app
 from flask_wtf import FlaskForm
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from wtforms import StringField, PasswordField, SelectField, BooleanField, SubmitField
 from wtforms.validators import DataRequired, Email, Length, EqualTo
 
@@ -20,9 +23,12 @@ from .models import AdminUser, log_admin_action
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import Customer, PortManager, get_db_connection, PricingPlan, Subscription, Invoice
-from models import Ticket, TicketMessage, TicketAttachment, TicketCategory
+from models import Ticket, TicketMessage, TicketAttachment, TicketCategory, ConsultationAppointment
 
 logger = logging.getLogger(__name__)
+
+# Security logger for admin actions
+security_logger = logging.getLogger('security')
 
 
 # =============================================================================
@@ -62,9 +68,25 @@ class AdminLoginForm(FlaskForm):
 # Authentication Routes
 # =============================================================================
 
+def get_admin_limiter():
+    """Get the limiter from the current app context"""
+    from flask import current_app
+    return current_app.extensions.get('limiter')
+
+
 @admin_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    """Admin login page"""
+    """Admin login page with rate limiting"""
+    # Apply rate limiting for admin login (stricter than customer login)
+    limiter = get_admin_limiter()
+    if limiter:
+        # Check rate limit manually - 3 attempts per minute, 10 per hour
+        key = f"admin_login:{get_remote_address()}"
+        try:
+            limiter.check()
+        except Exception:
+            pass  # Let Flask-Limiter handle the 429 response
+
     if session.get('admin_user_id'):
         return redirect(url_for('admin.dashboard'))
 
@@ -79,9 +101,18 @@ def login():
             session['admin_user_role'] = admin.role
             admin.update_last_login()
             log_admin_action(admin.id, 'admin_login', ip_address=request.remote_addr)
+            security_logger.info(
+                f"ADMIN_LOGIN_SUCCESS: admin={admin.id} email={admin.email} "
+                f"IP={request.remote_addr}"
+            )
             flash('Welcome back, {}!'.format(admin.full_name), 'success')
             return redirect(url_for('admin.dashboard'))
         else:
+            # Log failed attempt
+            security_logger.warning(
+                f"ADMIN_LOGIN_FAILED: email={form.email.data} "
+                f"IP={request.remote_addr} user_agent={request.user_agent.string[:50]}"
+            )
             flash('Invalid email or password.', 'error')
 
     return render_template('admin/login.html', form=form)
@@ -856,6 +887,152 @@ def serve_ticket_attachment(attachment_id):
         download_name=attachment.original_filename,
         as_attachment=True
     )
+
+
+# =============================================================================
+# Consultation Appointments
+# =============================================================================
+
+@admin_bp.route('/appointments')
+@admin_required
+def appointments():
+    """List all consultation appointments"""
+    admin = get_current_admin()
+
+    # Get filter parameters
+    status = request.args.get('status', '')
+    search = request.args.get('search', '').strip()
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+    page = int(request.args.get('page', 1))
+    per_page = 20
+
+    # Get filtered appointments
+    appointments_list, total = ConsultationAppointment.get_all_filtered(
+        status=status or None,
+        search=search or None,
+        date_from=date_from or None,
+        date_to=date_to or None,
+        page=page,
+        per_page=per_page
+    )
+
+    total_pages = (total + per_page - 1) // per_page
+
+    # Get stats
+    stats = ConsultationAppointment.get_stats()
+
+    # Get all admins for assignment dropdown
+    admins = AdminUser.get_all()
+
+    return render_template('admin/appointments.html',
+                           admin=admin,
+                           appointments=appointments_list,
+                           stats=stats,
+                           admins=admins,
+                           status_filter=status,
+                           search=search,
+                           date_from=date_from,
+                           date_to=date_to,
+                           page=page,
+                           total_pages=total_pages,
+                           total=total)
+
+
+@admin_bp.route('/appointments/<int:appointment_id>')
+@admin_required
+def appointment_detail(appointment_id):
+    """View appointment detail"""
+    admin = get_current_admin()
+    appointment = ConsultationAppointment.get_by_id(appointment_id)
+
+    if not appointment:
+        flash('Appointment not found.', 'error')
+        return redirect(url_for('admin.appointments'))
+
+    # Get all admins for assignment dropdown
+    admins = AdminUser.get_all()
+
+    return render_template('admin/appointment_detail.html',
+                           admin=admin,
+                           appointment=appointment,
+                           admins=admins)
+
+
+@admin_bp.route('/appointments/<int:appointment_id>/status', methods=['POST'])
+@admin_required
+def appointment_status(appointment_id):
+    """Update appointment status"""
+    admin = get_current_admin()
+    appointment = ConsultationAppointment.get_by_id(appointment_id)
+
+    if not appointment:
+        flash('Appointment not found.', 'error')
+        return redirect(url_for('admin.appointments'))
+
+    new_status = request.form.get('status', '')
+    if new_status in ['pending', 'confirmed', 'completed', 'cancelled', 'no_show']:
+        old_status = appointment.status
+        appointment.status = new_status
+        appointment.save()
+
+        log_admin_action(admin.id, 'appointment_status_change', 'appointment', appointment_id,
+                         f'Changed status from {old_status} to {new_status}', request.remote_addr)
+        flash(f'Status updated to {new_status}.', 'success')
+    else:
+        flash('Invalid status.', 'error')
+
+    return redirect(url_for('admin.appointment_detail', appointment_id=appointment_id))
+
+
+@admin_bp.route('/appointments/<int:appointment_id>/assign', methods=['POST'])
+@admin_required
+def appointment_assign(appointment_id):
+    """Assign appointment to an admin"""
+    admin = get_current_admin()
+    appointment = ConsultationAppointment.get_by_id(appointment_id)
+
+    if not appointment:
+        flash('Appointment not found.', 'error')
+        return redirect(url_for('admin.appointments'))
+
+    admin_id = request.form.get('admin_id', '')
+    appointment.assigned_admin_id = int(admin_id) if admin_id else None
+    appointment.save()
+
+    if admin_id:
+        assigned_admin = AdminUser.get_by_id(int(admin_id))
+        log_admin_action(admin.id, 'appointment_assign', 'appointment', appointment_id,
+                         f'Assigned to {assigned_admin.full_name if assigned_admin else "Unknown"}', request.remote_addr)
+        flash('Appointment assigned.', 'success')
+    else:
+        log_admin_action(admin.id, 'appointment_unassign', 'appointment', appointment_id,
+                         'Removed assignment', request.remote_addr)
+        flash('Assignment removed.', 'success')
+
+    return redirect(url_for('admin.appointment_detail', appointment_id=appointment_id))
+
+
+@admin_bp.route('/appointments/<int:appointment_id>/notes', methods=['POST'])
+@admin_required
+def appointment_notes(appointment_id):
+    """Update appointment notes"""
+    admin = get_current_admin()
+    appointment = ConsultationAppointment.get_by_id(appointment_id)
+
+    if not appointment:
+        flash('Appointment not found.', 'error')
+        return redirect(url_for('admin.appointments'))
+
+    notes = request.form.get('notes', '').strip()
+    appointment.notes = notes
+    appointment.save()
+
+    log_admin_action(admin.id, 'appointment_notes_update', 'appointment', appointment_id,
+                     'Updated notes', request.remote_addr)
+    flash('Notes saved.', 'success')
+
+    return redirect(url_for('admin.appointment_detail', appointment_id=appointment_id))
 
 
 # =============================================================================
@@ -1993,3 +2170,767 @@ def force_password_change():
                            admin=admin,
                            form=form,
                            force_change=True)
+
+
+# =============================================================================
+# CMS Pages Management
+# =============================================================================
+
+@admin_bp.route('/pages')
+@super_admin_required
+def pages():
+    """List all editable pages"""
+    admin = get_current_admin()
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("""
+            SELECT id, page_slug, title, is_published, published_at, updated_at
+            FROM page_content
+            ORDER BY updated_at DESC
+        """)
+        pages_list = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return render_template('admin/pages.html',
+                           admin=admin,
+                           pages=pages_list)
+
+
+@admin_bp.route('/pages/<slug>/edit', methods=['GET', 'POST'])
+@super_admin_required
+def page_edit(slug):
+    """Edit page content"""
+    admin = get_current_admin()
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("SELECT * FROM page_content WHERE page_slug = %s", (slug,))
+        page = cursor.fetchone()
+        
+        if not page:
+            flash('Page not found.', 'error')
+            return redirect(url_for('admin.pages'))
+        
+        if request.method == 'POST':
+            import json
+
+            raw_body = request.form.get('content_body', '')
+            content_data, error_message = parse_page_editor_content(raw_body)
+            if error_message:
+                flash(error_message, 'error')
+                return render_template('admin/page_edit.html',
+                                       admin=admin,
+                                       page=page,
+                                       editor_content=raw_body,
+                                       slug=slug)
+
+            content_json = json.dumps(content_data)
+            title = request.form.get('title', page['title'])
+
+            cursor.execute("""
+                UPDATE page_content 
+                SET title = %s, content = %s, updated_at = NOW()
+                WHERE id = %s
+            """, (title, content_json, page['id']))
+            conn.commit()
+
+            cursor.execute("""
+                INSERT INTO page_versions (page_id, content, changed_by_admin_id, change_summary)
+                VALUES (%s, %s, %s, %s)
+            """, (page['id'], content_json, admin.id, request.form.get('change_summary', 'Content updated')))
+            conn.commit()
+
+            log_admin_action(admin.id, 'page_edit', 'page_content', page['id'],
+                           f'Edited page: {slug}', request.remote_addr)
+            flash(f'Page "{page["title"]}" saved successfully.', 'success')
+
+            return redirect(url_for('admin.page_edit', slug=slug))
+        
+        import json
+        if page['content'] and isinstance(page['content'], str):
+            page_content = json.loads(page['content'])
+        else:
+            page_content = page['content']
+
+        editor_content = serialize_page_content(page_content or {})
+
+        return render_template('admin/page_edit.html',
+                               admin=admin,
+                               page=page,
+                               editor_content=editor_content,
+                               slug=slug)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@admin_bp.route('/pages/<slug>/preview', methods=['GET', 'POST'])
+@super_admin_required
+def page_preview(slug):
+    """Preview page (draft or published) in modal"""
+    admin = get_current_admin()
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("SELECT * FROM page_content WHERE page_slug = %s", (slug,))
+        page = cursor.fetchone()
+
+        if not page:
+            return jsonify({'error': 'Page not found'}), 404
+
+        import json
+        if request.method == 'POST':
+            raw_body = request.form.get('content_body', '')
+            content_data, error_message = parse_page_editor_content(raw_body)
+            if error_message:
+                return jsonify({'success': False, 'error': error_message}), 400
+            content_data['title'] = request.form.get('title', page['title'])
+            page_content = content_data
+        else:
+            if page['content'] and isinstance(page['content'], str):
+                page_content = json.loads(page['content'])
+            else:
+                page_content = page['content']
+
+        preview_html = render_page_content(slug, page_content, preview=True)
+
+        return jsonify({
+            'success': True,
+            'title': page_content.get('title', page['title']) if isinstance(page_content, dict) else page['title'],
+            'html': preview_html
+        })
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@admin_bp.route('/pages/<slug>/publish', methods=['POST'])
+@super_admin_required
+def page_publish(slug):
+    """Publish a page"""
+    admin = get_current_admin()
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("SELECT id, title FROM page_content WHERE page_slug = %s", (slug,))
+        page = cursor.fetchone()
+        
+        if not page:
+            flash('Page not found.', 'error')
+            return redirect(url_for('admin.pages'))
+        
+        cursor.execute("""
+            UPDATE page_content 
+            SET is_published = TRUE, published_at = NOW(), updated_at = NOW()
+            WHERE id = %s
+        """, (page[0],))
+        conn.commit()
+        
+        log_admin_action(admin.id, 'page_publish', 'page_content', page[0],
+                       f'Published page: {slug}', request.remote_addr)
+        flash(f'Page "{page[1]}" has been published.', 'success')
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return redirect(url_for('admin.pages'))
+
+
+@admin_bp.route('/pages/<slug>/unpublish', methods=['POST'])
+@super_admin_required
+def page_unpublish(slug):
+    """Unpublish a page"""
+    admin = get_current_admin()
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("SELECT id, title FROM page_content WHERE page_slug = %s", (slug,))
+        page = cursor.fetchone()
+        
+        if not page:
+            flash('Page not found.', 'error')
+            return redirect(url_for('admin.pages'))
+        
+        cursor.execute("""
+            UPDATE page_content 
+            SET is_published = FALSE, updated_at = NOW()
+            WHERE id = %s
+        """, (page[0],))
+        conn.commit()
+        
+        log_admin_action(admin.id, 'page_unpublish', 'page_content', page[0],
+                       f'Unpublished page: {slug}', request.remote_addr)
+        flash(f'Page "{page[1]}" has been unpublished.', 'success')
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return redirect(url_for('admin.pages'))
+
+
+@admin_bp.route('/pages/<slug>/history')
+@super_admin_required
+def page_history(slug):
+    """Version history for a page"""
+    admin = get_current_admin()
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("SELECT * FROM page_content WHERE page_slug = %s", (slug,))
+        page = cursor.fetchone()
+        
+        if not page:
+            flash('Page not found.', 'error')
+            return redirect(url_for('admin.pages'))
+        
+        cursor.execute("""
+            SELECT pv.*, au.full_name as changed_by_name
+            FROM page_versions pv
+            LEFT JOIN admin_users au ON pv.changed_by_admin_id = au.id
+            WHERE pv.page_id = %s
+            ORDER BY pv.created_at DESC
+        """, (page['id'],))
+        versions = cursor.fetchall()
+        
+        for v in versions:
+            if v['created_at']:
+                v['created_at'] = v['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+        
+        return render_template('admin/page_history.html',
+                               admin=admin,
+                               page=page,
+                               versions=versions,
+                               slug=slug)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@admin_bp.route('/pages/<slug>/rollback/<int:version_id>', methods=['POST'])
+@super_admin_required
+def page_rollback(slug, version_id):
+    """Rollback page to a specific version"""
+    admin = get_current_admin()
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("SELECT id, title FROM page_content WHERE page_slug = %s", (slug,))
+        page = cursor.fetchone()
+        
+        if not page:
+            flash('Page not found.', 'error')
+            return redirect(url_for('admin.pages'))
+        
+        cursor.execute("SELECT * FROM page_versions WHERE id = %s AND page_id = %s", 
+                      (version_id, page['id']))
+        version = cursor.fetchone()
+        
+        if not version:
+            flash('Version not found.', 'error')
+            return redirect(url_for('admin.page_history', slug=slug))
+        
+        cursor.execute("""
+            UPDATE page_content 
+            SET content = %s, updated_at = NOW()
+            WHERE id = %s
+        """, (version['content'], page['id']))
+        
+        cursor.execute("""
+            INSERT INTO page_versions (page_id, content, changed_by_admin_id, change_summary)
+            VALUES (%s, %s, %s, %s)
+        """, (page['id'], version['content'], admin.id, 
+              f'Rolback to version {version_id} from {version["created_at"]}'))
+        conn.commit()
+        
+        log_admin_action(admin.id, 'page_rollback', 'page_content', page['id'],
+                       f'Rolled back page {slug} to version {version_id}', request.remote_addr)
+        flash(f'Page has been rolled back to version from {version["created_at"]}.', 'success')
+    except Exception as e:
+        flash(f'Error during rollback: {str(e)}', 'error')
+    finally:
+        cursor.close()
+        conn.close()
+    
+    return redirect(url_for('admin.page_history', slug=slug))
+
+
+@admin_bp.route('/api/pages/<slug>')
+@super_admin_required
+def api_page_content(slug):
+    """Get page content as JSON"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        cursor.execute("SELECT * FROM page_content WHERE page_slug = %s", (slug,))
+        page = cursor.fetchone()
+        
+        if not page:
+            return jsonify({'error': 'Page not found'}), 404
+        
+        import json
+        content = page['content']
+        if isinstance(content, str):
+            content = json.loads(content)
+        
+        return jsonify({
+            'id': page['id'],
+            'slug': page['page_slug'],
+            'title': page['title'],
+            'content': content,
+            'is_published': page['is_published'],
+            'published_at': page['published_at'].isoformat() if page['published_at'] else None,
+            'updated_at': page['updated_at'].isoformat() if page['updated_at'] else None
+        })
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =============================================================================
+# Pricing Plans Management (Super Admin Only)
+# =============================================================================
+
+@admin_bp.route('/pricing')
+@super_admin_required
+def pricing_plans():
+    """List all pricing plans"""
+    admin = get_current_admin()
+    plans = PricingPlan.get_all()
+
+    # Group by platform
+    woocommerce_plans = [p for p in plans if p.platform == 'woocommerce']
+    magento_plans = [p for p in plans if p.platform == 'magento']
+
+    return render_template('admin/pricing_plans.html',
+                           admin=admin,
+                           woocommerce_plans=woocommerce_plans,
+                           magento_plans=magento_plans)
+
+
+@admin_bp.route('/pricing/<int:plan_id>/edit', methods=['GET', 'POST'])
+@super_admin_required
+def pricing_plan_edit(plan_id):
+    """Edit a pricing plan"""
+    admin = get_current_admin()
+    plan = PricingPlan.get_by_id(plan_id)
+
+    if not plan:
+        flash('Pricing plan not found.', 'error')
+        return redirect(url_for('admin.pricing_plans'))
+
+    if request.method == 'POST':
+        try:
+            # Update basic fields
+            plan.name = request.form.get('name', plan.name)
+            plan.price_monthly = float(request.form.get('price_monthly', plan.price_monthly))
+            plan.store_limit = int(request.form.get('store_limit', plan.store_limit))
+            plan.memory_limit = request.form.get('memory_limit', plan.memory_limit)
+            plan.cpu_limit = request.form.get('cpu_limit', plan.cpu_limit)
+            plan.display_order = int(request.form.get('display_order', plan.display_order))
+            plan.is_active = request.form.get('is_active') == 'on'
+
+            # Update features from checkboxes
+            feature_keys = [
+                'daily_backups', 'email_support', 'premium_plugins', 'support_24_7',
+                'redis_cache', 'staging', 'sla_uptime', 'advanced_security',
+                'centralized_management', 'white_label', 'dedicated_support'
+            ]
+            plan.features = {key: request.form.get(f'feature_{key}') == 'on' for key in feature_keys}
+
+            plan.update()
+
+            log_admin_action(admin.id, 'pricing_plan_edit', f"Updated pricing plan: {plan.name} (ID: {plan.id})")
+            flash(f'Pricing plan "{plan.name}" updated successfully.', 'success')
+            return redirect(url_for('admin.pricing_plans'))
+
+        except ValueError as e:
+            flash(f'Invalid value: {str(e)}', 'error')
+        except Exception as e:
+            flash(f'Error updating plan: {str(e)}', 'error')
+
+    return render_template('admin/pricing_plan_edit.html',
+                           admin=admin,
+                           plan=plan)
+
+
+# =============================================================================
+# Stripe Pricing Sync API
+# =============================================================================
+
+@admin_bp.route('/api/pricing/sync-options')
+@super_admin_required
+def api_pricing_sync_options():
+    """Get Stripe sync options for all pricing plans"""
+    try:
+        from stripe_integration.pricing import get_all_pricing_sync_status
+        result = get_all_pricing_sync_status()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@admin_bp.route('/api/pricing/sync/<int:plan_id>', methods=['POST'])
+@super_admin_required
+def api_pricing_sync(plan_id):
+    """Sync pricing plan to Stripe"""
+    try:
+        from stripe_integration.pricing import sync_price_to_stripe
+        create_new = request.json.get('create_new', False) if request.json else False
+        result = sync_price_to_stripe(plan_id, create_new)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+# =============================================================================
+# Page Rendering Helpers
+# =============================================================================
+
+def serialize_page_content(content):
+    """Convert structured page content into editor markdown."""
+    import json
+
+    if not content:
+        return ''
+
+    lines = []
+    for section, section_data in content.items():
+        if isinstance(section_data, dict):
+            for key, value in section_data.items():
+                # Handle nested complex types (lists, dicts) as JSON
+                if isinstance(value, (list, dict)):
+                    lines.append(f"## section: {section}.{key} (json)")
+                    lines.append("```json")
+                    lines.append(json.dumps(value, indent=2))
+                    lines.append("```")
+                else:
+                    lines.append(f"## section: {section}.{key}")
+                    lines.append(str(value) if value is not None else '')
+                lines.append('')
+        elif isinstance(section_data, str):
+            lines.append(f"## section: {section}")
+            lines.append(section_data)
+            lines.append('')
+        else:
+            lines.append(f"## section: {section} (json)")
+            lines.append("```json")
+            lines.append(json.dumps(section_data, indent=2))
+            lines.append("```")
+            lines.append('')
+
+    return "\n".join(lines).strip() + "\n"
+
+
+def parse_page_editor_content(raw_text):
+    """Parse editor markdown into structured page content."""
+    import json
+
+    if not raw_text or not raw_text.strip():
+        return {}, 'Editor is empty. Add at least one section header.'
+
+    pattern = re.compile(r'^##\s+section:\s*(.+)$', re.MULTILINE)
+    matches = list(pattern.finditer(raw_text))
+    if not matches:
+        return {}, "No section headers found. Use '## section: <name>' to define sections."
+
+    content = {}
+    for index, match in enumerate(matches):
+        header = match.group(1).strip()
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(raw_text)
+        body = raw_text[start:end].strip('\n').strip()
+
+        is_json = header.lower().endswith('(json)')
+        if is_json:
+            header = header[:-6].strip()
+            json_text = body
+            if json_text.startswith('```'):
+                lines = json_text.splitlines()
+                if len(lines) >= 2 and lines[-1].strip().startswith('```'):
+                    json_text = "\n".join(lines[1:-1]).strip()
+            try:
+                value = json.loads(json_text) if json_text else {}
+            except json.JSONDecodeError as exc:
+                return {}, f"Invalid JSON in section '{header}': {exc.msg}."
+        else:
+            value = body
+
+        if '.' in header:
+            section, key = header.split('.', 1)
+            content.setdefault(section, {})[key] = value
+        else:
+            content[header] = value
+
+    return content, None
+
+def render_page_content(slug, content, preview=False):
+    """Render page content to HTML based on page type"""
+    from flask import render_template_string
+    
+    base_template = '''
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{{ title }} - ShopHosting.io</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+        <style>
+            :root {
+                --bg-deepest: #08080a;
+                --bg-deep: #0d0d10;
+                --bg-base: #111114;
+                --bg-elevated: #18181c;
+                --bg-surface: #1e1e24;
+                --bg-hover: #26262e;
+                --text-primary: #f4f4f6;
+                --text-secondary: #a1a1aa;
+                --text-tertiary: #71717a;
+                --accent-cyan: #00d4ff;
+                --accent-blue: #0088ff;
+                --accent-indigo: #5b5bd6;
+                --gradient-primary: linear-gradient(135deg, #00d4ff 0%, #0088ff 50%, #5b5bd6 100%);
+                --success: #22c55e;
+            }
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+                font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+                line-height: 1.6;
+                color: var(--text-primary);
+                background: var(--bg-deepest);
+            }
+            .preview-banner {
+                background: var(--accent-blue);
+                color: white;
+                text-align: center;
+                padding: 8px;
+                font-size: 14px;
+                font-weight: 500;
+            }
+            .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+            header { 
+                background: rgba(8, 8, 10, 0.9); 
+                backdrop-filter: blur(20px);
+                border-bottom: 1px solid rgba(255,255,255,0.06);
+                padding: 16px 0;
+                position: sticky; top: 0; z-index: 100;
+            }
+            header .container { display: flex; justify-content: space-between; align-items: center; }
+            .logo {
+                font-size: 1.4rem; font-weight: 700; text-decoration: none;
+                background: var(--gradient-primary);
+                -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            }
+            nav { display: flex; gap: 8px; }
+            nav a {
+                padding: 10px 18px; color: var(--text-secondary); text-decoration: none;
+                font-weight: 500; border-radius: 10px; transition: all 0.2s;
+            }
+            nav a:hover { color: var(--text-primary); background: var(--bg-hover); }
+            main { min-height: calc(100vh - 180px); padding: 60px 0; }
+            
+            /* Hero */
+            .hero { text-align: center; padding: 80px 0; }
+            .hero h1 { 
+                font-size: 3.5rem; font-weight: 700; margin-bottom: 20px; 
+                background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            }
+            .hero p { font-size: 1.25rem; color: var(--text-secondary); max-width: 600px; margin: 0 auto 40px; }
+            .btn {
+                display: inline-flex; align-items: center; gap: 8px;
+                padding: 14px 28px; border-radius: 10px; font-weight: 600;
+                text-decoration: none; cursor: pointer; border: none;
+                background: var(--gradient-primary); color: var(--bg-deepest);
+                transition: all 0.25s;
+            }
+            .btn:hover { transform: translateY(-2px); box-shadow: 0 0 40px rgba(0, 136, 255, 0.3); }
+            
+            /* Stats */
+            .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin: 60px 0; }
+            .stat { 
+                background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.06);
+                padding: 32px; text-align: center; border-radius: 16px;
+            }
+            .stat-value { font-size: 2.5rem; font-weight: 700; color: var(--accent-cyan); }
+            .stat-label { color: var(--text-secondary); margin-top: 8px; }
+            
+            /* Features grid */
+            .features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+            .feature {
+                background: var(--bg-elevated); border: 1px solid rgba(255,255,255,0.06);
+                padding: 32px; border-radius: 16px;
+            }
+            .feature h3 { margin-bottom: 12px; }
+            .feature p { color: var(--text-secondary); }
+            
+            /* CTA */
+            .cta { 
+                text-align: center; padding: 80px 0; background: var(--bg-elevated);
+                border-radius: 24px; margin: 60px 0;
+            }
+            .cta h2 { font-size: 2.5rem; margin-bottom: 16px; }
+            .cta p { color: var(--text-secondary); margin-bottom: 32px; }
+            
+            footer { 
+                background: var(--bg-deep); border-top: 1px solid rgba(255,255,255,0.06);
+                color: var(--text-tertiary); padding: 32px 0; text-align: center;
+            }
+        </style>
+    </head>
+    <body>
+        {% if preview %}
+        <div class="preview-banner">PREVIEW MODE - Changes not yet live</div>
+        {% endif %}
+        <header>
+            <div class="container">
+                <a href="/" class="logo">ShopHosting.io</a>
+                <nav>
+                    <a href="/features">Features</a>
+                    <a href="/pricing">Pricing</a>
+                    <a href="/about">About</a>
+                    <a href="/contact">Contact</a>
+                    <a href="/login">Login</a>
+                    <a href="/signup" style="background: var(--gradient-primary); color: var(--bg-deepest);">Free Consultation</a>
+                </nav>
+            </div>
+        </header>
+        <main>
+            {{ content_html }}
+        </main>
+        <footer>
+            <p>&copy; 2025 ShopHosting.io. All rights reserved.</p>
+        </footer>
+    </body>
+    </html>
+    '''
+    
+    content_html = ''
+    
+    if slug == 'home' and content:
+        content_html = _render_homepage(content)
+    elif slug == 'pricing' and content:
+        content_html = _render_pricing_page(content)
+    elif slug == 'features' and content:
+        content_html = _render_features_page(content)
+    elif slug == 'about' and content:
+        content_html = _render_about_page(content)
+    elif slug == 'contact' and content:
+        content_html = _render_contact_page(content)
+    else:
+        content_html = f'<div class="container"><h1>{content.get("title", slug)}</h1><p>Content placeholder for {slug}</p></div>'
+    
+    return render_template_string(base_template, title=content.get('title', slug), content_html=content_html, preview=preview)
+
+
+def _render_homepage(content):
+    hero = content.get('hero', {})
+    stats = content.get('stats', {})
+    cta = content.get('cta', {})
+    
+    return f'''
+    <div class="container">
+        <section class="hero">
+            <h1>{hero.get("headline", "")}</h1>
+            <p>{hero.get("subheadline", "")}</p>
+            <a href="{hero.get("cta_link", "/signup")}" class="btn">{hero.get("cta_text", "Get Started")}</a>
+        </section>
+        
+        <section class="stats">
+            <div class="stat">
+                <div class="stat-value">{stats.get("stores_count", "100+")}</div>
+                <div class="stat-label">Active Stores</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">{stats.get("uptime", "99.9%")}</div>
+                <div class="stat-label">Uptime SLA</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">{stats.get("hours_saved", "5000+")}</div>
+                <div class="stat-label">Dev Hours Saved</div>
+            </div>
+        </section>
+        
+        <section class="cta">
+            <h2>{cta.get("headline", "Ready to Scale?")}</h2>
+            <p>{cta.get("subheadline", "")}</p>
+            <a href="{cta.get("button_link", "/signup")}" class="btn">{cta.get("button_text", "Get Started")}</a>
+        </section>
+    </div>
+    '''
+
+
+def _render_pricing_page(content):
+    header = content.get('header', {})
+    
+    return f'''
+    <div class="container">
+        <section class="hero">
+            <h1>{header.get("headline", "")}</h1>
+            <p>{header.get("subheadline", "")}</p>
+        </section>
+        
+        <div style="text-align: center; padding: 40px;">
+            <p style="color: var(--text-secondary);">Pricing plans loaded from database.</p>
+            <p style="color: var(--text-tertiary); margin-top: 16px;">Edit pricing content in the CMS.</p>
+        </div>
+    </div>
+    '''
+
+
+def _render_features_page(content):
+    hero = content.get('hero', {})
+    
+    return f'''
+    <div class="container">
+        <section class="hero">
+            <h1>{hero.get("headline", "")}</h1>
+            <p>{hero.get("subheadline", "")}</p>
+        </section>
+    </div>
+    '''
+
+
+def _render_about_page(content):
+    hero = content.get('hero', {})
+    
+    return f'''
+    <div class="container">
+        <section class="hero">
+            <h1>{hero.get("headline", "")}</h1>
+            <p>{hero.get("subheadline", "")}</p>
+        </section>
+    </div>
+    '''
+
+
+def _render_contact_page(content):
+    hero = content.get('hero', {})
+    
+    return f'''
+    <div class="container">
+        <section class="hero">
+            <h1>{hero.get("headline", "")}</h1>
+            <p>{hero.get("subheadline", "")}</p>
+        </section>
+    </div>
+    '''
