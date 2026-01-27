@@ -513,13 +513,8 @@
             <a href="{{ credentials.admin_url }}" target="_blank" class="quick-link">
                 <span>Admin Panel</span>
             </a>
-            <a href="{{ url_for('staging_list') }}" class="quick-link">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                    <line x1="8" y1="21" x2="16" y2="21"/>
-                    <line x1="12" y1="17" x2="12" y2="21"/>
-                </svg>
-                <span>Staging Environments</span>
+            <a href="{{ url_for('backup_page') }}" class="quick-link">
+                <span>Manage Backups</span>
             </a>
         </div>
 
@@ -541,7 +536,7 @@
 
 {% block extra_js %}
 {% if customer.status == 'pending' or customer.status == 'provisioning' %}
-<script>
+<script nonce="{{ csp_nonce() }}">
     // Auto-refresh page every 15 seconds while provisioning
     setTimeout(function() {
         location.reload();

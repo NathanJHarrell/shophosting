@@ -502,7 +502,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce() }}">
     function showReplyForm(type) {
         document.querySelectorAll('.reply-tab').forEach(tab => tab.classList.remove('active'));
         document.querySelectorAll('.reply-form').forEach(form => form.classList.remove('active'));

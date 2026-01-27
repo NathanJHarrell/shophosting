@@ -349,7 +349,7 @@
                         <li {% if not plan.has_feature('premium_plugins') %}class="unavailable"{% endif %}>Premium plugins included</li>
                         <li {% if not plan.has_feature('support_24_7') %}class="unavailable"{% endif %}>24/7 priority support</li>
                     </ul>
-                    <a href="{{ url_for('signup', plan=plan.slug) }}" class="btn btn-primary plan-cta">Talk to Us</a>
+                    <a href="{{ url_for('signup', plan=plan.slug) }}" class="btn btn-primary plan-cta">Order Now</a>
                 </div>
                 {% endfor %}
             </div>
@@ -377,7 +377,7 @@
                         <li {% if not plan.has_feature('support_24_7') %}class="unavailable"{% endif %}>24/7 priority support</li>
                         <li {% if not plan.has_feature('dedicated_support') %}class="unavailable"{% endif %}>Dedicated support channel</li>
                     </ul>
-                    <a href="{{ url_for('signup', plan=plan.slug) }}" class="btn btn-primary plan-cta">Talk to Us</a>
+                    <a href="{{ url_for('signup', plan=plan.slug) }}" class="btn btn-primary plan-cta">Order Now</a>
                 </div>
                 {% endfor %}
             </div>
@@ -408,7 +408,7 @@
                         <li {% if not plan.has_feature('premium_plugins') %}class="unavailable"{% endif %}>Premium extensions</li>
                         <li {% if not plan.has_feature('support_24_7') %}class="unavailable"{% endif %}>24/7 priority support</li>
                     </ul>
-                    <a href="{{ url_for('signup', plan=plan.slug) }}" class="btn btn-primary plan-cta">Talk to Us</a>
+                    <a href="{{ url_for('signup', plan=plan.slug) }}" class="btn btn-primary plan-cta">Order Now</a>
                 </div>
                 {% endfor %}
             </div>
@@ -436,7 +436,7 @@
                         <li {% if not plan.has_feature('support_24_7') %}class="unavailable"{% endif %}>24/7 priority support</li>
                         <li {% if not plan.has_feature('dedicated_support') %}class="unavailable"{% endif %}>Dedicated support channel</li>
                     </ul>
-                    <a href="{{ url_for('signup', plan=plan.slug) }}" class="btn btn-primary plan-cta">Talk to Us</a>
+                    <a href="{{ url_for('signup', plan=plan.slug) }}" class="btn btn-primary plan-cta">Order Now</a>
                 </div>
                 {% endfor %}
             </div>
@@ -455,7 +455,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce() }}">
     // Platform tab switching
     document.querySelectorAll('.platform-tab').forEach(tab => {
         tab.addEventListener('click', function() {

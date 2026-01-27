@@ -1,11 +1,11 @@
 [Unit]
-Description=ShopHosting.io Daily Backup
-After=network-online.target mysql.service
+Description=ShopHosting.io directory backup
+After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/opt/shophosting/scripts/backup.sh
+ExecStart=/opt/shophosting/scripts/shophosting-dir-backup.sh
 Environment=HOME=/root
 Environment=XDG_CACHE_HOME=/root/.cache
 StandardOutput=journal

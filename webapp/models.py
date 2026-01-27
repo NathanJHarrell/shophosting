@@ -17,13 +17,21 @@ def init_db_pool():
     """Initialize database connection pool"""
     global db_pool
 
+    # Validate required database configuration
+    db_password = os.getenv('DB_PASSWORD')
+    if not db_password:
+        raise RuntimeError(
+            "CRITICAL: DB_PASSWORD environment variable is required. "
+            "Please set it in /opt/shophosting/.env"
+        )
+
     db_config = {
         'host': os.getenv('DB_HOST', 'localhost'),
         'user': os.getenv('DB_USER', 'shophosting_app'),
-        'password': os.getenv('DB_PASSWORD', 'YourSecurePasswordHere123!'),
+        'password': db_password,
         'database': os.getenv('DB_NAME', 'shophosting_db'),
         'pool_name': 'shophosting_pool',
-        'pool_size': 5
+        'pool_size': int(os.getenv('DB_POOL_SIZE', '5'))
     }
 
     db_pool = pooling.MySQLConnectionPool(**db_config)
@@ -481,6 +489,29 @@ class PricingPlan:
             conn.close()
 
     @staticmethod
+    def get_all():
+        """Get all pricing plans (including inactive)"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT * FROM pricing_plans
+                ORDER BY platform, display_order
+            """)
+            rows = cursor.fetchall()
+            import json
+            plans = []
+            for row in rows:
+                if row.get('features') and isinstance(row['features'], str):
+                    row['features'] = json.loads(row['features'])
+                plans.append(PricingPlan(**row))
+            return plans
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
     def get_all_active():
         """Get all active pricing plans"""
         conn = get_db_connection()
@@ -546,6 +577,45 @@ class PricingPlan:
             'memory_limit': self.memory_limit,
             'cpu_limit': self.cpu_limit
         }
+
+    def update(self):
+        """Update pricing plan in database"""
+        import json
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            features_json = json.dumps(self.features) if self.features else '{}'
+            cursor.execute("""
+                UPDATE pricing_plans SET
+                    name = %s,
+                    price_monthly = %s,
+                    store_limit = %s,
+                    features = %s,
+                    memory_limit = %s,
+                    cpu_limit = %s,
+                    is_active = %s,
+                    display_order = %s
+                WHERE id = %s
+            """, (
+                self.name,
+                self.price_monthly,
+                self.store_limit,
+                features_json,
+                self.memory_limit,
+                self.cpu_limit,
+                self.is_active,
+                self.display_order,
+                self.id
+            ))
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            cursor.close()
+            conn.close()
 
     def __repr__(self):
         return f"<PricingPlan {self.id}: {self.slug}>"
@@ -1384,381 +1454,161 @@ class TicketAttachment:
         return f"<TicketAttachment {self.id}: {self.original_filename}>"
 
 
-# =============================================================================
-# Staging Port Manager
-# =============================================================================
+class ConsultationAppointment:
+    """Model for consultation appointments scheduled via the website"""
 
-class StagingPortManager:
-    """Manages port allocation for staging environment containers"""
-    # Using 10001-10100 to avoid conflict with phpMyAdmin ports (9001-9100)
-    PORT_RANGE_START = 10001
-    PORT_RANGE_END = 10100
-
-    @staticmethod
-    def get_next_available_port():
-        """Get the next available port for a new staging environment"""
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        try:
-            # Get all currently used staging ports
-            cursor.execute("SELECT web_port FROM staging_environments WHERE web_port IS NOT NULL AND status != 'deleted'")
-            used_ports = {row[0] for row in cursor.fetchall()}
-
-            # Find first available port in range
-            for port in range(StagingPortManager.PORT_RANGE_START, StagingPortManager.PORT_RANGE_END + 1):
-                if port not in used_ports:
-                    return port
-
-            return None  # No ports available
-
-        finally:
-            cursor.close()
-            conn.close()
-
-    @staticmethod
-    def is_port_available(port):
-        """Check if a specific port is available"""
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        try:
-            cursor.execute("SELECT COUNT(*) FROM staging_environments WHERE web_port = %s AND status != 'deleted'", (port,))
-            count = cursor.fetchone()[0]
-            return count == 0
-        finally:
-            cursor.close()
-            conn.close()
-
-
-# =============================================================================
-# Staging Environment Model
-# =============================================================================
-
-class StagingEnvironment:
-    """Staging environment model for customer staging sites"""
-
-    MAX_STAGING_PER_CUSTOMER = 3
-    STATUSES = ['creating', 'active', 'syncing', 'failed', 'deleted']
-
-    def __init__(self, id=None, customer_id=None, name=None, staging_domain=None,
-                 status='creating', web_port=None, db_name=None, db_user=None,
-                 db_password=None, source_snapshot_date=None, last_push_date=None,
-                 created_at=None, updated_at=None):
+    def __init__(self, id=None, first_name=None, last_name=None, email=None,
+                 phone=None, scheduled_date=None, scheduled_time=None,
+                 timezone='EST', status='pending', notes=None,
+                 assigned_admin_id=None, created_at=None, updated_at=None):
         self.id = id
-        self.customer_id = customer_id
-        self.name = name
-        self.staging_domain = staging_domain
+        self.first_name = first_name
+        self.last_name = last_name
+        self.email = email
+        self.phone = phone
+        self.scheduled_date = scheduled_date
+        self.scheduled_time = scheduled_time
+        self.timezone = timezone
         self.status = status
-        self.web_port = web_port
-        self.db_name = db_name
-        self.db_user = db_user
-        self.db_password = db_password
-        self.source_snapshot_date = source_snapshot_date
-        self.last_push_date = last_push_date
-        self.created_at = created_at or datetime.now()
-        self.updated_at = updated_at or datetime.now()
+        self.notes = notes
+        self.assigned_admin_id = assigned_admin_id
+        self.created_at = created_at
+        self.updated_at = updated_at
 
-    # =========================================================================
-    # Database Operations
-    # =========================================================================
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}"
 
     def save(self):
-        """Save staging environment to database (insert or update)"""
+        """Insert or update appointment"""
         conn = get_db_connection()
         cursor = conn.cursor()
-
         try:
             if self.id is None:
                 cursor.execute("""
-                    INSERT INTO staging_environments
-                    (customer_id, name, staging_domain, status, web_port,
-                     db_name, db_user, db_password, source_snapshot_date,
-                     created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    self.customer_id, self.name, self.staging_domain, self.status,
-                    self.web_port, self.db_name, self.db_user, self.db_password,
-                    self.source_snapshot_date, self.created_at, self.updated_at
-                ))
+                    INSERT INTO consultation_appointments
+                    (first_name, last_name, email, phone, scheduled_date, scheduled_time,
+                     timezone, status, notes, assigned_admin_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (self.first_name, self.last_name, self.email, self.phone,
+                      self.scheduled_date, self.scheduled_time, self.timezone,
+                      self.status, self.notes, self.assigned_admin_id))
                 self.id = cursor.lastrowid
-
-                # Update customer's staging count
-                cursor.execute("""
-                    UPDATE customers SET staging_count = (
-                        SELECT COUNT(*) FROM staging_environments
-                        WHERE customer_id = %s AND status != 'deleted'
-                    ) WHERE id = %s
-                """, (self.customer_id, self.customer_id))
             else:
                 cursor.execute("""
-                    UPDATE staging_environments SET
-                        name = %s, staging_domain = %s, status = %s, web_port = %s,
-                        db_name = %s, db_user = %s, db_password = %s,
-                        source_snapshot_date = %s, last_push_date = %s, updated_at = %s
+                    UPDATE consultation_appointments SET
+                        first_name = %s, last_name = %s, email = %s, phone = %s,
+                        scheduled_date = %s, scheduled_time = %s, timezone = %s,
+                        status = %s, notes = %s, assigned_admin_id = %s
                     WHERE id = %s
-                """, (
-                    self.name, self.staging_domain, self.status, self.web_port,
-                    self.db_name, self.db_user, self.db_password,
-                    self.source_snapshot_date, self.last_push_date,
-                    datetime.now(), self.id
-                ))
-
+                """, (self.first_name, self.last_name, self.email, self.phone,
+                      self.scheduled_date, self.scheduled_time, self.timezone,
+                      self.status, self.notes, self.assigned_admin_id, self.id))
             conn.commit()
             return self
-
         finally:
             cursor.close()
             conn.close()
-
-    def update_status(self, status):
-        """Update staging environment status"""
-        self.status = status
-        self.updated_at = datetime.now()
-        return self.save()
-
-    def mark_deleted(self):
-        """Mark staging environment as deleted"""
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        try:
-            self.status = 'deleted'
-            cursor.execute("""
-                UPDATE staging_environments SET status = 'deleted', updated_at = %s
-                WHERE id = %s
-            """, (datetime.now(), self.id))
-
-            # Update customer's staging count
-            cursor.execute("""
-                UPDATE customers SET staging_count = (
-                    SELECT COUNT(*) FROM staging_environments
-                    WHERE customer_id = %s AND status != 'deleted'
-                ) WHERE id = %s
-            """, (self.customer_id, self.customer_id))
-
-            conn.commit()
-            return True
-        finally:
-            cursor.close()
-            conn.close()
-
-    # =========================================================================
-    # Static Query Methods
-    # =========================================================================
 
     @staticmethod
-    def get_by_id(staging_id):
-        """Get staging environment by ID"""
+    def get_by_id(appointment_id):
+        """Get appointment by ID"""
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-
         try:
-            cursor.execute("SELECT * FROM staging_environments WHERE id = %s", (staging_id,))
+            cursor.execute("SELECT * FROM consultation_appointments WHERE id = %s", (appointment_id,))
             row = cursor.fetchone()
-
-            if row:
-                return StagingEnvironment(**row)
-            return None
-
+            return ConsultationAppointment(**row) if row else None
         finally:
             cursor.close()
             conn.close()
 
     @staticmethod
-    def get_by_customer(customer_id, include_deleted=False):
-        """Get all staging environments for a customer"""
+    def get_all_filtered(status=None, search=None, date_from=None, date_to=None,
+                         page=1, per_page=20):
+        """Get appointments with filtering and pagination"""
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-
         try:
-            if include_deleted:
-                cursor.execute("""
-                    SELECT * FROM staging_environments
-                    WHERE customer_id = %s
-                    ORDER BY created_at DESC
-                """, (customer_id,))
-            else:
-                cursor.execute("""
-                    SELECT * FROM staging_environments
-                    WHERE customer_id = %s AND status != 'deleted'
-                    ORDER BY created_at DESC
-                """, (customer_id,))
+            where_clauses = ["1=1"]
+            params = []
 
-            rows = cursor.fetchall()
-            return [StagingEnvironment(**row) for row in rows]
+            if status:
+                where_clauses.append("status = %s")
+                params.append(status)
+            if search:
+                where_clauses.append(
+                    "(first_name LIKE %s OR last_name LIKE %s OR email LIKE %s OR phone LIKE %s)"
+                )
+                search_param = f"%{search}%"
+                params.extend([search_param, search_param, search_param, search_param])
+            if date_from:
+                where_clauses.append("scheduled_date >= %s")
+                params.append(date_from)
+            if date_to:
+                where_clauses.append("scheduled_date <= %s")
+                params.append(date_to)
 
-        finally:
-            cursor.close()
-            conn.close()
-
-    @staticmethod
-    def get_by_domain(staging_domain):
-        """Get staging environment by domain"""
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        try:
-            cursor.execute("SELECT * FROM staging_environments WHERE staging_domain = %s", (staging_domain,))
-            row = cursor.fetchone()
-
-            if row:
-                return StagingEnvironment(**row)
-            return None
-
-        finally:
-            cursor.close()
-            conn.close()
-
-    @staticmethod
-    def count_by_customer(customer_id):
-        """Count active staging environments for a customer"""
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        try:
-            cursor.execute("""
-                SELECT COUNT(*) FROM staging_environments
-                WHERE customer_id = %s AND status != 'deleted'
-            """, (customer_id,))
-            return cursor.fetchone()[0]
-
-        finally:
-            cursor.close()
-            conn.close()
-
-    @staticmethod
-    def can_create_staging(customer_id):
-        """Check if customer can create another staging environment"""
-        count = StagingEnvironment.count_by_customer(customer_id)
-        return count < StagingEnvironment.MAX_STAGING_PER_CUSTOMER
-
-    @staticmethod
-    def get_all(include_deleted=False, page=1, per_page=20):
-        """Get all staging environments (for admin)"""
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-
-        try:
-            where = "1=1" if include_deleted else "se.status != 'deleted'"
-            offset = (page - 1) * per_page
+            where_sql = " AND ".join(where_clauses)
 
             # Get count
-            cursor.execute(f"SELECT COUNT(*) as count FROM staging_environments se WHERE {where}")
+            cursor.execute(f"SELECT COUNT(*) as count FROM consultation_appointments WHERE {where_sql}", params)
             total = cursor.fetchone()['count']
 
-            # Get paginated results with customer info
+            # Get paginated results
+            offset = (page - 1) * per_page
             cursor.execute(f"""
-                SELECT se.*, c.email as customer_email, c.domain as production_domain,
-                       c.company_name as customer_company, c.platform
-                FROM staging_environments se
-                JOIN customers c ON se.customer_id = c.id
-                WHERE {where}
-                ORDER BY se.created_at DESC
+                SELECT * FROM consultation_appointments
+                WHERE {where_sql}
+                ORDER BY scheduled_date DESC, scheduled_time DESC
                 LIMIT %s OFFSET %s
-            """, (per_page, offset))
+            """, params + [per_page, offset])
 
-            rows = cursor.fetchall()
-            return rows, total
-
-        finally:
-            cursor.close()
-            conn.close()
-
-    # =========================================================================
-    # Sync History Methods
-    # =========================================================================
-
-    def log_sync(self, sync_type, status='pending'):
-        """Log a sync operation"""
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        try:
-            cursor.execute("""
-                INSERT INTO staging_sync_history
-                (staging_id, sync_type, status, started_at, created_at)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (self.id, sync_type, status, datetime.now(), datetime.now()))
-
-            conn.commit()
-            return cursor.lastrowid
-
+            appointments = [ConsultationAppointment(**row) for row in cursor.fetchall()]
+            return appointments, total
         finally:
             cursor.close()
             conn.close()
 
     @staticmethod
-    def update_sync_status(sync_id, status, error_message=None):
-        """Update sync operation status"""
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        try:
-            if status in ['completed', 'failed']:
-                cursor.execute("""
-                    UPDATE staging_sync_history
-                    SET status = %s, completed_at = %s, error_message = %s
-                    WHERE id = %s
-                """, (status, datetime.now(), error_message, sync_id))
-            else:
-                cursor.execute("""
-                    UPDATE staging_sync_history SET status = %s WHERE id = %s
-                """, (status, sync_id))
-
-            conn.commit()
-
-        finally:
-            cursor.close()
-            conn.close()
-
-    def get_sync_history(self, limit=10):
-        """Get sync history for this staging environment"""
+    def get_stats():
+        """Get appointment statistics"""
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-
         try:
             cursor.execute("""
-                SELECT * FROM staging_sync_history
-                WHERE staging_id = %s
-                ORDER BY created_at DESC
-                LIMIT %s
-            """, (self.id, limit))
-
-            return cursor.fetchall()
-
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
+                    SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+                    SUM(CASE WHEN status = 'no_show' THEN 1 ELSE 0 END) as no_show,
+                    SUM(CASE WHEN scheduled_date = CURDATE() THEN 1 ELSE 0 END) as today,
+                    SUM(CASE WHEN scheduled_date > CURDATE() AND scheduled_date <= DATE_ADD(CURDATE(), INTERVAL 7 DAY) THEN 1 ELSE 0 END) as this_week
+                FROM consultation_appointments
+            """)
+            return cursor.fetchone()
         finally:
             cursor.close()
             conn.close()
 
-    # =========================================================================
-    # Utility Methods
-    # =========================================================================
-
-    @staticmethod
-    def generate_staging_domain(customer_id, staging_number):
-        """Generate staging domain for a customer"""
-        return f"cust{customer_id}-staging-{staging_number}.shophosting.io"
-
-    def get_staging_url(self):
-        """Get full staging site URL"""
-        return f"https://{self.staging_domain}"
-
     def to_dict(self):
-        """Convert to dictionary"""
+        """Convert to dictionary for JSON serialization"""
         return {
             'id': self.id,
-            'customer_id': self.customer_id,
-            'name': self.name,
-            'staging_domain': self.staging_domain,
-            'staging_url': self.get_staging_url(),
+            'first_name': self.first_name,
+            'last_name': self.last_name,
+            'full_name': self.full_name,
+            'email': self.email,
+            'phone': self.phone,
+            'scheduled_date': str(self.scheduled_date) if self.scheduled_date else None,
+            'scheduled_time': self.scheduled_time,
+            'timezone': self.timezone,
             'status': self.status,
-            'web_port': self.web_port,
-            'source_snapshot_date': self.source_snapshot_date.isoformat() if self.source_snapshot_date else None,
-            'last_push_date': self.last_push_date.isoformat() if self.last_push_date else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
     def __repr__(self):
-        return f"<StagingEnvironment {self.id}: {self.staging_domain}>"
+        return f"<ConsultationAppointment {self.id}: {self.full_name} on {self.scheduled_date}>"

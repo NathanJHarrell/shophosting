@@ -1,0 +1,348 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Appointment #{{ appointment.id }}{% endblock %}
+{% block page_title %}Consultation Appointment{% endblock %}
+
+{% block extra_css %}
+<style>
+    .appointment-layout {
+        display: grid;
+        grid-template-columns: 1fr 350px;
+        gap: 24px;
+    }
+
+    @media (max-width: 1200px) {
+        .appointment-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .badge-pending { background: var(--warning-muted); color: var(--warning); }
+    .badge-confirmed { background: var(--info-muted); color: var(--accent-blue); }
+    .badge-completed { background: var(--success-muted); color: var(--success); }
+    .badge-cancelled { background: var(--bg-surface); color: var(--text-tertiary); }
+    .badge-no_show { background: var(--error-muted); color: var(--error); }
+
+    .appointment-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 24px;
+    }
+
+    .appointment-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .appointment-meta {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .info-card {
+        margin-bottom: 24px;
+    }
+
+    .info-card .card-body {
+        padding: 24px;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+    }
+
+    @media (max-width: 600px) {
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .info-item {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .info-item-label {
+        font-size: 0.8rem;
+        color: var(--text-tertiary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .info-item-value {
+        font-size: 1rem;
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .info-item-value.highlight {
+        font-size: 1.25rem;
+        color: var(--accent-cyan);
+    }
+
+    .sidebar-card {
+        margin-bottom: 20px;
+    }
+
+    .sidebar-card .card-header {
+        padding: 16px 20px;
+    }
+
+    .sidebar-card .card-body {
+        padding: 20px;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .info-row:last-child {
+        border-bottom: none;
+    }
+
+    .info-label {
+        color: var(--text-tertiary);
+        font-size: 0.9rem;
+    }
+
+    .info-value {
+        color: var(--text-primary);
+        font-weight: 500;
+        text-align: right;
+    }
+
+    .action-form {
+        margin-bottom: 16px;
+    }
+
+    .action-form:last-child {
+        margin-bottom: 0;
+    }
+
+    .action-form label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.85rem;
+        color: var(--text-tertiary);
+    }
+
+    .action-form .form-control {
+        width: 100%;
+    }
+
+    .action-form select.form-control {
+        padding: 10px 14px;
+    }
+
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-tertiary);
+        text-decoration: none;
+        font-size: 0.9rem;
+        margin-bottom: 20px;
+        transition: color 0.2s;
+    }
+
+    .back-link:hover {
+        color: var(--accent-blue);
+    }
+
+    .notes-section textarea {
+        min-height: 120px;
+        resize: vertical;
+    }
+
+    .scheduled-datetime {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        padding: 20px;
+        text-align: center;
+    }
+
+    .scheduled-date {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+    }
+
+    .scheduled-time {
+        font-size: 1.25rem;
+        color: var(--accent-cyan);
+    }
+
+    .contact-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 16px;
+    }
+
+    .contact-actions a {
+        flex: 1;
+        text-align: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{{ url_for('admin.appointments') }}" class="back-link">
+    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+    </svg>
+    Back to Appointments
+</a>
+
+<div class="appointment-header">
+    <div>
+        <h2 class="appointment-title">{{ appointment.first_name }} {{ appointment.last_name }}</h2>
+        <div class="appointment-meta">
+            <span class="mono text-muted">#{{ appointment.id }}</span>
+            <span class="badge badge-{{ appointment.status }}">{{ appointment.status|replace('_', ' ') }}</span>
+        </div>
+    </div>
+</div>
+
+<div class="appointment-layout">
+    <div class="main-column">
+        <!-- Scheduled Date/Time -->
+        <div class="card info-card">
+            <div class="card-header">
+                <h3 class="card-title">Scheduled Consultation</h3>
+            </div>
+            <div class="card-body">
+                <div class="scheduled-datetime">
+                    <div class="scheduled-date">
+                        {{ appointment.scheduled_date.strftime('%A, %B %d, %Y') if appointment.scheduled_date else 'Not scheduled' }}
+                    </div>
+                    <div class="scheduled-time">
+                        {{ appointment.scheduled_time }} {{ appointment.timezone }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contact Information -->
+        <div class="card info-card">
+            <div class="card-header">
+                <h3 class="card-title">Contact Information</h3>
+            </div>
+            <div class="card-body">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-item-label">First Name</span>
+                        <span class="info-item-value">{{ appointment.first_name }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-item-label">Last Name</span>
+                        <span class="info-item-value">{{ appointment.last_name }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-item-label">Email Address</span>
+                        <span class="info-item-value">{{ appointment.email }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-item-label">Phone Number</span>
+                        <span class="info-item-value">{{ appointment.phone }}</span>
+                    </div>
+                </div>
+                <div class="contact-actions">
+                    <a href="mailto:{{ appointment.email }}" class="btn btn-secondary btn-sm">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-right: 4px;">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        </svg>
+                        Send Email
+                    </a>
+                    <a href="tel:{{ appointment.phone }}" class="btn btn-secondary btn-sm">
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="margin-right: 4px;">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path>
+                        </svg>
+                        Call
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="card info-card">
+            <div class="card-header">
+                <h3 class="card-title">Notes</h3>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin.appointment_notes', appointment_id=appointment.id) }}" class="notes-section">
+                    <div class="form-group">
+                        <textarea name="notes" class="form-control" placeholder="Add notes about this consultation...">{{ appointment.notes or '' }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">Save Notes</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="sidebar-column">
+        <!-- Details -->
+        <div class="card sidebar-card">
+            <div class="card-header">
+                <h4 class="card-title">Details</h4>
+            </div>
+            <div class="card-body">
+                <div class="info-row">
+                    <span class="info-label">Created</span>
+                    <span class="info-value">{{ appointment.created_at.strftime('%b %d, %Y') }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Time</span>
+                    <span class="info-value">{{ appointment.created_at.strftime('%H:%M') }}</span>
+                </div>
+                {% if appointment.updated_at and appointment.updated_at != appointment.created_at %}
+                <div class="info-row">
+                    <span class="info-label">Updated</span>
+                    <span class="info-value">{{ appointment.updated_at.strftime('%b %d, %H:%M') }}</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card sidebar-card">
+            <div class="card-header">
+                <h4 class="card-title">Actions</h4>
+            </div>
+            <div class="card-body">
+                <form class="action-form" method="POST" action="{{ url_for('admin.appointment_status', appointment_id=appointment.id) }}">
+                    <label>Status</label>
+                    <select name="status" class="form-control" onchange="this.form.submit()">
+                        <option value="pending" {% if appointment.status == 'pending' %}selected{% endif %}>Pending</option>
+                        <option value="confirmed" {% if appointment.status == 'confirmed' %}selected{% endif %}>Confirmed</option>
+                        <option value="completed" {% if appointment.status == 'completed' %}selected{% endif %}>Completed</option>
+                        <option value="cancelled" {% if appointment.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                        <option value="no_show" {% if appointment.status == 'no_show' %}selected{% endif %}>No Show</option>
+                    </select>
+                </form>
+
+                <form class="action-form" method="POST" action="{{ url_for('admin.appointment_assign', appointment_id=appointment.id) }}">
+                    <label>Assigned To</label>
+                    <select name="admin_id" class="form-control" onchange="this.form.submit()">
+                        <option value="">Unassigned</option>
+                        {% for a in admins %}
+                            <option value="{{ a.id }}" {% if appointment.assigned_admin_id == a.id %}selected{% endif %}>{{ a.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

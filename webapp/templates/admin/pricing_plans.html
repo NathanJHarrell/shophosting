@@ -1,0 +1,142 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Pricing Plans - Admin Panel{% endblock %}
+
+{% block page_title %}Pricing Plans{% endblock %}
+
+{% block content %}
+<div class="card" style="margin-bottom: 24px;">
+    <div class="card-header">
+        <h2 class="card-title">WooCommerce Plans</h2>
+        <span class="badge badge-info">{{ woocommerce_plans|length }} plans</span>
+    </div>
+    <div class="card-body">
+        {% if woocommerce_plans %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Plan Name</th>
+                        <th>Price</th>
+                        <th>Store Limit</th>
+                        <th>Resources</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for plan in woocommerce_plans %}
+                    <tr>
+                        <td>
+                            <strong>{{ plan.name }}</strong>
+                            <div class="text-muted" style="font-size: 0.85rem; margin-top: 4px;">{{ plan.slug }}</div>
+                        </td>
+                        <td>
+                            <strong style="color: var(--accent-cyan);">${{ "%.2f"|format(plan.price_monthly) }}</strong>
+                            <span class="text-muted">/mo</span>
+                        </td>
+                        <td>
+                            {% if plan.store_limit == 1 %}
+                            Single Store
+                            {% else %}
+                            Up to {{ plan.store_limit }} stores
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="text-muted">{{ plan.memory_limit }} RAM / {{ plan.cpu_limit }} CPU</span>
+                        </td>
+                        <td>
+                            {% if plan.is_active %}
+                            <span class="badge badge-active">Active</span>
+                            {% else %}
+                            <span class="badge badge-suspended">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('admin.pricing_plan_edit', plan_id=plan.id) }}" class="btn btn-secondary btn-sm">Edit</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+            <p>No WooCommerce plans found.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Magento Plans</h2>
+        <span class="badge badge-info">{{ magento_plans|length }} plans</span>
+    </div>
+    <div class="card-body">
+        {% if magento_plans %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Plan Name</th>
+                        <th>Price</th>
+                        <th>Store Limit</th>
+                        <th>Resources</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for plan in magento_plans %}
+                    <tr>
+                        <td>
+                            <strong>{{ plan.name }}</strong>
+                            <div class="text-muted" style="font-size: 0.85rem; margin-top: 4px;">{{ plan.slug }}</div>
+                        </td>
+                        <td>
+                            <strong style="color: var(--accent-cyan);">${{ "%.2f"|format(plan.price_monthly) }}</strong>
+                            <span class="text-muted">/mo</span>
+                        </td>
+                        <td>
+                            {% if plan.store_limit == 1 %}
+                            Single Store
+                            {% else %}
+                            Up to {{ plan.store_limit }} stores
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="text-muted">{{ plan.memory_limit }} RAM / {{ plan.cpu_limit }} CPU</span>
+                        </td>
+                        <td>
+                            {% if plan.is_active %}
+                            <span class="badge badge-active">Active</span>
+                            {% else %}
+                            <span class="badge badge-suspended">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('admin.pricing_plan_edit', plan_id=plan.id) }}" class="btn btn-secondary btn-sm">Edit</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+            <p>No Magento plans found.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card" style="margin-top: 24px; background: var(--bg-surface); border-color: var(--border-subtle);">
+    <div class="card-body" style="padding: 16px 20px;">
+        <p style="margin: 0; color: var(--text-tertiary); font-size: 0.9rem;">
+            <strong>Note:</strong> Price changes will not affect existing subscriptions until they renew.
+            If you need to sync pricing changes to Stripe, use the Stripe integration API.
+        </p>
+    </div>
+</div>
+{% endblock %}
