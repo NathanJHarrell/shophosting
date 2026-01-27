@@ -1,0 +1,445 @@
+{% extends "base.html" %}
+
+{% block title %}{{ staging.name }} - Staging - ShopHosting.io{% endblock %}
+
+{% block extra_css %}
+<style>
+    .staging-detail-page {
+        max-width: 900px;
+        margin: 0 auto;
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 24px;
+        font-size: 0.9rem;
+    }
+
+    .breadcrumb a {
+        color: var(--text-secondary);
+        text-decoration: none;
+    }
+
+    .breadcrumb a:hover {
+        color: var(--accent-blue);
+    }
+
+    .breadcrumb-separator {
+        color: var(--text-tertiary);
+    }
+
+    .breadcrumb-current {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 32px;
+    }
+
+    .page-title {
+        font-size: 2rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--text-primary);
+    }
+
+    .staging-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .staging-status.active {
+        background: var(--success-muted);
+        color: var(--accent-green);
+    }
+
+    .staging-status.creating {
+        background: var(--warning-muted);
+        color: var(--accent-yellow);
+    }
+
+    .staging-status.syncing {
+        background: var(--info-muted);
+        color: var(--accent-blue);
+    }
+
+    .staging-status.failed {
+        background: var(--error-muted);
+        color: var(--accent-red);
+    }
+
+    .info-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        margin-bottom: 24px;
+        overflow: hidden;
+    }
+
+    .info-card-header {
+        padding: 20px 28px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .info-card-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .info-card-body {
+        padding: 8px 0;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 28px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .info-row:last-child {
+        border-bottom: none;
+    }
+
+    .info-label {
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+
+    .info-value {
+        color: var(--text-primary);
+        font-weight: 500;
+    }
+
+    .info-value a {
+        color: var(--accent-blue);
+        text-decoration: none;
+    }
+
+    .info-value a:hover {
+        text-decoration: underline;
+    }
+
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        border-radius: var(--radius-md);
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        border: none;
+    }
+
+    .btn-primary {
+        background: var(--gradient-primary);
+        color: white;
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-glow);
+    }
+
+    .btn-secondary {
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
+    }
+
+    .btn-secondary:hover {
+        background: var(--bg-surface);
+    }
+
+    .btn-danger {
+        background: var(--error-muted);
+        color: var(--accent-red);
+    }
+
+    .btn-danger:hover {
+        background: rgba(255, 68, 68, 0.2);
+    }
+
+    .actions-row {
+        display: flex;
+        gap: 12px;
+        padding: 20px 28px;
+        background: var(--bg-surface);
+    }
+
+    .sync-history {
+        margin-top: 8px;
+    }
+
+    .sync-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 14px 28px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .sync-item:last-child {
+        border-bottom: none;
+    }
+
+    .sync-type {
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .sync-meta {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+
+    .sync-date {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+    }
+
+    .sync-status {
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .sync-status.completed {
+        background: var(--success-muted);
+        color: var(--accent-green);
+    }
+
+    .sync-status.running {
+        background: var(--info-muted);
+        color: var(--accent-blue);
+    }
+
+    .sync-status.failed {
+        background: var(--error-muted);
+        color: var(--accent-red);
+    }
+
+    .sync-status.pending {
+        background: var(--warning-muted);
+        color: var(--accent-yellow);
+    }
+
+    .empty-history {
+        padding: 40px 28px;
+        text-align: center;
+        color: var(--text-tertiary);
+    }
+
+    .warning-box {
+        background: var(--warning-muted);
+        border: 1px solid rgba(255, 184, 0, 0.3);
+        border-radius: var(--radius-md);
+        padding: 16px 20px;
+        margin-bottom: 24px;
+        color: var(--text-primary);
+        font-size: 0.9rem;
+    }
+
+    .warning-box strong {
+        color: var(--accent-yellow);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="staging-detail-page">
+    <div class="breadcrumb">
+        <a href="{{ url_for('dashboard') }}">Dashboard</a>
+        <span class="breadcrumb-separator">/</span>
+        <a href="{{ url_for('staging_list') }}">Staging</a>
+        <span class="breadcrumb-separator">/</span>
+        <span class="breadcrumb-current">{{ staging.name }}</span>
+    </div>
+
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">{{ staging.name }}</h1>
+        </div>
+        <span class="staging-status {{ staging.status }}">
+            {% if staging.status == 'active' %}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+            {% elif staging.status == 'creating' %}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+            {% elif staging.status == 'syncing' %}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
+            {% else %}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+            {% endif %}
+            {{ staging.status|capitalize }}
+        </span>
+    </div>
+
+    {% if staging.status == 'active' %}
+    <div class="warning-box">
+        <strong>Important:</strong> Pushing to production will overwrite your live site's data.
+        Always backup your production site before pushing changes.
+    </div>
+    {% endif %}
+
+    <div class="info-card">
+        <div class="info-card-header">
+            <h2 class="info-card-title">Staging Details</h2>
+        </div>
+        <div class="info-card-body">
+            <div class="info-row">
+                <span class="info-label">Staging URL</span>
+                <span class="info-value">
+                    <a href="https://{{ staging.staging_domain }}" target="_blank">
+                        {{ staging.staging_domain }}
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;">
+                            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
+                        </svg>
+                    </a>
+                </span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Production URL</span>
+                <span class="info-value">
+                    <a href="https://{{ customer.domain }}" target="_blank">{{ customer.domain }}</a>
+                </span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Platform</span>
+                <span class="info-value">{{ customer.platform|capitalize }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Created</span>
+                <span class="info-value">{{ staging.created_at.strftime('%B %d, %Y at %I:%M %p') }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Cloned From Production</span>
+                <span class="info-value">
+                    {% if staging.source_snapshot_date %}
+                        {{ staging.source_snapshot_date.strftime('%B %d, %Y at %I:%M %p') }}
+                    {% else %}
+                        Unknown
+                    {% endif %}
+                </span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Last Push to Production</span>
+                <span class="info-value">
+                    {% if staging.last_push_date %}
+                        {{ staging.last_push_date.strftime('%B %d, %Y at %I:%M %p') }}
+                    {% else %}
+                        Never
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+
+        {% if staging.status == 'active' %}
+        <div class="actions-row">
+            <form method="POST" action="{{ url_for('staging_push', staging_id=staging.id) }}"
+                  onsubmit="return confirm('Are you sure you want to push FILES to production? This will overwrite production files.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="sync_type" value="files">
+                <button type="submit" class="btn btn-secondary">
+                    Push Files Only
+                </button>
+            </form>
+            <form method="POST" action="{{ url_for('staging_push', staging_id=staging.id) }}"
+                  onsubmit="return confirm('Are you sure you want to push DATABASE to production? This will overwrite production content.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="sync_type" value="db">
+                <button type="submit" class="btn btn-secondary">
+                    Push Database Only
+                </button>
+            </form>
+            <form method="POST" action="{{ url_for('staging_push', staging_id=staging.id) }}"
+                  onsubmit="return confirm('Are you sure you want to push EVERYTHING to production? This will overwrite both files and database.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="sync_type" value="all">
+                <button type="submit" class="btn btn-primary">
+                    Push Everything
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="info-card">
+        <div class="info-card-header">
+            <h2 class="info-card-title">Sync History</h2>
+        </div>
+        <div class="sync-history">
+            {% if sync_history %}
+                {% for sync in sync_history %}
+                <div class="sync-item">
+                    <span class="sync-type">
+                        {% if sync.sync_type == 'create' %}
+                            Created from production
+                        {% elif sync.sync_type == 'push_files' %}
+                            Pushed files to production
+                        {% elif sync.sync_type == 'push_db' %}
+                            Pushed database to production
+                        {% elif sync.sync_type == 'push_all' %}
+                            Pushed everything to production
+                        {% else %}
+                            {{ sync.sync_type }}
+                        {% endif %}
+                    </span>
+                    <div class="sync-meta">
+                        <span class="sync-date">{{ sync.created_at.strftime('%b %d, %Y %I:%M %p') }}</span>
+                        <span class="sync-status {{ sync.status }}">{{ sync.status|capitalize }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-history">
+                    No sync history yet
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; margin-top: 24px;">
+        <a href="{{ url_for('staging_list') }}" class="btn btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+            Back to Staging
+        </a>
+
+        <form method="POST" action="{{ url_for('staging_delete', staging_id=staging.id) }}"
+              onsubmit="return confirm('Are you sure you want to delete this staging environment? This cannot be undone.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                </svg>
+                Delete Staging Environment
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

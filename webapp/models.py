@@ -119,7 +119,7 @@ class Customer:
                  domain=None, platform=None, status='pending', web_port=None,
                  db_name=None, db_user=None, db_password=None,
                  admin_user=None, admin_password=None, error_message=None,
-                 stripe_customer_id=None, plan_id=None,
+                 stripe_customer_id=None, plan_id=None, staging_count=None,
                  created_at=None, updated_at=None):
         self.id = id
         self.email = email
@@ -137,6 +137,7 @@ class Customer:
         self.error_message = error_message
         self.stripe_customer_id = stripe_customer_id
         self.plan_id = plan_id
+        self.staging_count = staging_count or 0
         self.created_at = created_at or datetime.now()
         self.updated_at = updated_at or datetime.now()
 
@@ -1381,3 +1382,383 @@ class TicketAttachment:
 
     def __repr__(self):
         return f"<TicketAttachment {self.id}: {self.original_filename}>"
+
+
+# =============================================================================
+# Staging Port Manager
+# =============================================================================
+
+class StagingPortManager:
+    """Manages port allocation for staging environment containers"""
+    # Using 10001-10100 to avoid conflict with phpMyAdmin ports (9001-9100)
+    PORT_RANGE_START = 10001
+    PORT_RANGE_END = 10100
+
+    @staticmethod
+    def get_next_available_port():
+        """Get the next available port for a new staging environment"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            # Get all currently used staging ports
+            cursor.execute("SELECT web_port FROM staging_environments WHERE web_port IS NOT NULL AND status != 'deleted'")
+            used_ports = {row[0] for row in cursor.fetchall()}
+
+            # Find first available port in range
+            for port in range(StagingPortManager.PORT_RANGE_START, StagingPortManager.PORT_RANGE_END + 1):
+                if port not in used_ports:
+                    return port
+
+            return None  # No ports available
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def is_port_available(port):
+        """Check if a specific port is available"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("SELECT COUNT(*) FROM staging_environments WHERE web_port = %s AND status != 'deleted'", (port,))
+            count = cursor.fetchone()[0]
+            return count == 0
+        finally:
+            cursor.close()
+            conn.close()
+
+
+# =============================================================================
+# Staging Environment Model
+# =============================================================================
+
+class StagingEnvironment:
+    """Staging environment model for customer staging sites"""
+
+    MAX_STAGING_PER_CUSTOMER = 3
+    STATUSES = ['creating', 'active', 'syncing', 'failed', 'deleted']
+
+    def __init__(self, id=None, customer_id=None, name=None, staging_domain=None,
+                 status='creating', web_port=None, db_name=None, db_user=None,
+                 db_password=None, source_snapshot_date=None, last_push_date=None,
+                 created_at=None, updated_at=None):
+        self.id = id
+        self.customer_id = customer_id
+        self.name = name
+        self.staging_domain = staging_domain
+        self.status = status
+        self.web_port = web_port
+        self.db_name = db_name
+        self.db_user = db_user
+        self.db_password = db_password
+        self.source_snapshot_date = source_snapshot_date
+        self.last_push_date = last_push_date
+        self.created_at = created_at or datetime.now()
+        self.updated_at = updated_at or datetime.now()
+
+    # =========================================================================
+    # Database Operations
+    # =========================================================================
+
+    def save(self):
+        """Save staging environment to database (insert or update)"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            if self.id is None:
+                cursor.execute("""
+                    INSERT INTO staging_environments
+                    (customer_id, name, staging_domain, status, web_port,
+                     db_name, db_user, db_password, source_snapshot_date,
+                     created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    self.customer_id, self.name, self.staging_domain, self.status,
+                    self.web_port, self.db_name, self.db_user, self.db_password,
+                    self.source_snapshot_date, self.created_at, self.updated_at
+                ))
+                self.id = cursor.lastrowid
+
+                # Update customer's staging count
+                cursor.execute("""
+                    UPDATE customers SET staging_count = (
+                        SELECT COUNT(*) FROM staging_environments
+                        WHERE customer_id = %s AND status != 'deleted'
+                    ) WHERE id = %s
+                """, (self.customer_id, self.customer_id))
+            else:
+                cursor.execute("""
+                    UPDATE staging_environments SET
+                        name = %s, staging_domain = %s, status = %s, web_port = %s,
+                        db_name = %s, db_user = %s, db_password = %s,
+                        source_snapshot_date = %s, last_push_date = %s, updated_at = %s
+                    WHERE id = %s
+                """, (
+                    self.name, self.staging_domain, self.status, self.web_port,
+                    self.db_name, self.db_user, self.db_password,
+                    self.source_snapshot_date, self.last_push_date,
+                    datetime.now(), self.id
+                ))
+
+            conn.commit()
+            return self
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    def update_status(self, status):
+        """Update staging environment status"""
+        self.status = status
+        self.updated_at = datetime.now()
+        return self.save()
+
+    def mark_deleted(self):
+        """Mark staging environment as deleted"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            self.status = 'deleted'
+            cursor.execute("""
+                UPDATE staging_environments SET status = 'deleted', updated_at = %s
+                WHERE id = %s
+            """, (datetime.now(), self.id))
+
+            # Update customer's staging count
+            cursor.execute("""
+                UPDATE customers SET staging_count = (
+                    SELECT COUNT(*) FROM staging_environments
+                    WHERE customer_id = %s AND status != 'deleted'
+                ) WHERE id = %s
+            """, (self.customer_id, self.customer_id))
+
+            conn.commit()
+            return True
+        finally:
+            cursor.close()
+            conn.close()
+
+    # =========================================================================
+    # Static Query Methods
+    # =========================================================================
+
+    @staticmethod
+    def get_by_id(staging_id):
+        """Get staging environment by ID"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("SELECT * FROM staging_environments WHERE id = %s", (staging_id,))
+            row = cursor.fetchone()
+
+            if row:
+                return StagingEnvironment(**row)
+            return None
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_customer(customer_id, include_deleted=False):
+        """Get all staging environments for a customer"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            if include_deleted:
+                cursor.execute("""
+                    SELECT * FROM staging_environments
+                    WHERE customer_id = %s
+                    ORDER BY created_at DESC
+                """, (customer_id,))
+            else:
+                cursor.execute("""
+                    SELECT * FROM staging_environments
+                    WHERE customer_id = %s AND status != 'deleted'
+                    ORDER BY created_at DESC
+                """, (customer_id,))
+
+            rows = cursor.fetchall()
+            return [StagingEnvironment(**row) for row in rows]
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_domain(staging_domain):
+        """Get staging environment by domain"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("SELECT * FROM staging_environments WHERE staging_domain = %s", (staging_domain,))
+            row = cursor.fetchone()
+
+            if row:
+                return StagingEnvironment(**row)
+            return None
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def count_by_customer(customer_id):
+        """Count active staging environments for a customer"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) FROM staging_environments
+                WHERE customer_id = %s AND status != 'deleted'
+            """, (customer_id,))
+            return cursor.fetchone()[0]
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def can_create_staging(customer_id):
+        """Check if customer can create another staging environment"""
+        count = StagingEnvironment.count_by_customer(customer_id)
+        return count < StagingEnvironment.MAX_STAGING_PER_CUSTOMER
+
+    @staticmethod
+    def get_all(include_deleted=False, page=1, per_page=20):
+        """Get all staging environments (for admin)"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            where = "1=1" if include_deleted else "se.status != 'deleted'"
+            offset = (page - 1) * per_page
+
+            # Get count
+            cursor.execute(f"SELECT COUNT(*) as count FROM staging_environments se WHERE {where}")
+            total = cursor.fetchone()['count']
+
+            # Get paginated results with customer info
+            cursor.execute(f"""
+                SELECT se.*, c.email as customer_email, c.domain as production_domain,
+                       c.company_name as customer_company, c.platform
+                FROM staging_environments se
+                JOIN customers c ON se.customer_id = c.id
+                WHERE {where}
+                ORDER BY se.created_at DESC
+                LIMIT %s OFFSET %s
+            """, (per_page, offset))
+
+            rows = cursor.fetchall()
+            return rows, total
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    # =========================================================================
+    # Sync History Methods
+    # =========================================================================
+
+    def log_sync(self, sync_type, status='pending'):
+        """Log a sync operation"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO staging_sync_history
+                (staging_id, sync_type, status, started_at, created_at)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (self.id, sync_type, status, datetime.now(), datetime.now()))
+
+            conn.commit()
+            return cursor.lastrowid
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_sync_status(sync_id, status, error_message=None):
+        """Update sync operation status"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            if status in ['completed', 'failed']:
+                cursor.execute("""
+                    UPDATE staging_sync_history
+                    SET status = %s, completed_at = %s, error_message = %s
+                    WHERE id = %s
+                """, (status, datetime.now(), error_message, sync_id))
+            else:
+                cursor.execute("""
+                    UPDATE staging_sync_history SET status = %s WHERE id = %s
+                """, (status, sync_id))
+
+            conn.commit()
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    def get_sync_history(self, limit=10):
+        """Get sync history for this staging environment"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT * FROM staging_sync_history
+                WHERE staging_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+            """, (self.id, limit))
+
+            return cursor.fetchall()
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    # =========================================================================
+    # Utility Methods
+    # =========================================================================
+
+    @staticmethod
+    def generate_staging_domain(customer_id, staging_number):
+        """Generate staging domain for a customer"""
+        return f"cust{customer_id}-staging-{staging_number}.shophosting.io"
+
+    def get_staging_url(self):
+        """Get full staging site URL"""
+        return f"https://{self.staging_domain}"
+
+    def to_dict(self):
+        """Convert to dictionary"""
+        return {
+            'id': self.id,
+            'customer_id': self.customer_id,
+            'name': self.name,
+            'staging_domain': self.staging_domain,
+            'staging_url': self.get_staging_url(),
+            'status': self.status,
+            'web_port': self.web_port,
+            'source_snapshot_date': self.source_snapshot_date.isoformat() if self.source_snapshot_date else None,
+            'last_push_date': self.last_push_date.isoformat() if self.last_push_date else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+    def __repr__(self):
+        return f"<StagingEnvironment {self.id}: {self.staging_domain}>"

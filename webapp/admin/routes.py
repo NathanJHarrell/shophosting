@@ -21,6 +21,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import Customer, PortManager, get_db_connection, PricingPlan, Subscription, Invoice
 from models import Ticket, TicketMessage, TicketAttachment, TicketCategory
+from models import StagingEnvironment, StagingPortManager
 
 logger = logging.getLogger(__name__)
 
@@ -517,6 +518,165 @@ def system_backup_restore(snapshot_id):
         return {'success': True, 'message': f'Restore started for snapshot {snapshot_id}'}
     except Exception as e:
         return {'success': False, 'message': str(e)}, 500
+
+
+# =============================================================================
+# Staging Environments Management
+# =============================================================================
+
+@admin_bp.route('/staging')
+@admin_required
+def staging_list():
+    """List all staging environments"""
+    admin = get_current_admin()
+
+    page = request.args.get('page', 1, type=int)
+    status_filter = request.args.get('status', None)
+    customer_filter = request.args.get('customer_id', None, type=int)
+
+    staging_envs, total = StagingEnvironment.get_all(
+        include_deleted=request.args.get('show_deleted') == '1',
+        page=page,
+        per_page=20
+    )
+
+    # Get staging statistics
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_count,
+                SUM(CASE WHEN status = 'creating' THEN 1 ELSE 0 END) as creating_count,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count
+            FROM staging_environments
+            WHERE status != 'deleted'
+        """)
+        stats = cursor.fetchone()
+    finally:
+        cursor.close()
+        conn.close()
+
+    # Port usage for staging
+    staging_port_usage = {
+        'total': StagingPortManager.PORT_RANGE_END - StagingPortManager.PORT_RANGE_START + 1,
+        'used': stats['total'] if stats else 0
+    }
+    staging_port_usage['available'] = staging_port_usage['total'] - staging_port_usage['used']
+
+    return render_template('admin/staging.html',
+                           admin=admin,
+                           staging_envs=staging_envs,
+                           total=total,
+                           page=page,
+                           stats=stats,
+                           staging_port_usage=staging_port_usage)
+
+
+@admin_bp.route('/staging/<int:staging_id>')
+@admin_required
+def staging_detail(staging_id):
+    """View staging environment details"""
+    admin = get_current_admin()
+
+    staging = StagingEnvironment.get_by_id(staging_id)
+    if not staging:
+        flash('Staging environment not found.', 'error')
+        return redirect(url_for('admin.staging_list'))
+
+    customer = Customer.get_by_id(staging.customer_id)
+    sync_history = staging.get_sync_history(limit=20)
+
+    return render_template('admin/staging_detail.html',
+                           admin=admin,
+                           staging=staging,
+                           customer=customer,
+                           sync_history=sync_history)
+
+
+@admin_bp.route('/staging/<int:staging_id>/delete', methods=['POST'])
+@admin_required
+def staging_delete(staging_id):
+    """Delete a staging environment (admin)"""
+    admin = get_current_admin()
+
+    staging = StagingEnvironment.get_by_id(staging_id)
+    if not staging:
+        flash('Staging environment not found.', 'error')
+        return redirect(url_for('admin.staging_list'))
+
+    try:
+        from redis import Redis
+        from rq import Queue
+
+        redis_host = os.getenv('REDIS_HOST', 'localhost')
+        redis_conn = Redis(host=redis_host, port=6379)
+        queue = Queue('staging', connection=redis_conn)
+
+        sys.path.insert(0, '/opt/shophosting/provisioning')
+        from staging_worker import delete_staging_job
+        job = queue.enqueue(delete_staging_job, staging_id,
+                           job_timeout=300, result_ttl=3600)
+
+        log_admin_action(admin.id, 'delete_staging', 'staging_environment', staging_id,
+                        f'Deleted staging {staging.staging_domain}', request.remote_addr)
+
+        flash(f'Staging environment {staging.staging_domain} is being deleted.', 'success')
+        logger.info(f"Admin {admin.id} deleted staging {staging_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to delete staging: {e}")
+        flash('Failed to delete staging environment.', 'error')
+
+    return redirect(url_for('admin.staging_list'))
+
+
+@admin_bp.route('/customer/<int:customer_id>/staging/create', methods=['POST'])
+@admin_required
+def staging_create_for_customer(customer_id):
+    """Create staging environment for a customer (admin)"""
+    admin = get_current_admin()
+
+    customer = Customer.get_by_id(customer_id)
+    if not customer:
+        flash('Customer not found.', 'error')
+        return redirect(url_for('admin.customers'))
+
+    if customer.status != 'active':
+        flash('Customer site must be active to create staging.', 'error')
+        return redirect(url_for('admin.customer_detail', customer_id=customer_id))
+
+    if not StagingEnvironment.can_create_staging(customer_id):
+        flash(f'Customer already has maximum staging environments.', 'error')
+        return redirect(url_for('admin.customer_detail', customer_id=customer_id))
+
+    staging_name = request.form.get('staging_name', '').strip() or None
+
+    try:
+        from redis import Redis
+        from rq import Queue
+
+        redis_host = os.getenv('REDIS_HOST', 'localhost')
+        redis_conn = Redis(host=redis_host, port=6379)
+        queue = Queue('staging', connection=redis_conn)
+
+        sys.path.insert(0, '/opt/shophosting/provisioning')
+        from staging_worker import create_staging_job
+        job = queue.enqueue(create_staging_job, customer_id, staging_name,
+                           job_timeout=600, result_ttl=3600)
+
+        log_admin_action(admin.id, 'create_staging', 'customer', customer_id,
+                        f'Created staging for customer {customer.email}', request.remote_addr)
+
+        flash('Staging environment is being created.', 'success')
+        logger.info(f"Admin {admin.id} created staging for customer {customer_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to create staging: {e}")
+        flash('Failed to create staging environment.', 'error')
+
+    return redirect(url_for('admin.customer_detail', customer_id=customer_id))
 
 
 # =============================================================================
