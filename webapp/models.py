@@ -1762,3 +1762,135 @@ class StagingEnvironment:
 
     def __repr__(self):
         return f"<StagingEnvironment {self.id}: {self.staging_domain}>"
+
+
+# =============================================================================
+# Customer Backup Job Model
+# =============================================================================
+
+class CustomerBackupJob:
+    """Tracks customer backup and restore operations"""
+
+    def __init__(self, id=None, customer_id=None, job_type=None, backup_type=None,
+                 snapshot_id=None, status='pending', error_message=None,
+                 created_at=None, completed_at=None):
+        self.id = id
+        self.customer_id = customer_id
+        self.job_type = job_type  # 'backup' or 'restore'
+        self.backup_type = backup_type  # 'db', 'files', or 'both'
+        self.snapshot_id = snapshot_id
+        self.status = status
+        self.error_message = error_message
+        self.created_at = created_at or datetime.now()
+        self.completed_at = completed_at
+
+    def save(self):
+        """Save job to database"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            if self.id is None:
+                cursor.execute("""
+                    INSERT INTO customer_backup_jobs
+                    (customer_id, job_type, backup_type, snapshot_id, status,
+                     error_message, created_at, completed_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    self.customer_id, self.job_type, self.backup_type,
+                    self.snapshot_id, self.status, self.error_message,
+                    self.created_at, self.completed_at
+                ))
+                self.id = cursor.lastrowid
+            else:
+                cursor.execute("""
+                    UPDATE customer_backup_jobs SET
+                        status = %s, error_message = %s, completed_at = %s,
+                        snapshot_id = %s
+                    WHERE id = %s
+                """, (self.status, self.error_message, self.completed_at,
+                      self.snapshot_id, self.id))
+
+            conn.commit()
+            return self
+        finally:
+            cursor.close()
+            conn.close()
+
+    def update_status(self, status, error_message=None):
+        """Update job status"""
+        self.status = status
+        self.error_message = error_message
+        if status in ('completed', 'failed'):
+            self.completed_at = datetime.now()
+        self.save()
+
+    @staticmethod
+    def get_by_id(job_id):
+        """Get job by ID"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("SELECT * FROM customer_backup_jobs WHERE id = %s", (job_id,))
+            row = cursor.fetchone()
+            if row:
+                return CustomerBackupJob(**row)
+            return None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_active_job(customer_id):
+        """Get active (pending/running) job for customer"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT * FROM customer_backup_jobs
+                WHERE customer_id = %s AND status IN ('pending', 'running')
+                ORDER BY created_at DESC LIMIT 1
+            """, (customer_id,))
+            row = cursor.fetchone()
+            if row:
+                return CustomerBackupJob(**row)
+            return None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_recent_jobs(customer_id, limit=10):
+        """Get recent jobs for customer"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT * FROM customer_backup_jobs
+                WHERE customer_id = %s
+                ORDER BY created_at DESC LIMIT %s
+            """, (customer_id, limit))
+            return [CustomerBackupJob(**row) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+            conn.close()
+
+    def to_dict(self):
+        """Convert to dictionary"""
+        return {
+            'id': self.id,
+            'customer_id': self.customer_id,
+            'job_type': self.job_type,
+            'backup_type': self.backup_type,
+            'snapshot_id': self.snapshot_id,
+            'status': self.status,
+            'error_message': self.error_message,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None
+        }
+
+    def __repr__(self):
+        return f"<CustomerBackupJob {self.id}: {self.job_type} - {self.status}>"
