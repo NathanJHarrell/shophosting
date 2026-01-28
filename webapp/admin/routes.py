@@ -26,6 +26,7 @@ from models import Customer, PortManager, get_db_connection, PricingPlan, Subscr
 from models import Ticket, TicketMessage, TicketAttachment, TicketCategory, ConsultationAppointment
 from models import Server, ServerSelector
 from models import MonitoringCheck, CustomerMonitoringStatus, MonitoringAlert
+from models import ResourceUsage, ResourceAlert
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +238,31 @@ def customer_detail(customer_id):
                            audit_logs=audit_logs,
                            provisioning_logs=provisioning_logs,
                            in_progress_job=in_progress_job)
+
+
+@admin_bp.route('/customers/<int:customer_id>/resources')
+@admin_required
+def customer_resources(customer_id):
+    """View detailed resource usage for a customer"""
+    admin = get_current_admin()
+    customer = Customer.get_by_id(customer_id)
+
+    if not customer:
+        flash('Customer not found', 'error')
+        return redirect(url_for('admin.customers'))
+
+    usage = customer.get_resource_usage()
+    history = ResourceUsage.get_usage_history(customer_id, days=30)
+    alerts = ResourceAlert.get_recent_for_customer(customer_id, limit=20)
+    plan = PricingPlan.get_by_id(customer.plan_id) if customer.plan_id else None
+
+    return render_template('admin/customer_resources.html',
+                           admin=admin,
+                           customer=customer,
+                           usage=usage,
+                           history=history,
+                           alerts=alerts,
+                           plan=plan)
 
 
 @admin_bp.route('/customers/<int:customer_id>/suspend', methods=['POST'])
