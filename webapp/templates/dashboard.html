@@ -968,4 +968,152 @@
     setInterval(checkStatus, 5000);
 </script>
 {% endif %}
+
+{% if customer.status == 'active' and credentials %}
+<script nonce="{{ csp_nonce() }}">
+    // Site Health Functions
+    let restartCooldown = false;
+    let logsExpanded = false;
+
+    // Fetch container status
+    async function fetchContainerStatus() {
+        try {
+            const response = await fetch('/api/container/status');
+            const data = await response.json();
+
+            const statusEl = document.getElementById('container-status');
+            const uptimeEl = document.getElementById('container-uptime');
+            const statusText = statusEl.querySelector('.status-text');
+
+            // Update status badge
+            statusEl.className = 'status-badge ' + (data.running ? 'running' :
+                data.status === 'restarting' ? 'restarting' :
+                data.status === 'exited' ? 'stopped' : 'unknown');
+
+            statusText.textContent = data.running ? 'Running' :
+                data.status === 'restarting' ? 'Restarting...' :
+                data.status === 'exited' ? 'Stopped' : 'Unknown';
+
+            // Update uptime
+            if (data.uptime) {
+                uptimeEl.textContent = 'Uptime: ' + data.uptime;
+            } else {
+                uptimeEl.textContent = '';
+            }
+
+        } catch (error) {
+            console.error('Failed to fetch status:', error);
+            document.getElementById('container-status').className = 'status-badge unknown';
+            document.querySelector('.status-text').textContent = 'Error';
+        }
+    }
+
+    // Restart container
+    async function restartContainer() {
+        if (restartCooldown) {
+            alert('Please wait 5 minutes between restarts.');
+            return;
+        }
+
+        if (!confirm('Are you sure you want to restart your store? It will be unavailable for ~30 seconds.')) {
+            return;
+        }
+
+        const btn = document.getElementById('restart-btn');
+        btn.disabled = true;
+        btn.classList.add('loading');
+        const btnText = btn.querySelector('span:not(.help-icon)');
+        btnText.textContent = 'Restarting...';
+
+        try {
+            const response = await fetch('/api/container/restart', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                alert(data.message);
+                restartCooldown = true;
+                setTimeout(() => {
+                    restartCooldown = false;
+                    btn.disabled = false;
+                    btnText.textContent = 'Restart Store';
+                }, 300000); // 5 minutes
+
+                // Poll status more frequently after restart
+                setTimeout(fetchContainerStatus, 5000);
+                setTimeout(fetchContainerStatus, 15000);
+                setTimeout(fetchContainerStatus, 30000);
+            } else {
+                alert('Restart failed: ' + data.message);
+                btn.disabled = false;
+                btnText.textContent = 'Restart Store';
+            }
+        } catch (error) {
+            alert('Failed to restart: ' + error.message);
+            btn.disabled = false;
+            btnText.textContent = 'Restart Store';
+        }
+
+        btn.classList.remove('loading');
+    }
+
+    // Toggle logs visibility
+    function toggleLogs() {
+        const content = document.getElementById('logs-content');
+        const toggle = document.getElementById('logs-toggle');
+        logsExpanded = !logsExpanded;
+
+        content.classList.toggle('expanded', logsExpanded);
+        toggle.classList.toggle('expanded', logsExpanded);
+
+        if (logsExpanded) {
+            refreshLogs();
+        }
+    }
+
+    // Fetch logs - uses safe DOM methods to prevent XSS
+    async function refreshLogs() {
+        const logsEl = document.getElementById('logs-list');
+        logsEl.textContent = 'Loading logs...';
+
+        try {
+            const response = await fetch('/api/container/logs?lines=50');
+            const data = await response.json();
+
+            // Clear existing content
+            logsEl.textContent = '';
+
+            if (data.logs && data.logs.length > 0) {
+                // Use safe DOM methods instead of innerHTML
+                data.logs.forEach(line => {
+                    const lineDiv = document.createElement('div');
+                    lineDiv.className = 'log-line';
+                    lineDiv.textContent = line;
+                    logsEl.appendChild(lineDiv);
+                });
+            } else {
+                const emptyDiv = document.createElement('div');
+                emptyDiv.className = 'logs-empty';
+                emptyDiv.textContent = 'No recent errors - your site is running smoothly!';
+                logsEl.appendChild(emptyDiv);
+            }
+        } catch (error) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'log-line';
+            errorDiv.style.color = 'var(--error)';
+            errorDiv.textContent = 'Failed to load logs: ' + error.message;
+            logsEl.textContent = '';
+            logsEl.appendChild(errorDiv);
+        }
+    }
+
+    // Initialize
+    fetchContainerStatus();
+    setInterval(fetchContainerStatus, 10000); // Poll every 10 seconds
+</script>
+{% endif %}
 {% endblock %}
