@@ -5,18 +5,7 @@
 
 set -euo pipefail
 
-# Configuration
-RESTIC_REPOSITORY="sftp:sh-backup@15.204.249.219:/home/sh-backup/system"
-RESTIC_PASSWORD_FILE="/opt/shophosting/.system-restic-password"
-BACKUP_LOG="/var/log/shophosting-system-backup.log"
-SYSTEM_PATH="/opt/shophosting"
-NGINX_PATH="/etc/nginx/sites-available"
-RETENTION_DAYS=7
-
-# Custom tag from command line
-CUSTOM_TAG="${1:-}"
-
-# Load environment
+# Load environment first (for DB credentials)
 load_env() {
     if [ -f /opt/shophosting/.env ]; then
         while IFS= read -r line || [ -n "$line" ]; do
@@ -32,8 +21,25 @@ load_env() {
 
 load_env
 
+# Configuration - set AFTER load_env to avoid being overwritten
+RESTIC_REPOSITORY="sftp:sh-backup@15.204.249.219:/home/sh-backup/system"
+RESTIC_PASSWORD_FILE="/opt/shophosting/.system-restic-password"
+BACKUP_LOG="/var/log/shophosting-system-backup.log"
+SYSTEM_PATH="/opt/shophosting"
+NGINX_PATH="/etc/nginx/sites-available"
+RETENTION_DAYS=7
+
 export RESTIC_REPOSITORY
 export RESTIC_PASSWORD_FILE
+
+# Custom tag from command line
+# Usage: ./system-backup.sh [tag] or ./system-backup.sh --tag tag
+CUSTOM_TAG=""
+if [ "${1:-}" = "--tag" ] && [ -n "${2:-}" ]; then
+    CUSTOM_TAG="$2"
+elif [ -n "${1:-}" ] && [ "${1:0:2}" != "--" ]; then
+    CUSTOM_TAG="$1"
+fi
 export HOME=/root
 export XDG_CACHE_HOME=/root/.cache
 
@@ -57,11 +63,19 @@ fi
 
 # Create database dump
 DB_DUMP="$TEMP_DIR/shophosting_db.sql"
-mysqldump -u root -p"${DB_ROOT_PASSWORD:-rootpassword}" --single-transaction \
-    --databases shophosting_db > "$DB_DUMP" 2>/dev/null || \
-mysqldump -u root -prootpassword --single-transaction \
-    --databases shophosting_db > "$DB_DUMP" 2>/dev/null || \
-    log "Warning: Could not backup database"
+if [ -n "${DB_PASSWORD:-}" ]; then
+    mysqldump -h "${DB_HOST:-localhost}" \
+        -u "${DB_USER:-shophosting_app}" \
+        -p"${DB_PASSWORD}" \
+        --single-transaction \
+        --routines \
+        --triggers \
+        shophosting_db > "$DB_DUMP" 2>/dev/null && \
+        log "Database dump complete: $(du -h "$DB_DUMP" | cut -f1)" || \
+        log "Warning: Could not backup database"
+else
+    log "Warning: DB_PASSWORD not set, skipping database dump"
+fi
 
 # Build tags
 TAGS=("system" "app")

@@ -125,12 +125,17 @@ class ProvisioningLogHandler(logging.Handler):
 class ProvisioningWorker:
     """Handles provisioning of new customer containers with Nginx reverse proxy"""
 
-    def __init__(self, base_path=None):
+    def __init__(self, base_path=None, server_id=None):
         # Use environment variable for base path, with fallback
         if base_path is None:
             base_path = os.getenv('CUSTOMERS_BASE_PATH', '/var/customers')
         self.base_path = Path(base_path)
         self.base_path.mkdir(parents=True, exist_ok=True)
+
+        # Server ID for multi-server support
+        self.server_id = server_id or os.getenv('SERVER_ID')
+        if self.server_id:
+            self.server_id = int(self.server_id)
 
         # Database configuration from environment variables
         self.db_config = {
@@ -146,6 +151,29 @@ class ProvisioningWorker:
 
         self.current_job_id = None
         self.current_customer_id = None
+
+        # Send initial heartbeat if server_id is set
+        if self.server_id:
+            self.update_server_heartbeat()
+
+    def update_server_heartbeat(self):
+        """Update server heartbeat timestamp in database"""
+        if not self.server_id:
+            return
+
+        try:
+            conn = self.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE servers SET last_heartbeat = NOW() WHERE id = %s",
+                (self.server_id,)
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+            logger.debug(f"Updated heartbeat for server {self.server_id}")
+        except Exception as e:
+            logger.warning(f"Failed to update server heartbeat: {e}")
     
     def get_db_connection(self):
         """Get database connection"""
@@ -220,28 +248,47 @@ class ProvisioningWorker:
         try:
             conn = self.get_db_connection()
             cursor = conn.cursor()
-            
-            cursor.execute("""
-                UPDATE customers 
-                SET db_name = %s, db_user = %s, db_password = %s, 
-                    admin_user = %s, admin_password = %s, web_port = %s
-                WHERE id = %s
-            """, (
-                credentials['db_name'],
-                credentials['db_user'],
-                credentials['db_password'],
-                credentials['admin_user'],
-                credentials['admin_password'],
-                credentials['web_port'],
-                customer_id
-            ))
-            
+
+            # Include server_id if present in credentials
+            server_id = credentials.get('server_id')
+            if server_id:
+                cursor.execute("""
+                    UPDATE customers
+                    SET db_name = %s, db_user = %s, db_password = %s,
+                        admin_user = %s, admin_password = %s, web_port = %s, server_id = %s
+                    WHERE id = %s
+                """, (
+                    credentials['db_name'],
+                    credentials['db_user'],
+                    credentials['db_password'],
+                    credentials['admin_user'],
+                    credentials['admin_password'],
+                    credentials['web_port'],
+                    server_id,
+                    customer_id
+                ))
+            else:
+                cursor.execute("""
+                    UPDATE customers
+                    SET db_name = %s, db_user = %s, db_password = %s,
+                        admin_user = %s, admin_password = %s, web_port = %s
+                    WHERE id = %s
+                """, (
+                    credentials['db_name'],
+                    credentials['db_user'],
+                    credentials['db_password'],
+                    credentials['admin_user'],
+                    credentials['admin_password'],
+                    credentials['web_port'],
+                    customer_id
+                ))
+
             conn.commit()
             cursor.close()
             conn.close()
-            
+
             logger.info(f"Saved credentials for customer {customer_id}")
-            
+
         except Exception as e:
             logger.error(f"Failed to save credentials: {e}")
     
@@ -887,6 +934,7 @@ class ProvisioningWorker:
                 'db_root_password': self.generate_password(),
                 'container_prefix': f"customer-{customer_id}",
                 'web_port': job_data['web_port'],
+                'server_id': job_data.get('server_id') or self.server_id,
                 'memory_limit': job_data.get('memory_limit', '1g'),
                 'cpu_limit': job_data.get('cpu_limit', '1.0')
             }
@@ -978,19 +1026,78 @@ def provision_customer_job(job_data):
     current_job = get_current_job()
     rq_job_id = current_job.id if current_job else None
 
-    worker = ProvisioningWorker()
+    # Get server_id from job data or environment
+    server_id = job_data.get('server_id') or os.getenv('SERVER_ID')
+
+    worker = ProvisioningWorker(server_id=server_id)
+
+    # Update heartbeat at start of job
+    worker.update_server_heartbeat()
+
     return worker.provision_customer(job_data, rq_job_id=rq_job_id)
+
+
+def start_heartbeat_thread(server_id, interval=30):
+    """Start a background thread that sends periodic heartbeats"""
+    import threading
+
+    def heartbeat_loop():
+        import mysql.connector
+        db_config = {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'user': os.getenv('DB_USER', 'shophosting_app'),
+            'password': os.getenv('DB_PASSWORD', ''),
+            'database': os.getenv('DB_NAME', 'shophosting_db')
+        }
+
+        while True:
+            try:
+                conn = mysql.connector.connect(**db_config)
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE servers SET last_heartbeat = NOW() WHERE id = %s",
+                    (server_id,)
+                )
+                conn.commit()
+                cursor.close()
+                conn.close()
+                logger.debug(f"Heartbeat sent for server {server_id}")
+            except Exception as e:
+                logger.warning(f"Heartbeat failed: {e}")
+
+            import time
+            time.sleep(interval)
+
+    thread = threading.Thread(target=heartbeat_loop, daemon=True)
+    thread.start()
+    logger.info(f"Started heartbeat thread for server {server_id} (interval: {interval}s)")
+    return thread
 
 
 if __name__ == '__main__':
     # Start the worker with configuration from environment variables
     redis_host = os.getenv('REDIS_HOST', 'localhost')
     redis_port = int(os.getenv('REDIS_PORT', 6379))
+    server_id = os.getenv('SERVER_ID')
 
     redis_conn = redis.Redis(host=redis_host, port=redis_port, db=0)
 
-    # Removed Connection context manager as it's no longer supported
-    # Listen to both provisioning and staging queues
-    worker = Worker(['provisioning', 'staging'], connection=redis_conn)
-    logger.info(f"ShopHosting.io Provisioning worker started (Redis: {redis_host}:{redis_port}, queues: provisioning, staging)")
+    # Build queue list based on server configuration
+    queues = ['staging']  # Always listen to staging queue
+
+    if server_id:
+        # Multi-server mode: listen to server-specific queue
+        server_queue = f"provisioning:server-{server_id}"
+        queues.insert(0, server_queue)
+        logger.info(f"Multi-server mode: Server ID {server_id}")
+
+        # Start heartbeat thread
+        start_heartbeat_thread(int(server_id))
+    else:
+        # Single-server mode: listen to default provisioning queue
+        queues.insert(0, 'provisioning')
+        logger.info("Single-server mode (no SERVER_ID set)")
+
+    worker = Worker(queues, connection=redis_conn)
+    logger.info(f"ShopHosting.io Provisioning worker started (Redis: {redis_host}:{redis_port}, queues: {', '.join(queues)})")
     worker.work()

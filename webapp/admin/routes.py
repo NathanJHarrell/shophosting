@@ -24,6 +24,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import Customer, PortManager, get_db_connection, PricingPlan, Subscription, Invoice
 from models import Ticket, TicketMessage, TicketAttachment, TicketCategory, ConsultationAppointment
+from models import Server, ServerSelector
 
 logger = logging.getLogger(__name__)
 
@@ -349,15 +350,26 @@ def customer_retry_provisioning(customer_id):
             'cpu_limit': os.getenv('DEFAULT_CPU_LIMIT', '1.0')
         }
 
-        job = queue.enqueue_customer(customer_data)
+        job, server = queue.enqueue_customer(customer_data)
 
-        # Record the job
+        # Update customer with server assignment
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE customers SET server_id = %s WHERE id = %s",
+            (server.id, customer_id)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # Record the job with server_id
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO provisioning_jobs (customer_id, job_id, status)
-            VALUES (%s, %s, 'queued')
-        """, (customer_id, job.id))
+            INSERT INTO provisioning_jobs (customer_id, job_id, status, server_id)
+            VALUES (%s, %s, 'queued', %s)
+        """, (customer_id, job.id, server.id))
         conn.commit()
         cursor.close()
         conn.close()
@@ -465,13 +477,15 @@ def system():
     port_usage = PortManager.get_port_usage()
     disk_usage = get_disk_usage()
     backup_status = get_backup_status()
+    server_stats = ServerSelector.get_server_stats()
 
     return render_template('admin/system.html',
                            admin=admin,
                            services=services,
                            port_usage=port_usage,
                            disk_usage=disk_usage,
-                           backup_status=backup_status)
+                           backup_status=backup_status,
+                           server_stats=server_stats)
 
 
 # =============================================================================
@@ -548,6 +562,185 @@ def system_backup_restore(snapshot_id):
         return {'success': True, 'message': f'Restore started for snapshot {snapshot_id}'}
     except Exception as e:
         return {'success': False, 'message': str(e)}, 500
+
+
+# =============================================================================
+# Server Management
+# =============================================================================
+
+@admin_bp.route('/servers')
+@admin_required
+def servers():
+    """List all servers"""
+    admin = get_current_admin()
+    servers_list = Server.get_all()
+    stats = ServerSelector.get_server_stats()
+
+    return render_template('admin/servers.html',
+                           admin=admin,
+                           servers=servers_list,
+                           stats=stats)
+
+
+@admin_bp.route('/servers/<int:server_id>')
+@admin_required
+def server_detail(server_id):
+    """Server detail page"""
+    admin = get_current_admin()
+    server = Server.get_by_id(server_id)
+
+    if not server:
+        flash('Server not found.', 'error')
+        return redirect(url_for('admin.servers'))
+
+    # Get customers on this server
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            SELECT id, email, company_name, domain, platform, status, web_port, created_at
+            FROM customers
+            WHERE server_id = %s
+            ORDER BY created_at DESC
+        """, (server_id,))
+        customers = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+    port_info = server.get_port_capacity()
+
+    return render_template('admin/server_detail.html',
+                           admin=admin,
+                           server=server,
+                           customers=customers,
+                           port_info=port_info)
+
+
+@admin_bp.route('/servers/create', methods=['GET', 'POST'])
+@admin_required
+def server_create():
+    """Create a new server"""
+    admin = get_current_admin()
+
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        hostname = request.form.get('hostname', '').strip()
+        ip_address = request.form.get('ip_address', '').strip()
+        max_customers = int(request.form.get('max_customers', 50))
+        port_range_start = int(request.form.get('port_range_start', 8001))
+        port_range_end = int(request.form.get('port_range_end', 8100))
+        redis_queue_name = request.form.get('redis_queue_name', '').strip() or None
+
+        if not all([name, hostname, ip_address]):
+            flash('Name, hostname, and IP address are required.', 'error')
+            return render_template('admin/server_form.html', admin=admin, server=None)
+
+        # Check for duplicate hostname
+        if Server.get_by_hostname(hostname):
+            flash(f'A server with hostname {hostname} already exists.', 'error')
+            return render_template('admin/server_form.html', admin=admin, server=None)
+
+        server = Server(
+            name=name,
+            hostname=hostname,
+            ip_address=ip_address,
+            max_customers=max_customers,
+            port_range_start=port_range_start,
+            port_range_end=port_range_end,
+            redis_queue_name=redis_queue_name
+        )
+        server.save()
+
+        log_admin_action(admin.id, 'create_server', 'server', server.id,
+                        f'Created server {name}', request.remote_addr)
+        flash(f'Server {name} created successfully.', 'success')
+        return redirect(url_for('admin.servers'))
+
+    return render_template('admin/server_form.html', admin=admin, server=None)
+
+
+@admin_bp.route('/servers/<int:server_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def server_edit(server_id):
+    """Edit a server"""
+    admin = get_current_admin()
+    server = Server.get_by_id(server_id)
+
+    if not server:
+        flash('Server not found.', 'error')
+        return redirect(url_for('admin.servers'))
+
+    if request.method == 'POST':
+        server.name = request.form.get('name', '').strip()
+        server.hostname = request.form.get('hostname', '').strip()
+        server.ip_address = request.form.get('ip_address', '').strip()
+        server.max_customers = int(request.form.get('max_customers', 50))
+        server.port_range_start = int(request.form.get('port_range_start', 8001))
+        server.port_range_end = int(request.form.get('port_range_end', 8100))
+        server.redis_queue_name = request.form.get('redis_queue_name', '').strip() or None
+
+        if not all([server.name, server.hostname, server.ip_address]):
+            flash('Name, hostname, and IP address are required.', 'error')
+            return render_template('admin/server_form.html', admin=admin, server=server)
+
+        server.save()
+
+        log_admin_action(admin.id, 'edit_server', 'server', server.id,
+                        f'Updated server {server.name}', request.remote_addr)
+        flash(f'Server {server.name} updated successfully.', 'success')
+        return redirect(url_for('admin.server_detail', server_id=server.id))
+
+    return render_template('admin/server_form.html', admin=admin, server=server)
+
+
+@admin_bp.route('/servers/<int:server_id>/maintenance', methods=['POST'])
+@admin_required
+def server_toggle_maintenance(server_id):
+    """Toggle server maintenance mode"""
+    admin = get_current_admin()
+    server = Server.get_by_id(server_id)
+
+    if not server:
+        flash('Server not found.', 'error')
+        return redirect(url_for('admin.servers'))
+
+    if server.status == 'maintenance':
+        server.status = 'active'
+        action = 'activated'
+    else:
+        server.status = 'maintenance'
+        action = 'put into maintenance'
+
+    server.save()
+
+    log_admin_action(admin.id, 'toggle_server_maintenance', 'server', server.id,
+                    f'Server {server.name} {action}', request.remote_addr)
+    flash(f'Server {server.name} has been {action}.', 'success')
+    return redirect(url_for('admin.server_detail', server_id=server.id))
+
+
+@admin_bp.route('/servers/<int:server_id>/delete', methods=['POST'])
+@admin_required
+def server_delete(server_id):
+    """Delete a server (only if no customers)"""
+    admin = get_current_admin()
+    server = Server.get_by_id(server_id)
+
+    if not server:
+        flash('Server not found.', 'error')
+        return redirect(url_for('admin.servers'))
+
+    try:
+        server_name = server.name
+        server.delete()
+        log_admin_action(admin.id, 'delete_server', 'server', server_id,
+                        f'Deleted server {server_name}', request.remote_addr)
+        flash(f'Server {server_name} has been deleted.', 'success')
+    except ValueError as e:
+        flash(str(e), 'error')
+
+    return redirect(url_for('admin.servers'))
 
 
 # =============================================================================
@@ -1842,20 +2035,31 @@ def create_customer():
                         'cpu_limit': os.getenv('DEFAULT_CPU_LIMIT', '1.0')
                     }
 
-                    job = queue.enqueue_customer(customer_data)
+                    job, server = queue.enqueue_customer(customer_data)
 
-                    # Record the job
+                    # Update customer with server assignment
                     conn = get_db_connection()
                     cursor = conn.cursor()
-                    cursor.execute("""
-                        INSERT INTO provisioning_jobs (customer_id, job_id, status)
-                        VALUES (%s, %s, 'queued')
-                    """, (customer_id, job.id))
+                    cursor.execute(
+                        "UPDATE customers SET server_id = %s WHERE id = %s",
+                        (server.id, customer_id)
+                    )
                     conn.commit()
                     cursor.close()
                     conn.close()
 
-                    flash(f'Customer {email} created and provisioning started.', 'success')
+                    # Record the job with server_id
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        INSERT INTO provisioning_jobs (customer_id, job_id, status, server_id)
+                        VALUES (%s, %s, 'queued', %s)
+                    """, (customer_id, job.id, server.id))
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+
+                    flash(f'Customer {email} created and provisioning started on server {server.name}.', 'success')
                 except Exception as e:
                     flash(f'Customer created but provisioning failed to start: {str(e)}', 'warning')
             else:

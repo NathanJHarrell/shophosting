@@ -12,6 +12,7 @@ A multi-tenant Docker hosting platform that automatically provisions containeriz
   - **Admin User Management**: Super admins can create, edit, and manage other admin users with role-based access control
   - **Live Provisioning Logs**: Real-time persistent logs showing detailed provisioning progress on customer pages
 - **Background Job Processing**: Redis-backed queue system for reliable provisioning
+- **Multi-Server Provisioning**: Scale horizontally by adding worker servers with automatic load balancing
 - **SSL/TLS Support**: Automatic certificate management with Let's Encrypt
 - **Resource Isolation**: Each customer gets isolated Docker containers with configurable resource limits
 - **Automated Backups**: Daily encrypted backups to remote server using restic with 30-day retention
@@ -642,6 +643,7 @@ Backrest will now manage all backup scheduling and retention.
 
 - [Development Guide](DEVELOPMENT_GUIDE.md) - Detailed development instructions
 - [System Guide](SYSTEM_GUIDE.md) - System architecture and operations
+- [Worker Deployment](WORKER_DEPLOYMENT.md) - Deploying provisioning workers on additional servers
 
 ## License
 

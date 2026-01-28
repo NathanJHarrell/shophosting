@@ -1,0 +1,146 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Servers{% endblock %}
+{% block page_title %}Server Management{% endblock %}
+
+{% block content %}
+<!-- Server Statistics -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 24px;">
+    <div class="stat-card">
+        <div class="stat-icon" style="background: var(--success-muted); color: var(--success);">
+            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"></path></svg>
+        </div>
+        <div>
+            <div class="stat-value">{{ stats.active }}</div>
+            <div class="stat-label">Active Servers</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background: var(--warning-muted); color: var(--warning);">
+            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        </div>
+        <div>
+            <div class="stat-value">{{ stats.maintenance }}</div>
+            <div class="stat-label">In Maintenance</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background: var(--info-muted); color: var(--info);">
+            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+        </div>
+        <div>
+            <div class="stat-value">{{ stats.total_customers }}</div>
+            <div class="stat-label">Total Customers</div>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon" style="background: var(--gradient-glow); color: var(--accent-cyan);">
+            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+        </div>
+        <div>
+            <div class="stat-value">{{ stats.total_capacity }}</div>
+            <div class="stat-label">Total Capacity</div>
+        </div>
+    </div>
+</div>
+
+<!-- Server List -->
+<div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 class="card-title">Servers</h3>
+        <a href="{{ url_for('admin.server_create') }}" class="btn btn-primary">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            Add Server
+        </a>
+    </div>
+    <div class="card-body">
+        {% if servers %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Server</th>
+                    <th>Hostname</th>
+                    <th>Status</th>
+                    <th>Health</th>
+                    <th>Customers</th>
+                    <th>Utilization</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for server in servers %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('admin.server_detail', server_id=server.id) }}" style="color: var(--accent-cyan); text-decoration: none; font-weight: 500;">
+                            {{ server.name }}
+                        </a>
+                    </td>
+                    <td class="mono">{{ server.hostname }}</td>
+                    <td>
+                        {% if server.status == 'active' %}
+                            <span class="badge badge-success">Active</span>
+                        {% elif server.status == 'maintenance' %}
+                            <span class="badge badge-warning">Maintenance</span>
+                        {% else %}
+                            <span class="badge badge-error">Offline</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if server.is_healthy() %}
+                            <span class="status-dot online"></span>
+                            <span class="text-success">Healthy</span>
+                        {% else %}
+                            <span class="status-dot offline"></span>
+                            <span class="text-error">Unhealthy</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ server.get_customer_count() }} / {{ server.max_customers }}</td>
+                    <td>
+                        {% set customer_count = server.get_customer_count() %}
+                        {% set utilization = (customer_count / server.max_customers * 100)|round(1) if server.max_customers > 0 else 0 %}
+                        <div class="progress" style="width: 100px; height: 8px;">
+                            <div class="progress-bar" style="width: {{ utilization }}%;
+                                {% if utilization > 80 %}background: var(--error);
+                                {% elif utilization > 60 %}background: var(--warning);
+                                {% endif %}"></div>
+                        </div>
+                        <span class="text-muted" style="font-size: 0.85rem;">{{ utilization }}%</span>
+                    </td>
+                    <td>
+                        <a href="{{ url_for('admin.server_detail', server_id=server.id) }}" class="btn btn-ghost btn-sm">View</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <p>No servers configured.</p>
+            <a href="{{ url_for('admin.server_create') }}" class="btn btn-primary">Add First Server</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Capacity Overview -->
+{% if stats.total > 0 %}
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Capacity Overview</h3>
+    </div>
+    <div class="card-body">
+        <div class="progress" style="height: 24px; margin-bottom: 16px;">
+            <div class="progress-bar" style="width: {{ (stats.total_customers / stats.total_capacity * 100)|round if stats.total_capacity > 0 else 0 }}%"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+            <span class="text-muted">Customers: <strong>{{ stats.total_customers }}</strong></span>
+            <span class="text-muted">Available: <strong class="text-success">{{ stats.total_capacity - stats.total_customers }}</strong></span>
+            <span class="text-muted">Total Capacity: <strong>{{ stats.total_capacity }}</strong></span>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -125,7 +125,7 @@ class Customer:
 
     def __init__(self, id=None, email=None, password_hash=None, company_name=None,
                  domain=None, platform=None, status='pending', web_port=None,
-                 db_name=None, db_user=None, db_password=None,
+                 server_id=None, db_name=None, db_user=None, db_password=None,
                  admin_user=None, admin_password=None, error_message=None,
                  stripe_customer_id=None, plan_id=None, staging_count=None,
                  created_at=None, updated_at=None):
@@ -137,6 +137,7 @@ class Customer:
         self.platform = platform
         self.status = status
         self.web_port = web_port
+        self.server_id = server_id
         self.db_name = db_name
         self.db_user = db_user
         self.db_password = db_password
@@ -195,12 +196,12 @@ class Customer:
                 cursor.execute("""
                     INSERT INTO customers
                     (email, password_hash, company_name, domain, platform, status, web_port,
-                     stripe_customer_id, plan_id, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     server_id, stripe_customer_id, plan_id, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     self.email, self.password_hash, self.company_name,
                     self.domain, self.platform, self.status, self.web_port,
-                    self.stripe_customer_id, self.plan_id,
+                    self.server_id, self.stripe_customer_id, self.plan_id,
                     self.created_at, self.updated_at
                 ))
                 self.id = cursor.lastrowid
@@ -210,12 +211,12 @@ class Customer:
                     UPDATE customers SET
                         email = %s, password_hash = %s, company_name = %s,
                         domain = %s, platform = %s, status = %s, web_port = %s,
-                        stripe_customer_id = %s, plan_id = %s, updated_at = %s
+                        server_id = %s, stripe_customer_id = %s, plan_id = %s, updated_at = %s
                     WHERE id = %s
                 """, (
                     self.email, self.password_hash, self.company_name,
                     self.domain, self.platform, self.status, self.web_port,
-                    self.stripe_customer_id, self.plan_id,
+                    self.server_id, self.stripe_customer_id, self.plan_id,
                     datetime.now(), self.id
                 ))
 
@@ -395,9 +396,16 @@ class Customer:
             'platform': self.platform,
             'status': self.status,
             'web_port': self.web_port,
+            'server_id': self.server_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+    def get_server(self):
+        """Get the server this customer is hosted on"""
+        if not self.server_id:
+            return None
+        return Server.get_by_id(self.server_id)
 
     def __repr__(self):
         return f"<Customer {self.id}: {self.email}>"
@@ -1744,3 +1752,350 @@ class CustomerBackupJob:
 
     def __repr__(self):
         return f"<CustomerBackupJob {self.id}: {self.job_type} - {self.status}>"
+
+
+# =============================================================================
+# Server Model
+# =============================================================================
+
+class Server:
+    """Server model for multi-server provisioning"""
+
+    STATUSES = ['active', 'maintenance', 'offline']
+    HEARTBEAT_TIMEOUT_SECONDS = 120  # 2 minutes
+
+    def __init__(self, id=None, name=None, hostname=None, ip_address=None,
+                 status='active', max_customers=50, port_range_start=8001,
+                 port_range_end=8100, redis_queue_name=None, last_heartbeat=None,
+                 created_at=None, updated_at=None):
+        self.id = id
+        self.name = name
+        self.hostname = hostname
+        self.ip_address = ip_address
+        self.status = status
+        self.max_customers = max_customers
+        self.port_range_start = port_range_start
+        self.port_range_end = port_range_end
+        self.redis_queue_name = redis_queue_name
+        self.last_heartbeat = last_heartbeat
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    def save(self):
+        """Save server to database (insert or update)"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            if self.id is None:
+                cursor.execute("""
+                    INSERT INTO servers
+                    (name, hostname, ip_address, status, max_customers,
+                     port_range_start, port_range_end, redis_queue_name)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    self.name, self.hostname, self.ip_address, self.status,
+                    self.max_customers, self.port_range_start, self.port_range_end,
+                    self.redis_queue_name
+                ))
+                self.id = cursor.lastrowid
+            else:
+                cursor.execute("""
+                    UPDATE servers SET
+                        name = %s, hostname = %s, ip_address = %s, status = %s,
+                        max_customers = %s, port_range_start = %s, port_range_end = %s,
+                        redis_queue_name = %s
+                    WHERE id = %s
+                """, (
+                    self.name, self.hostname, self.ip_address, self.status,
+                    self.max_customers, self.port_range_start, self.port_range_end,
+                    self.redis_queue_name, self.id
+                ))
+
+            conn.commit()
+            return self
+        finally:
+            cursor.close()
+            conn.close()
+
+    def delete(self):
+        """Delete server from database (only if no customers assigned)"""
+        if self.id is None:
+            return False
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            # Check for assigned customers
+            cursor.execute("SELECT COUNT(*) FROM customers WHERE server_id = %s", (self.id,))
+            if cursor.fetchone()[0] > 0:
+                raise ValueError("Cannot delete server with assigned customers")
+
+            cursor.execute("DELETE FROM servers WHERE id = %s", (self.id,))
+            conn.commit()
+            return cursor.rowcount > 0
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_id(server_id):
+        """Get server by ID"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("SELECT * FROM servers WHERE id = %s", (server_id,))
+            row = cursor.fetchone()
+            return Server(**row) if row else None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_hostname(hostname):
+        """Get server by hostname"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("SELECT * FROM servers WHERE hostname = %s", (hostname,))
+            row = cursor.fetchone()
+            return Server(**row) if row else None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_all():
+        """Get all servers"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("SELECT * FROM servers ORDER BY name")
+            return [Server(**row) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_active():
+        """Get all active servers"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("SELECT * FROM servers WHERE status = 'active' ORDER BY name")
+            return [Server(**row) for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+            conn.close()
+
+    def get_customer_count(self):
+        """Get count of customers assigned to this server"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("SELECT COUNT(*) FROM customers WHERE server_id = %s", (self.id,))
+            return cursor.fetchone()[0]
+        finally:
+            cursor.close()
+            conn.close()
+
+    def get_used_ports(self):
+        """Get list of ports in use on this server"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT web_port FROM customers
+                WHERE server_id = %s AND web_port IS NOT NULL
+            """, (self.id,))
+            return [row[0] for row in cursor.fetchall()]
+        finally:
+            cursor.close()
+            conn.close()
+
+    def get_available_port(self):
+        """Get next available port for this server"""
+        used_ports = set(self.get_used_ports())
+
+        for port in range(self.port_range_start, self.port_range_end + 1):
+            if port not in used_ports:
+                return port
+
+        return None  # No ports available
+
+    def get_port_capacity(self):
+        """Get port utilization info"""
+        used_ports = self.get_used_ports()
+        total_ports = self.port_range_end - self.port_range_start + 1
+
+        return {
+            'total': total_ports,
+            'used': len(used_ports),
+            'available': total_ports - len(used_ports),
+            'used_ports': used_ports
+        }
+
+    def has_capacity(self):
+        """Check if server has capacity for more customers"""
+        customer_count = self.get_customer_count()
+        available_port = self.get_available_port()
+
+        return (customer_count < self.max_customers and
+                available_port is not None)
+
+    def update_heartbeat(self):
+        """Update server heartbeat timestamp"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(
+                "UPDATE servers SET last_heartbeat = NOW() WHERE id = %s",
+                (self.id,)
+            )
+            conn.commit()
+            self.last_heartbeat = datetime.now()
+        finally:
+            cursor.close()
+            conn.close()
+
+    def is_healthy(self):
+        """Check if server heartbeat is recent"""
+        if not self.last_heartbeat:
+            return False
+
+        age = (datetime.now() - self.last_heartbeat).total_seconds()
+        return age < self.HEARTBEAT_TIMEOUT_SECONDS
+
+    def get_queue_name(self):
+        """Get Redis queue name for this server"""
+        if self.redis_queue_name:
+            return self.redis_queue_name
+        return f"provisioning:server-{self.id}"
+
+    def to_dict(self):
+        """Convert to dictionary"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'hostname': self.hostname,
+            'ip_address': self.ip_address,
+            'status': self.status,
+            'max_customers': self.max_customers,
+            'port_range_start': self.port_range_start,
+            'port_range_end': self.port_range_end,
+            'redis_queue_name': self.redis_queue_name,
+            'last_heartbeat': self.last_heartbeat.isoformat() if self.last_heartbeat else None,
+            'is_healthy': self.is_healthy(),
+            'customer_count': self.get_customer_count(),
+            'has_capacity': self.has_capacity(),
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+    def __repr__(self):
+        return f"<Server {self.id}: {self.name} ({self.hostname})>"
+
+
+# =============================================================================
+# Server Selector
+# =============================================================================
+
+class ServerSelector:
+    """Selects the best server for new customer provisioning"""
+
+    @staticmethod
+    def select_server(require_healthy=True):
+        """
+        Select the best available server for a new customer.
+
+        Strategy:
+        1. Filter to active servers
+        2. Optionally filter to healthy servers (recent heartbeat)
+        3. Filter to servers with available capacity
+        4. Sort by current customer count (ascending)
+        5. Return server with lowest load
+
+        Args:
+            require_healthy: If True, only consider servers with recent heartbeat
+
+        Returns:
+            Server object, or None if no suitable server found
+        """
+        servers = Server.get_active()
+
+        if not servers:
+            return None
+
+        # Filter and score servers
+        candidates = []
+        for server in servers:
+            # Skip unhealthy servers if required
+            if require_healthy and not server.is_healthy():
+                continue
+
+            # Skip servers at capacity
+            if not server.has_capacity():
+                continue
+
+            customer_count = server.get_customer_count()
+            candidates.append((server, customer_count))
+
+        if not candidates:
+            # If no healthy servers, try again without health requirement
+            if require_healthy:
+                return ServerSelector.select_server(require_healthy=False)
+            return None
+
+        # Sort by customer count (lowest first) and return best
+        candidates.sort(key=lambda x: x[1])
+        return candidates[0][0]
+
+    @staticmethod
+    def get_server_stats():
+        """Get statistics for all servers"""
+        servers = Server.get_all()
+
+        stats = {
+            'total': len(servers),
+            'active': 0,
+            'maintenance': 0,
+            'offline': 0,
+            'healthy': 0,
+            'total_capacity': 0,
+            'total_customers': 0,
+            'servers': []
+        }
+
+        for server in servers:
+            if server.status == 'active':
+                stats['active'] += 1
+            elif server.status == 'maintenance':
+                stats['maintenance'] += 1
+            else:
+                stats['offline'] += 1
+
+            if server.is_healthy():
+                stats['healthy'] += 1
+
+            customer_count = server.get_customer_count()
+            stats['total_capacity'] += server.max_customers
+            stats['total_customers'] += customer_count
+
+            stats['servers'].append({
+                'id': server.id,
+                'name': server.name,
+                'status': server.status,
+                'is_healthy': server.is_healthy(),
+                'customer_count': customer_count,
+                'max_customers': server.max_customers,
+                'utilization': round(customer_count / server.max_customers * 100, 1) if server.max_customers > 0 else 0
+            })
+
+        return stats

@@ -71,6 +71,20 @@
                     <td class="mono">{{ customer.web_port or 'Not assigned' }}</td>
                 </tr>
                 <tr>
+                    <td class="text-muted" style="padding: 8px 0;">Server</td>
+                    <td>
+                        {% set server = customer.get_server() %}
+                        {% if server %}
+                            <a href="{{ url_for('admin.server_detail', server_id=server.id) }}" style="color: var(--accent-cyan); text-decoration: none;">
+                                {{ server.name }}
+                            </a>
+                            <span class="text-muted" style="font-size: 0.85rem;">({{ server.hostname }})</span>
+                        {% else %}
+                            <span class="text-muted">Not assigned</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
                     <td class="text-muted" style="padding: 8px 0;">Created</td>
                     <td>{{ customer.created_at.strftime('%Y-%m-%d %H:%M') if customer.created_at else '-' }}</td>
                 </tr>
