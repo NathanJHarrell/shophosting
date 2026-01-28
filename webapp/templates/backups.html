@@ -1,0 +1,524 @@
+{% extends "base.html" %}
+
+{% block title %}Backups - ShopHosting.io{% endblock %}
+
+{% block extra_css %}
+<style>
+    .backups-page {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    .section-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        margin-bottom: 24px;
+        overflow: hidden;
+    }
+
+    .section-header {
+        padding: 20px 28px;
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .section-body {
+        padding: 20px 28px;
+    }
+
+    .backup-options {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+
+    .backup-option {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+
+    .backup-option input[type="radio"] {
+        accent-color: var(--accent);
+    }
+
+    .backup-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .backup-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px;
+        background: var(--bg-surface);
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-subtle);
+    }
+
+    .backup-info {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .backup-date {
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .backup-type {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+    }
+
+    .backup-actions {
+        position: relative;
+    }
+
+    .restore-dropdown {
+        position: absolute;
+        right: 0;
+        top: 100%;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        min-width: 180px;
+        z-index: 100;
+        display: none;
+    }
+
+    .restore-dropdown.show {
+        display: block;
+    }
+
+    .restore-option {
+        padding: 12px 16px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .restore-option:hover {
+        background: var(--bg-surface);
+    }
+
+    .btn {
+        padding: 10px 20px;
+        border-radius: var(--radius-md);
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: none;
+    }
+
+    .btn-primary {
+        background: var(--accent);
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background: var(--accent-hover);
+    }
+
+    .btn-secondary {
+        background: var(--bg-surface);
+        color: var(--text-primary);
+        border: 1px solid var(--border-subtle);
+    }
+
+    .btn-secondary:hover {
+        background: var(--bg-elevated);
+    }
+
+    .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .status-banner {
+        padding: 16px 20px;
+        border-radius: var(--radius-md);
+        margin-bottom: 24px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .status-banner.running {
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: var(--text-primary);
+    }
+
+    .spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--border-subtle);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: var(--text-secondary);
+    }
+
+    /* Modal styles */
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-overlay.show {
+        display: flex;
+    }
+
+    .modal {
+        background: var(--bg-elevated);
+        border-radius: var(--radius-lg);
+        padding: 24px;
+        max-width: 450px;
+        width: 90%;
+    }
+
+    .modal-title {
+        font-size: 1.2rem;
+        font-weight: 600;
+        margin-bottom: 16px;
+    }
+
+    .modal-body {
+        margin-bottom: 20px;
+    }
+
+    .modal-input {
+        width: 100%;
+        padding: 12px;
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        background: var(--bg-surface);
+        color: var(--text-primary);
+        margin-top: 12px;
+    }
+
+    .modal-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+    }
+
+    .warning-text {
+        color: #ef4444;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="backups-page">
+    <h1 style="margin-bottom: 24px;">Backups</h1>
+
+    {% if active_job %}
+    <div class="status-banner running" id="status-banner">
+        <div class="spinner"></div>
+        <span id="status-text">
+            {% if active_job.job_type == 'backup' %}
+                Creating backup...
+            {% else %}
+                Restoring from backup...
+            {% endif %}
+        </span>
+    </div>
+    {% endif %}
+
+    <!-- Create Backup Section -->
+    <div class="section-card">
+        <div class="section-header">
+            <span class="section-title">Create Manual Backup</span>
+        </div>
+        <div class="section-body">
+            <form id="backup-form">
+                <div class="backup-options">
+                    <label class="backup-option">
+                        <input type="radio" name="backup_type" value="db">
+                        <span>Database only</span>
+                    </label>
+                    <label class="backup-option">
+                        <input type="radio" name="backup_type" value="files">
+                        <span>Files only</span>
+                    </label>
+                    <label class="backup-option">
+                        <input type="radio" name="backup_type" value="both" checked>
+                        <span>Database & Files</span>
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary" id="create-backup-btn" {% if active_job %}disabled{% endif %}>
+                    Create Backup
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Manual Backups Section -->
+    <div class="section-card">
+        <div class="section-header">
+            <span class="section-title">Manual Backups</span>
+            <span style="color: var(--text-secondary); font-size: 0.9rem;">Max 5 kept</span>
+        </div>
+        <div class="section-body">
+            {% if manual_backups %}
+            <div class="backup-list">
+                {% for backup in manual_backups %}
+                <div class="backup-item">
+                    <div class="backup-info">
+                        <span class="backup-date">{{ backup.time[:19] | replace('T', ' ') }}</span>
+                        <span class="backup-type">
+                            {% if 'both' in backup.tags %}Database & Files
+                            {% elif 'db' in backup.tags %}Database only
+                            {% elif 'files' in backup.tags %}Files only
+                            {% else %}Full backup{% endif %}
+                        </span>
+                    </div>
+                    <div class="backup-actions">
+                        <button class="btn btn-secondary restore-toggle" data-snapshot="{{ backup.id }}" data-source="manual" {% if active_job %}disabled{% endif %}>
+                            Restore
+                        </button>
+                        <div class="restore-dropdown" id="dropdown-{{ backup.id }}">
+                            <div class="restore-option" data-type="db">Database only</div>
+                            <div class="restore-option" data-type="files">Files only</div>
+                            <div class="restore-option" data-type="both">Full restore</div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>No manual backups yet. Create one above.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Daily Backups Section -->
+    <div class="section-card">
+        <div class="section-header">
+            <span class="section-title">Daily Backups</span>
+            <span style="color: var(--text-secondary); font-size: 0.9rem;">Last 30 days</span>
+        </div>
+        <div class="section-body">
+            {% if daily_backups %}
+            <div class="backup-list">
+                {% for backup in daily_backups %}
+                <div class="backup-item">
+                    <div class="backup-info">
+                        <span class="backup-date">{{ backup.time[:19] | replace('T', ' ') }}</span>
+                        <span class="backup-type">Full backup (automatic)</span>
+                    </div>
+                    <div class="backup-actions">
+                        <button class="btn btn-secondary restore-toggle" data-snapshot="{{ backup.id }}" data-source="daily" {% if active_job %}disabled{% endif %}>
+                            Restore
+                        </button>
+                        <div class="restore-dropdown" id="dropdown-{{ backup.id }}">
+                            <div class="restore-option" data-type="db">Database only</div>
+                            <div class="restore-option" data-type="files">Files only</div>
+                            <div class="restore-option" data-type="both">Full restore</div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>No daily backups available yet.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Restore Confirmation Modal -->
+<div class="modal-overlay" id="restore-modal">
+    <div class="modal">
+        <div class="modal-title">Confirm Restore</div>
+        <div class="modal-body">
+            <p>This will restore your site from the selected backup. Your site will be put into maintenance mode during the restore.</p>
+            <p class="warning-text" style="margin-top: 12px;">This action cannot be undone. Any changes made after this backup will be lost.</p>
+            <input type="text" class="modal-input" id="restore-confirmation" placeholder="Type RESTORE to confirm">
+            <input type="hidden" id="restore-snapshot-id">
+            <input type="hidden" id="restore-type">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" id="cancel-restore">Cancel</button>
+            <button class="btn btn-primary" id="confirm-restore">Restore</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csrfToken = '{{ csrf_token() }}';
+
+// Create backup form
+document.getElementById('backup-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const backupType = document.querySelector('input[name="backup_type"]:checked').value;
+    const btn = document.getElementById('create-backup-btn');
+
+    btn.disabled = true;
+    btn.textContent = 'Starting...';
+
+    try {
+        const formData = new FormData();
+        formData.append('backup_type', backupType);
+
+        const response = await fetch('/backups/create', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.message || 'Failed to start backup');
+            btn.disabled = false;
+            btn.textContent = 'Create Backup';
+        }
+    } catch (err) {
+        alert('An error occurred');
+        btn.disabled = false;
+        btn.textContent = 'Create Backup';
+    }
+});
+
+// Restore dropdown toggles
+document.querySelectorAll('.restore-toggle').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const snapshotId = btn.dataset.snapshot;
+        const dropdown = document.getElementById('dropdown-' + snapshotId);
+
+        // Close all other dropdowns
+        document.querySelectorAll('.restore-dropdown').forEach(d => {
+            if (d !== dropdown) d.classList.remove('show');
+        });
+
+        dropdown.classList.toggle('show');
+    });
+});
+
+// Close dropdowns when clicking outside
+document.addEventListener('click', () => {
+    document.querySelectorAll('.restore-dropdown').forEach(d => d.classList.remove('show'));
+});
+
+// Restore option clicks
+document.querySelectorAll('.restore-option').forEach(opt => {
+    opt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const dropdown = opt.closest('.restore-dropdown');
+        const snapshotId = dropdown.id.replace('dropdown-', '');
+        const restoreType = opt.dataset.type;
+
+        document.getElementById('restore-snapshot-id').value = snapshotId;
+        document.getElementById('restore-type').value = restoreType;
+        document.getElementById('restore-confirmation').value = '';
+        document.getElementById('restore-modal').classList.add('show');
+
+        dropdown.classList.remove('show');
+    });
+});
+
+// Modal cancel
+document.getElementById('cancel-restore').addEventListener('click', () => {
+    document.getElementById('restore-modal').classList.remove('show');
+});
+
+// Modal confirm
+document.getElementById('confirm-restore').addEventListener('click', async () => {
+    const confirmation = document.getElementById('restore-confirmation').value;
+    const snapshotId = document.getElementById('restore-snapshot-id').value;
+    const restoreType = document.getElementById('restore-type').value;
+
+    if (confirmation !== 'RESTORE') {
+        alert('Please type RESTORE to confirm');
+        return;
+    }
+
+    const btn = document.getElementById('confirm-restore');
+    btn.disabled = true;
+    btn.textContent = 'Starting...';
+
+    try {
+        const formData = new FormData();
+        formData.append('confirmation', confirmation);
+        formData.append('restore_type', restoreType);
+
+        const response = await fetch(`/backups/${snapshotId}/restore`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.message || 'Failed to start restore');
+            btn.disabled = false;
+            btn.textContent = 'Restore';
+        }
+    } catch (err) {
+        alert('An error occurred');
+        btn.disabled = false;
+        btn.textContent = 'Restore';
+    }
+});
+
+// Poll for status updates if there's an active job
+{% if active_job %}
+setInterval(async () => {
+    try {
+        const response = await fetch('/api/backups/status');
+        const data = await response.json();
+
+        if (!data.has_active_job) {
+            location.reload();
+        }
+    } catch (err) {
+        console.error('Status poll failed:', err);
+    }
+}, 5000);
+{% endif %}
+</script>
+{% endblock %}
