@@ -125,10 +125,10 @@ class Customer:
 
     def __init__(self, id=None, email=None, password_hash=None, company_name=None,
                  domain=None, platform=None, status='pending', web_port=None,
-                 server_id=None, db_name=None, db_user=None, db_password=None,
-                 admin_user=None, admin_password=None, error_message=None,
-                 stripe_customer_id=None, plan_id=None, staging_count=None,
-                 created_at=None, updated_at=None):
+                 server_id=None, quota_project_id=None, db_name=None, db_user=None,
+                 db_password=None, admin_user=None, admin_password=None,
+                 error_message=None, stripe_customer_id=None, plan_id=None,
+                 staging_count=None, created_at=None, updated_at=None):
         self.id = id
         self.email = email
         self.password_hash = password_hash
@@ -138,6 +138,7 @@ class Customer:
         self.status = status
         self.web_port = web_port
         self.server_id = server_id
+        self.quota_project_id = quota_project_id
         self.db_name = db_name
         self.db_user = db_user
         self.db_password = db_password
@@ -196,13 +197,13 @@ class Customer:
                 cursor.execute("""
                     INSERT INTO customers
                     (email, password_hash, company_name, domain, platform, status, web_port,
-                     server_id, stripe_customer_id, plan_id, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     server_id, quota_project_id, stripe_customer_id, plan_id, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     self.email, self.password_hash, self.company_name,
                     self.domain, self.platform, self.status, self.web_port,
-                    self.server_id, self.stripe_customer_id, self.plan_id,
-                    self.created_at, self.updated_at
+                    self.server_id, self.quota_project_id, self.stripe_customer_id,
+                    self.plan_id, self.created_at, self.updated_at
                 ))
                 self.id = cursor.lastrowid
             else:
@@ -211,13 +212,14 @@ class Customer:
                     UPDATE customers SET
                         email = %s, password_hash = %s, company_name = %s,
                         domain = %s, platform = %s, status = %s, web_port = %s,
-                        server_id = %s, stripe_customer_id = %s, plan_id = %s, updated_at = %s
+                        server_id = %s, quota_project_id = %s, stripe_customer_id = %s,
+                        plan_id = %s, updated_at = %s
                     WHERE id = %s
                 """, (
                     self.email, self.password_hash, self.company_name,
                     self.domain, self.platform, self.status, self.web_port,
-                    self.server_id, self.stripe_customer_id, self.plan_id,
-                    datetime.now(), self.id
+                    self.server_id, self.quota_project_id, self.stripe_customer_id,
+                    self.plan_id, datetime.now(), self.id
                 ))
 
             conn.commit()
@@ -231,7 +233,7 @@ class Customer:
         """Delete customer from database"""
         if self.id is None:
             return False
-            
+
         conn = get_db_connection()
         cursor = conn.cursor()
 
@@ -242,6 +244,33 @@ class Customer:
         finally:
             cursor.close()
             conn.close()
+
+    def get_resource_usage(self):
+        """Get current resource usage with limits"""
+        plan = PricingPlan.get_by_id(self.plan_id) if self.plan_id else None
+
+        disk_used = ResourceUsage.get_current_disk_usage(self.id)
+        bandwidth_used = ResourceUsage.get_monthly_bandwidth(self.id)
+
+        disk_limit = (plan.disk_limit_gb * 1024 * 1024 * 1024) if plan else 25 * 1024 * 1024 * 1024
+        bandwidth_limit = (plan.bandwidth_limit_gb * 1024 * 1024 * 1024) if plan else 250 * 1024 * 1024 * 1024
+
+        return {
+            'disk': {
+                'used_bytes': disk_used,
+                'limit_bytes': disk_limit,
+                'used_gb': round(disk_used / (1024 * 1024 * 1024), 2),
+                'limit_gb': plan.disk_limit_gb if plan else 25,
+                'percent': round((disk_used / disk_limit) * 100, 1) if disk_limit > 0 else 0
+            },
+            'bandwidth': {
+                'used_bytes': bandwidth_used,
+                'limit_bytes': bandwidth_limit,
+                'used_gb': round(bandwidth_used / (1024 * 1024 * 1024), 2),
+                'limit_gb': plan.bandwidth_limit_gb if plan else 250,
+                'percent': round((bandwidth_used / bandwidth_limit) * 100, 1) if bandwidth_limit > 0 else 0
+            }
+        }
 
     # =========================================================================
     # Static Query Methods
