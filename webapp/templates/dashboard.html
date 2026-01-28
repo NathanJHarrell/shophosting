@@ -800,6 +800,59 @@
             </div>
         </div>
 
+        <!-- Site Health -->
+        <div class="info-card site-health-card">
+            <div class="info-card-header">
+                <h2 class="info-card-title">
+                    Site Health
+                    <span class="help-icon" title="Monitor your store's server status and restart if needed">?</span>
+                </h2>
+            </div>
+
+            <div class="health-status-row">
+                <div class="status-info">
+                    <span id="container-status" class="status-badge unknown">
+                        <span class="status-dot"></span>
+                        <span class="status-text">Checking...</span>
+                    </span>
+                    <span id="container-uptime" class="uptime-text"></span>
+                </div>
+                <button id="restart-btn" class="restart-btn" onclick="restartContainer()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 4v6h-6"></path>
+                        <path d="M1 20v-6h6"></path>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                    <span>Restart Store</span>
+                    <span class="help-icon" title="Restarts your store's server. Use if your site is unresponsive. Takes ~30 seconds.">?</span>
+                </button>
+            </div>
+
+            <div class="health-metrics">
+                <iframe src="https://shophosting.io/grafana/d-solo/customer-metrics/customer-metrics?orgId=1&var-customer_id={{ customer.id }}&panelId=5&theme=dark"
+                        width="100%" height="80" frameborder="0" title="CPU Usage"></iframe>
+                <iframe src="https://shophosting.io/grafana/d-solo/customer-metrics/customer-metrics?orgId=1&var-customer_id={{ customer.id }}&panelId=6&theme=dark"
+                        width="100%" height="80" frameborder="0" title="Memory Usage"></iframe>
+                <iframe src="https://shophosting.io/grafana/d-solo/customer-metrics/customer-metrics?orgId=1&var-customer_id={{ customer.id }}&panelId=7&theme=dark"
+                        width="100%" height="80" frameborder="0" title="Requests/sec"></iframe>
+            </div>
+
+            <div class="logs-section">
+                <div class="logs-header" onclick="toggleLogs()">
+                    <span class="logs-title">Recent Logs</span>
+                    <div class="logs-actions">
+                        <button class="btn btn-sm" onclick="event.stopPropagation(); refreshLogs()">Refresh</button>
+                        <svg id="logs-toggle" class="logs-toggle" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                </div>
+                <div id="logs-content" class="logs-content">
+                    <div id="logs-list" class="logs-list">Loading logs...</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Resource Usage -->
         <div class="info-card resource-usage-card">
             <div class="info-card-header">
