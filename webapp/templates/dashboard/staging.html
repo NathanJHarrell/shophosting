@@ -1,0 +1,50 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block page_title %}Staging{% endblock %}
+
+{% block dashboard_css %}
+.coming-soon {
+    text-align: center;
+    padding: 80px 40px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+}
+
+.coming-soon-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 24px;
+    color: var(--text-muted);
+}
+
+.coming-soon h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.coming-soon p {
+    color: var(--text-tertiary);
+    max-width: 400px;
+    margin: 0 auto;
+}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="page-header">
+    <h1 class="page-title">Staging Environments</h1>
+    <p class="page-subtitle">Test changes safely before pushing to production.</p>
+</div>
+
+<div class="coming-soon">
+    <svg class="coming-soon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+        <polyline points="2 17 12 22 22 17"></polyline>
+        <polyline points="2 12 12 17 22 12"></polyline>
+    </svg>
+    <h2>Staging Coming Soon</h2>
+    <p>Create staging copies of your store to test updates, themes, and plugins without affecting your live site.</p>
+</div>
+{% endblock %}

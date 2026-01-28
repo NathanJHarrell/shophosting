@@ -1,0 +1,81 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block page_title %}Domains{% endblock %}
+
+{% block dashboard_css %}
+.domain-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.domain-card-header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.domain-card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.domain-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.domain-item:last-child {
+    border-bottom: none;
+}
+
+.domain-info h3 {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.domain-info span {
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+}
+
+.domain-badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.domain-badge.primary {
+    background: var(--success-muted);
+    color: var(--success);
+}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="page-header">
+    <h1 class="page-title">Domains</h1>
+    <p class="page-subtitle">Manage your store's domain settings.</p>
+</div>
+
+<div class="domain-card">
+    <div class="domain-card-header">
+        <h2 class="domain-card-title">Connected Domains</h2>
+    </div>
+
+    <div class="domain-item">
+        <div class="domain-info">
+            <h3>{{ customer.domain }}</h3>
+            <span>Primary domain</span>
+        </div>
+        <span class="domain-badge primary">Active</span>
+    </div>
+</div>
+{% endblock %}

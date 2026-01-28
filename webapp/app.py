@@ -808,14 +808,112 @@ def billing_portal():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    """Customer dashboard"""
-    # Refresh customer data from database
+    """Redirect to dashboard overview"""
+    return redirect(url_for('dashboard_overview'))
+
+
+@app.route('/dashboard/overview')
+@login_required
+def dashboard_overview():
+    """Dashboard overview page"""
+    customer = Customer.get_by_id(current_user.id)
+    credentials = customer.get_credentials()
+    plan = PricingPlan.get_by_id(customer.plan_id) if customer.plan_id else None
+    usage = customer.get_resource_usage() if hasattr(customer, 'get_resource_usage') else {
+        'cpu': {'percent': 0},
+        'memory': {'used_mb': 0, 'limit_mb': 512, 'percent': 0},
+        'disk': {'used_gb': 0, 'limit_gb': 10, 'percent': 0}
+    }
+
+    return render_template('dashboard/overview.html',
+                          customer=customer,
+                          credentials=credentials,
+                          plan=plan,
+                          usage=usage,
+                          active_page='overview')
+
+
+@app.route('/dashboard/health')
+@login_required
+def dashboard_health():
+    """Site health page"""
     customer = Customer.get_by_id(current_user.id)
     credentials = customer.get_credentials()
 
-    return render_template('dashboard.html',
+    return render_template('dashboard/health.html',
                           customer=customer,
-                          credentials=credentials)
+                          credentials=credentials,
+                          active_page='health')
+
+
+@app.route('/dashboard/backups')
+@login_required
+def dashboard_backups():
+    """Backups management page"""
+    customer = Customer.get_by_id(current_user.id)
+
+    return render_template('dashboard/backups.html',
+                          customer=customer,
+                          active_page='backups')
+
+
+@app.route('/dashboard/staging')
+@login_required
+def dashboard_staging():
+    """Staging environments page"""
+    customer = Customer.get_by_id(current_user.id)
+    staging_envs = StagingEnvironment.get_by_customer(customer.id) if hasattr(StagingEnvironment, 'get_by_customer') else []
+
+    return render_template('dashboard/staging.html',
+                          customer=customer,
+                          staging_envs=staging_envs,
+                          active_page='staging')
+
+
+@app.route('/dashboard/domains')
+@login_required
+def dashboard_domains():
+    """Domains management page"""
+    customer = Customer.get_by_id(current_user.id)
+
+    return render_template('dashboard/domains.html',
+                          customer=customer,
+                          active_page='domains')
+
+
+@app.route('/dashboard/billing')
+@login_required
+def dashboard_billing():
+    """Billing page"""
+    customer = Customer.get_by_id(current_user.id)
+    plan = PricingPlan.get_by_id(customer.plan_id) if customer.plan_id else None
+
+    return render_template('dashboard/billing.html',
+                          customer=customer,
+                          plan=plan,
+                          active_page='billing')
+
+
+@app.route('/dashboard/settings')
+@login_required
+def dashboard_settings():
+    """Account settings page"""
+    customer = Customer.get_by_id(current_user.id)
+
+    return render_template('dashboard/settings.html',
+                          customer=customer,
+                          active_page='settings')
+
+
+@app.route('/dashboard/support')
+@login_required
+def dashboard_support():
+    """Support page"""
+    customer = Customer.get_by_id(current_user.id)
+
+    return render_template('dashboard/support.html',
+                          customer=customer,
+                          active_page='support')
 
 
 # =============================================================================

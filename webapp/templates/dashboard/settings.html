@@ -1,0 +1,120 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block page_title %}Settings{% endblock %}
+
+{% block dashboard_css %}
+.settings-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.settings-card-header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.settings-card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.settings-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.settings-item:last-child {
+    border-bottom: none;
+}
+
+.settings-info h3 {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.settings-info p {
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+}
+
+.settings-value {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.btn-sm {
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-sm:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-accent);
+}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="page-header">
+    <h1 class="page-title">Settings</h1>
+    <p class="page-subtitle">Manage your account preferences.</p>
+</div>
+
+<div class="settings-card">
+    <div class="settings-card-header">
+        <h2 class="settings-card-title">Account Information</h2>
+    </div>
+
+    <div class="settings-item">
+        <div class="settings-info">
+            <h3>Email Address</h3>
+            <p>Your login email</p>
+        </div>
+        <span class="settings-value">{{ customer.email }}</span>
+    </div>
+
+    <div class="settings-item">
+        <div class="settings-info">
+            <h3>Password</h3>
+            <p>Last changed: Never</p>
+        </div>
+        <button class="btn-sm">Change Password</button>
+    </div>
+
+    <div class="settings-item">
+        <div class="settings-info">
+            <h3>Two-Factor Authentication</h3>
+            <p>Add an extra layer of security</p>
+        </div>
+        <button class="btn-sm">Enable 2FA</button>
+    </div>
+</div>
+
+<div class="settings-card">
+    <div class="settings-card-header">
+        <h2 class="settings-card-title">Notifications</h2>
+    </div>
+
+    <div class="settings-item">
+        <div class="settings-info">
+            <h3>Email Notifications</h3>
+            <p>Receive updates about your store</p>
+        </div>
+        <button class="btn-sm">Configure</button>
+    </div>
+</div>
+{% endblock %}

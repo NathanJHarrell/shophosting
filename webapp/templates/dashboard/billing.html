@@ -1,0 +1,167 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block page_title %}Billing{% endblock %}
+
+{% block dashboard_css %}
+.billing-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.billing-card-header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.billing-card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.plan-info {
+    padding: 28px;
+}
+
+.plan-name {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.plan-price {
+    font-size: 2rem;
+    font-weight: 700;
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.plan-price span {
+    font-size: 1rem;
+    font-weight: 400;
+    color: var(--text-tertiary);
+    -webkit-text-fill-color: var(--text-tertiary);
+}
+
+.plan-features {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.plan-feature {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    color: var(--text-secondary);
+}
+
+.plan-feature svg {
+    width: 18px;
+    height: 18px;
+    color: var(--success);
+}
+
+.billing-actions {
+    padding: 20px 28px;
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    gap: 12px;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background: var(--gradient-primary);
+    border: none;
+    color: white;
+}
+
+.btn-primary:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-accent);
+}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="page-header">
+    <h1 class="page-title">Billing</h1>
+    <p class="page-subtitle">Manage your subscription and payment details.</p>
+</div>
+
+<div class="billing-card">
+    <div class="billing-card-header">
+        <h2 class="billing-card-title">Current Plan</h2>
+    </div>
+
+    <div class="plan-info">
+        <div class="plan-name">{{ plan.name if plan else 'Free Trial' }}</div>
+        <div class="plan-price">
+            ${{ plan.price_monthly if plan else '0' }}<span>/month</span>
+        </div>
+
+        {% if plan %}
+        <div class="plan-features">
+            <div class="plan-feature">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                {{ plan.disk_limit_gb }} GB Storage
+            </div>
+            <div class="plan-feature">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                {{ plan.bandwidth_limit_gb }} GB Bandwidth
+            </div>
+            <div class="plan-feature">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                SSL Certificate Included
+            </div>
+            <div class="plan-feature">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                24/7 Support
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="billing-actions">
+        <a href="{{ url_for('pricing') }}" class="btn btn-primary">Upgrade Plan</a>
+        <a href="#" class="btn btn-secondary">Manage Payment</a>
+    </div>
+</div>
+{% endblock %}
