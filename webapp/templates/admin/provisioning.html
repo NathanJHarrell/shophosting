@@ -130,7 +130,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce() }}">
 // Auto-refresh every 10 seconds
 setTimeout(function() {
     location.reload();

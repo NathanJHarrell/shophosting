@@ -91,7 +91,7 @@
     </div>
 </div>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
 function toggleDropdown(id) {
     var dropdown = document.getElementById(id);
     var isVisible = dropdown.style.display === 'block';

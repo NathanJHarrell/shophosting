@@ -1,0 +1,196 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Edit {{ plan.name }} - Admin Panel{% endblock %}
+
+{% block page_title %}Edit Pricing Plan{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin.pricing_plans') }}" class="btn btn-secondary btn-sm">Back to Pricing Plans</a>
+</div>
+
+<form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+        <!-- Left Column: Basic Info -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Plan Details</h3>
+                <span class="badge {% if plan.platform == 'woocommerce' %}badge-active{% else %}badge-info{% endif %}">{{ plan.platform|capitalize }}</span>
+            </div>
+            <div class="card-body">
+                <div style="margin-bottom: 20px;">
+                    <label class="form-label">Plan Name</label>
+                    <input type="text" name="name" class="form-control" value="{{ plan.name }}" required>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label class="form-label">Slug (read-only)</label>
+                    <input type="text" class="form-control" value="{{ plan.slug }}" disabled style="opacity: 0.6;">
+                    <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">Slug cannot be changed as it's tied to existing subscriptions.</div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                    <div>
+                        <label class="form-label">Monthly Price ($)</label>
+                        <input type="number" name="price_monthly" class="form-control" value="{{ plan.price_monthly }}" step="0.01" min="0" required>
+                    </div>
+                    <div>
+                        <label class="form-label">Store Limit</label>
+                        <input type="number" name="store_limit" class="form-control" value="{{ plan.store_limit }}" min="1" required>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                    <div>
+                        <label class="form-label">Memory Limit</label>
+                        <select name="memory_limit" class="form-control">
+                            <option value="1g" {% if plan.memory_limit == '1g' %}selected{% endif %}>1 GB</option>
+                            <option value="2g" {% if plan.memory_limit == '2g' %}selected{% endif %}>2 GB</option>
+                            <option value="4g" {% if plan.memory_limit == '4g' %}selected{% endif %}>4 GB</option>
+                            <option value="8g" {% if plan.memory_limit == '8g' %}selected{% endif %}>8 GB</option>
+                            <option value="16g" {% if plan.memory_limit == '16g' %}selected{% endif %}>16 GB</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">CPU Limit (cores)</label>
+                        <select name="cpu_limit" class="form-control">
+                            <option value="0.5" {% if plan.cpu_limit == '0.5' %}selected{% endif %}>0.5 cores</option>
+                            <option value="1.0" {% if plan.cpu_limit == '1.0' %}selected{% endif %}>1.0 cores</option>
+                            <option value="2.0" {% if plan.cpu_limit == '2.0' %}selected{% endif %}>2.0 cores</option>
+                            <option value="4.0" {% if plan.cpu_limit == '4.0' %}selected{% endif %}>4.0 cores</option>
+                            <option value="8.0" {% if plan.cpu_limit == '8.0' %}selected{% endif %}>8.0 cores</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+                    <div>
+                        <label class="form-label">Display Order</label>
+                        <input type="number" name="display_order" class="form-control" value="{{ plan.display_order }}" min="0">
+                    </div>
+                    <div style="display: flex; align-items: flex-end; padding-bottom: 4px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" name="is_active" {% if plan.is_active %}checked{% endif %}>
+                            <span>Plan is Active</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Features -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Features</h3>
+            </div>
+            <div class="card-body">
+                <div style="display: grid; gap: 12px;">
+                    <label class="feature-checkbox">
+                        <input type="checkbox" name="feature_daily_backups" {% if plan.features.get('daily_backups') %}checked{% endif %}>
+                        <span>Daily Backups</span>
+                    </label>
+                    <label class="feature-checkbox">
+                        <input type="checkbox" name="feature_email_support" {% if plan.features.get('email_support') %}checked{% endif %}>
+                        <span>Email Support</span>
+                    </label>
+                    <label class="feature-checkbox">
+                        <input type="checkbox" name="feature_premium_plugins" {% if plan.features.get('premium_plugins') %}checked{% endif %}>
+                        <span>Premium Plugins</span>
+                    </label>
+                    <label class="feature-checkbox">
+                        <input type="checkbox" name="feature_support_24_7" {% if plan.features.get('support_24_7') %}checked{% endif %}>
+                        <span>24/7 Support</span>
+                    </label>
+                    <label class="feature-checkbox">
+                        <input type="checkbox" name="feature_redis_cache" {% if plan.features.get('redis_cache') %}checked{% endif %}>
+                        <span>Redis Cache</span>
+                    </label>
+                    <label class="feature-checkbox">
+                        <input type="checkbox" name="feature_staging" {% if plan.features.get('staging') %}checked{% endif %}>
+                        <span>Staging Environment</span>
+                    </label>
+                    <label class="feature-checkbox">
+                        <input type="checkbox" name="feature_sla_uptime" {% if plan.features.get('sla_uptime') %}checked{% endif %}>
+                        <span>SLA Uptime Guarantee</span>
+                    </label>
+                    <label class="feature-checkbox">
+                        <input type="checkbox" name="feature_advanced_security" {% if plan.features.get('advanced_security') %}checked{% endif %}>
+                        <span>Advanced Security</span>
+                    </label>
+                    <label class="feature-checkbox">
+                        <input type="checkbox" name="feature_centralized_management" {% if plan.features.get('centralized_management') %}checked{% endif %}>
+                        <span>Centralized Management</span>
+                    </label>
+                    <label class="feature-checkbox">
+                        <input type="checkbox" name="feature_white_label" {% if plan.features.get('white_label') %}checked{% endif %}>
+                        <span>White Label</span>
+                    </label>
+                    <label class="feature-checkbox">
+                        <input type="checkbox" name="feature_dedicated_support" {% if plan.features.get('dedicated_support') %}checked{% endif %}>
+                        <span>Dedicated Support</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stripe Info (read-only) -->
+    <div class="card" style="margin-top: 24px;">
+        <div class="card-header">
+            <h3 class="card-title">Stripe Integration</h3>
+        </div>
+        <div class="card-body">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <label class="form-label">Stripe Product ID</label>
+                    <input type="text" class="form-control" value="{{ plan.stripe_product_id or 'Not configured' }}" disabled style="opacity: 0.6;">
+                </div>
+                <div>
+                    <label class="form-label">Stripe Price ID</label>
+                    <input type="text" class="form-control" value="{{ plan.stripe_price_id or 'Not configured' }}" disabled style="opacity: 0.6;">
+                </div>
+            </div>
+            <div class="text-muted" style="font-size: 0.85rem; margin-top: 12px;">
+                Stripe IDs are managed through the Stripe dashboard. After changing prices here, you may need to create a new Stripe price.
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div style="display: flex; gap: 12px; margin-top: 24px;">
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <a href="{{ url_for('admin.pricing_plans') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+
+<style>
+.feature-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    padding: 10px 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    transition: all 0.15s ease;
+}
+.feature-checkbox:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-default);
+}
+.feature-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent-blue);
+}
+.feature-checkbox input[type="checkbox"]:checked + span {
+    color: var(--text-primary);
+}
+.feature-checkbox span {
+    color: var(--text-secondary);
+}
+</style>
+{% endblock %}
