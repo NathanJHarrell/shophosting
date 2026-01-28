@@ -747,6 +747,84 @@ class ResourceUsage:
 
 
 # =============================================================================
+# ResourceAlert Model
+# =============================================================================
+
+class ResourceAlert:
+    """Resource limit alert record"""
+
+    ALERT_TYPES = ['disk_warning', 'disk_critical', 'bandwidth_warning', 'bandwidth_critical']
+
+    def __init__(self, id=None, customer_id=None, alert_type=None,
+                 threshold_percent=None, current_usage_bytes=None,
+                 limit_bytes=None, notified_at=None):
+        self.id = id
+        self.customer_id = customer_id
+        self.alert_type = alert_type
+        self.threshold_percent = threshold_percent
+        self.current_usage_bytes = current_usage_bytes
+        self.limit_bytes = limit_bytes
+        self.notified_at = notified_at
+
+    def save(self):
+        """Save alert record"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO resource_alerts
+                (customer_id, alert_type, threshold_percent, current_usage_bytes, limit_bytes)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (self.customer_id, self.alert_type, self.threshold_percent,
+                  self.current_usage_bytes, self.limit_bytes))
+            conn.commit()
+            self.id = cursor.lastrowid
+            return self
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def was_recently_sent(customer_id, alert_type, hours=24):
+        """Check if this alert type was sent recently"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) FROM resource_alerts
+                WHERE customer_id = %s
+                AND alert_type = %s
+                AND notified_at > DATE_SUB(NOW(), INTERVAL %s HOUR)
+            """, (customer_id, alert_type, hours))
+            count = cursor.fetchone()[0]
+            return count > 0
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_recent_for_customer(customer_id, limit=10):
+        """Get recent alerts for a customer"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT * FROM resource_alerts
+                WHERE customer_id = %s
+                ORDER BY notified_at DESC
+                LIMIT %s
+            """, (customer_id, limit))
+            rows = cursor.fetchall()
+            return [ResourceAlert(**row) for row in rows]
+        finally:
+            cursor.close()
+            conn.close()
+
+
+# =============================================================================
 # Subscription Model
 # =============================================================================
 
