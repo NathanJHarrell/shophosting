@@ -253,7 +253,7 @@ def spawn_container(store_info):
         redis_port = int(os.getenv('REDIS_PORT', 6379))
 
         queue = ProvisioningQueue(redis_host=redis_host, redis_port=redis_port)
-        job = queue.enqueue_customer(store_info)
+        job, server = queue.enqueue_customer(store_info)
 
         print("\n    ┌─────────────────────────────────────────────────────┐")
         print("    │                                                     │")
@@ -261,6 +261,7 @@ def spawn_container(store_info):
         print("    │                                                     │")
         print(f"    │  Job ID: {job.id:<42} │")
         print(f"    │  Status: {job.get_status():<42} │")
+        print(f"    │  Server: {server.name:<42} │")
         print("    │                                                     │")
         print("    │  The container is being provisioned in the         │")
         print("    │  background. This may take several minutes.        │")
@@ -280,6 +281,7 @@ def spawn_container(store_info):
             f.write(f"Customer ID: {store_info['customer_id']}\n")
             f.write(f"Platform: {store_info['platform']}\n")
             f.write(f"Domain: {store_info['domain']}\n")
+            f.write(f"Server: {server.name} ({server.hostname})\n")
             f.write(f"Port: {store_info['web_port']}\n")
             f.write(f"URL: http://{store_info['domain']}:{store_info['web_port']}\n\n")
             f.write(f"Admin Credentials:\n")

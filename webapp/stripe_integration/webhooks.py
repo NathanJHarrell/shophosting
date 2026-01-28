@@ -141,8 +141,13 @@ def handle_checkout_completed(session):
             'memory_limit': plan.memory_limit if plan else '1g',
             'cpu_limit': plan.cpu_limit if plan else '1.0'
         }
-        job = queue.enqueue_customer(job_data)
-        logger.info(f"Provisioning job {job.id} enqueued for customer {customer.id}")
+        job, server = queue.enqueue_customer(job_data)
+
+        # Update customer with server assignment
+        customer.server_id = server.id
+        customer.save()
+
+        logger.info(f"Provisioning job {job.id} enqueued for customer {customer.id} on server {server.name}")
     except Exception as e:
         logger.error(f"Error enqueueing provisioning job: {e}")
         raise

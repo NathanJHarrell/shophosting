@@ -14,6 +14,7 @@ A multi-tenant Docker hosting platform that automatically provisions containeriz
   - **CMS for Marketing Pages**: Full WYSIWYG editor for homepage, pricing, features, about, and contact pages with draft/publish workflow and version history
   - **Stripe Pricing Sync**: Two-way sync between local pricing plans and Stripe with choice dialog for creating new prices or updating existing ones
 - **Background Job Processing**: Redis-backed queue system for reliable provisioning
+- **Multi-Server Provisioning**: Scale horizontally by adding worker servers with automatic load balancing
 - **SSL/TLS Support**: Automatic certificate management with Let's Encrypt
 - **Resource Isolation**: Each customer gets isolated Docker containers with configurable resource limits
 - **Automated Backups**: Daily encrypted backups to remote server using restic with 30-day retention
@@ -417,6 +418,100 @@ Admins can view and manage all staging environments across customers:
 | Docker templates | `templates/woocommerce-staging-compose.yml.j2`, `templates/magento-staging-compose.yml.j2` |
 | Customer routes | `webapp/app.py` (/staging/*) |
 | Admin routes | `webapp/admin/routes.py` (/admin/staging/*) |
+
+## Multi-Server Provisioning
+
+ShopHosting.io supports horizontal scaling by distributing customer containers across multiple servers. Each server runs its own provisioning worker, and new customers are automatically assigned to the server with the most available capacity.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                   Main Server (Control Plane)                │
+│  ┌──────────┐  ┌──────────┐  ┌───────────────────────────┐  │
+│  │  Web App │  │  MySQL   │  │  Redis (job queues)       │  │
+│  │  Admin   │  │          │  │  - provisioning:server-1  │  │
+│  │  Stripe  │  │          │  │  - provisioning:server-2  │  │
+│  └──────────┘  └──────────┘  └───────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+           ┌──────────────────┼──────────────────┐
+           ▼                  ▼                  ▼
+    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+    │  Server 1   │    │  Server 2   │    │  Server N   │
+    │  Worker     │    │  Worker     │    │  Worker     │
+    │  Docker     │    │  Docker     │    │  Docker     │
+    │  Nginx      │    │  Nginx      │    │  Nginx      │
+    └─────────────┘    └─────────────┘    └─────────────┘
+```
+
+### Features
+
+- **Automatic Server Selection**: New customers are assigned to the server with the lowest utilization
+- **Health Monitoring**: Workers send heartbeats every 30 seconds; unhealthy servers are excluded from selection
+- **Per-Server Port Ranges**: Each server manages its own port allocation
+- **Capacity Limits**: Configure maximum customers per server
+- **Maintenance Mode**: Take servers offline for maintenance without affecting other servers
+
+### Setup
+
+1. **Run the migration:**
+   ```bash
+   mysql -u shophosting_app -p shophosting_db < /opt/shophosting/migrations/008_add_servers_table.sql
+   ```
+
+2. **Configure the primary server** (done automatically by migration):
+   The migration creates a "Primary" server entry for the existing server.
+
+3. **Start the worker with SERVER_ID:**
+   ```bash
+   # Edit /etc/systemd/system/provisioning-worker.service
+   # Add to [Service] section:
+   Environment="SERVER_ID=1"
+
+   sudo systemctl daemon-reload
+   sudo systemctl restart provisioning-worker
+   ```
+
+### Adding Additional Servers
+
+See [WORKER_DEPLOYMENT.md](WORKER_DEPLOYMENT.md) for complete instructions on deploying worker-only servers.
+
+Quick overview:
+1. Register the server in Admin Panel → Servers → Add Server
+2. Install Docker, Nginx, and Python on the new server
+3. Copy provisioning code and templates
+4. Configure environment variables (SERVER_ID, REDIS_HOST, DB_HOST)
+5. Start the provisioning worker service
+
+### Admin Panel
+
+Manage servers from the admin panel at `/admin/servers`:
+
+- **Server List**: View all servers with status, health, and utilization
+- **Server Detail**: See customers hosted on each server, port usage
+- **Add Server**: Register new servers for provisioning
+- **Maintenance Mode**: Toggle servers in/out of maintenance
+- **Delete Server**: Remove servers (only if no customers assigned)
+
+### Server Selection Algorithm
+
+When a new customer is provisioned:
+1. Filter to active servers with recent heartbeat (< 2 minutes)
+2. Filter to servers with available capacity (customer count < max, ports available)
+3. Sort by current customer count (ascending)
+4. Select the server with the lowest load
+
+### Configuration
+
+Each server has configurable settings:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| max_customers | 50 | Maximum customers this server can host |
+| port_range_start | 8001 | Start of port range for customer containers |
+| port_range_end | 8100 | End of port range for customer containers |
+| redis_queue_name | auto | Custom queue name (default: `provisioning:server-{id}`) |
 
 ### Consultation Appointments
 
@@ -841,7 +936,8 @@ cat /var/log/shophosting-dir-backup.log
 │   ├── 005_add_admin_features.sql   # Admin user management features
 │   ├── 006_add_cms_tables.sql      # CMS and page versions
 │   ├── 006_add_staging_environments.sql  # Staging environments
-│   └── 007_add_consultations_table.sql  # Consultation appointments
+│   ├── 007_add_consultations_table.sql  # Consultation appointments
+│   └── 008_add_servers_table.sql        # Multi-server provisioning
 ├── scripts/                # Utility scripts
 │   ├── backup.sh           # Daily customer data backup script
 │   ├── shophosting-dir-backup.sh  # Application code backup script
@@ -869,6 +965,7 @@ cat /var/log/shophosting-dir-backup.log
 - [Security Policy](SECURITY.md) - Security architecture and incident response
 - [Development Guide](DEVELOPMENT_GUIDE.md) - Detailed development instructions
 - [System Guide](SYSTEM_GUIDE.md) - System architecture and operations
+- [Worker Deployment](WORKER_DEPLOYMENT.md) - Deploying provisioning workers on additional servers
 
 ## License
 

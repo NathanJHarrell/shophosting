@@ -1,0 +1,101 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}{% if server %}Edit{% else %}Add{% endif %} Server{% endblock %}
+{% block page_title %}{% if server %}Edit Server{% else %}Add Server{% endif %}{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 600px;">
+    <div class="card-header">
+        <h3 class="card-title">{% if server %}Edit {{ server.name }}{% else %}Add New Server{% endif %}</h3>
+    </div>
+    <div class="card-body">
+        <form method="POST">
+            <div class="form-group">
+                <label class="form-label" for="name">Server Name</label>
+                <input type="text" id="name" name="name" class="form-input"
+                       value="{{ server.name if server else '' }}" required
+                       placeholder="e.g., Production Server 1">
+                <small class="text-muted">A friendly name for this server</small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="hostname">Hostname</label>
+                <input type="text" id="hostname" name="hostname" class="form-input"
+                       value="{{ server.hostname if server else '' }}" required
+                       placeholder="e.g., server1.shophosting.io">
+                <small class="text-muted">The hostname or FQDN of the server</small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="ip_address">IP Address</label>
+                <input type="text" id="ip_address" name="ip_address" class="form-input"
+                       value="{{ server.ip_address if server else '' }}" required
+                       placeholder="e.g., 192.168.1.100">
+                <small class="text-muted">The server's primary IP address</small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="max_customers">Maximum Customers</label>
+                <input type="number" id="max_customers" name="max_customers" class="form-input"
+                       value="{{ server.max_customers if server else 50 }}" min="1" max="500">
+                <small class="text-muted">Maximum number of customers this server can host</small>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div class="form-group">
+                    <label class="form-label" for="port_range_start">Port Range Start</label>
+                    <input type="number" id="port_range_start" name="port_range_start" class="form-input"
+                           value="{{ server.port_range_start if server else 8001 }}" min="1024" max="65535">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="port_range_end">Port Range End</label>
+                    <input type="number" id="port_range_end" name="port_range_end" class="form-input"
+                           value="{{ server.port_range_end if server else 8100 }}" min="1024" max="65535">
+                </div>
+            </div>
+            <small class="text-muted" style="display: block; margin-top: -12px; margin-bottom: 16px;">Port range for customer containers (default: 8001-8100)</small>
+
+            <div class="form-group">
+                <label class="form-label" for="redis_queue_name">Redis Queue Name (Optional)</label>
+                <input type="text" id="redis_queue_name" name="redis_queue_name" class="form-input"
+                       value="{{ server.redis_queue_name if server else '' }}"
+                       placeholder="Leave blank for auto-generated">
+                <small class="text-muted">Custom queue name, or leave blank for "provisioning:server-{id}"</small>
+            </div>
+
+            <div style="display: flex; gap: 12px; margin-top: 24px;">
+                <button type="submit" class="btn btn-primary">
+                    {% if server %}Update Server{% else %}Add Server{% endif %}
+                </button>
+                <a href="{{ url_for('admin.servers') }}" class="btn btn-ghost">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if server %}
+<!-- Worker Setup Instructions -->
+<div class="card" style="max-width: 600px; margin-top: 24px;">
+    <div class="card-header">
+        <h3 class="card-title">Worker Setup</h3>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-4">Run the following on the server to start the provisioning worker:</p>
+
+        <div style="padding: 16px; background: var(--bg-surface); border-radius: var(--radius-md); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; overflow-x: auto;">
+            <span class="text-muted"># Set environment variables</span><br>
+            export SERVER_ID={{ server.id }}<br>
+            export REDIS_HOST=your-redis-host<br>
+            export DB_HOST=your-db-host<br>
+            export DB_PASSWORD=your-db-password<br><br>
+            <span class="text-muted"># Start worker</span><br>
+            cd /opt/shophosting && python provisioning/provisioning_worker.py
+        </div>
+
+        <p class="text-muted mt-4" style="font-size: 0.85rem;">
+            The worker will listen to queue: <code class="mono">{{ server.get_queue_name() }}</code>
+        </p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
