@@ -343,6 +343,8 @@
                     </div>
                     <ul class="plan-features">
                         <li>Daily backups</li>
+                        <li>{{ plan.disk_limit_gb }}GB SSD Storage</li>
+                        <li>{{ plan.bandwidth_limit_gb }}GB Bandwidth/month</li>
                         <li>{{ plan.memory_limit | upper }} RAM / {{ plan.cpu_limit }} vCPU</li>
                         <li {% if not plan.has_feature('redis_cache') %}class="unavailable"{% endif %}>Redis object cache</li>
                         <li {% if not plan.has_feature('staging') %}class="unavailable"{% endif %}>Staging environment</li>
@@ -371,6 +373,8 @@
                     </div>
                     <ul class="plan-features">
                         <li>Centralized management</li>
+                        <li>{{ plan.disk_limit_gb }}GB SSD Storage</li>
+                        <li>{{ plan.bandwidth_limit_gb }}GB Bandwidth/month</li>
                         <li>{{ plan.memory_limit | upper }} RAM / {{ plan.cpu_limit }} vCPU per store</li>
                         <li {% if not plan.has_feature('white_label') %}class="unavailable"{% endif %}>White-label dashboard</li>
                         <li {% if not plan.has_feature('premium_plugins') %}class="unavailable"{% endif %}>Premium plugins included</li>
@@ -402,6 +406,8 @@
                     </div>
                     <ul class="plan-features">
                         <li>Daily backups</li>
+                        <li>{{ plan.disk_limit_gb }}GB SSD Storage</li>
+                        <li>{{ plan.bandwidth_limit_gb }}GB Bandwidth/month</li>
                         <li>{{ plan.memory_limit | upper }} RAM / {{ plan.cpu_limit }} vCPU</li>
                         <li {% if not plan.has_feature('redis_cache') %}class="unavailable"{% endif %}>Redis + Varnish cache</li>
                         <li {% if not plan.has_feature('staging') %}class="unavailable"{% endif %}>Staging environment</li>
@@ -430,6 +436,8 @@
                     </div>
                     <ul class="plan-features">
                         <li>Centralized management</li>
+                        <li>{{ plan.disk_limit_gb }}GB SSD Storage</li>
+                        <li>{{ plan.bandwidth_limit_gb }}GB Bandwidth/month</li>
                         <li>{{ plan.memory_limit | upper }} RAM / {{ plan.cpu_limit }} vCPU per store</li>
                         <li {% if not plan.has_feature('white_label') %}class="unavailable"{% endif %}>White-label dashboard</li>
                         <li {% if not plan.has_feature('premium_plugins') %}class="unavailable"{% endif %}>Premium extensions</li>

@@ -161,6 +161,7 @@ csp = {
         "'self'",
         "https://js.stripe.com",
         "https://hooks.stripe.com",
+        "https://shophosting.io",
     ],
     'connect-src': [
         "'self'",
@@ -335,6 +336,10 @@ init_stripe()
 # Register admin blueprint
 from admin import admin_bp
 app.register_blueprint(admin_bp, url_prefix='/admin')
+
+# Register metrics blueprint for Prometheus
+from metrics import metrics_bp
+app.register_blueprint(metrics_bp)
 
 # Apply rate limiting to admin login (stricter than customer login)
 # Admin accounts are high-value targets, so we limit more aggressively

@@ -249,39 +249,26 @@ class ProvisioningWorker:
             conn = self.get_db_connection()
             cursor = conn.cursor()
 
-            # Include server_id if present in credentials
             server_id = credentials.get('server_id')
-            if server_id:
-                cursor.execute("""
-                    UPDATE customers
-                    SET db_name = %s, db_user = %s, db_password = %s,
-                        admin_user = %s, admin_password = %s, web_port = %s, server_id = %s
-                    WHERE id = %s
-                """, (
-                    credentials['db_name'],
-                    credentials['db_user'],
-                    credentials['db_password'],
-                    credentials['admin_user'],
-                    credentials['admin_password'],
-                    credentials['web_port'],
-                    server_id,
-                    customer_id
-                ))
-            else:
-                cursor.execute("""
-                    UPDATE customers
-                    SET db_name = %s, db_user = %s, db_password = %s,
-                        admin_user = %s, admin_password = %s, web_port = %s
-                    WHERE id = %s
-                """, (
-                    credentials['db_name'],
-                    credentials['db_user'],
-                    credentials['db_password'],
-                    credentials['admin_user'],
-                    credentials['admin_password'],
-                    credentials['web_port'],
-                    customer_id
-                ))
+            quota_project_id = credentials.get('quota_project_id')
+
+            cursor.execute("""
+                UPDATE customers
+                SET db_name = %s, db_user = %s, db_password = %s,
+                    admin_user = %s, admin_password = %s, web_port = %s,
+                    server_id = %s, quota_project_id = %s
+                WHERE id = %s
+            """, (
+                credentials['db_name'],
+                credentials['db_user'],
+                credentials['db_password'],
+                credentials['admin_user'],
+                credentials['admin_password'],
+                credentials['web_port'],
+                server_id,
+                quota_project_id,
+                customer_id
+            ))
 
             conn.commit()
             cursor.close()
@@ -352,7 +339,45 @@ class ProvisioningWorker:
         except Exception as e:
             logger.error(f"Failed to create directory for {customer_id}: {e}")
             raise ProvisioningError(f"Directory creation failed: {e}")
-    
+
+    def setup_disk_quota(self, customer_id, disk_limit_gb):
+        """Set up ext4 project quota for customer directory"""
+        customer_path = self.base_path / f"customer-{customer_id}"
+        project_id = 1000 + customer_id  # Offset to avoid conflicts
+
+        try:
+            # Check if quotas are enabled
+            check = subprocess.run(['sudo', 'quotaon', '-p', '/'], capture_output=True, text=True)
+            if 'project quota' not in check.stdout.lower() and 'project quota' not in check.stderr.lower():
+                logger.warning("Project quotas not enabled on filesystem, skipping quota setup")
+                return None
+
+            # Assign project ID to directory
+            subprocess.run(
+                ['sudo', 'chattr', '+P', '-p', str(project_id), str(customer_path)],
+                check=True, capture_output=True, timeout=30
+            )
+
+            # Set quota (soft=hard for strict enforcement)
+            limit_kb = disk_limit_gb * 1024 * 1024
+            subprocess.run(
+                ['sudo', 'setquota', '-P', str(project_id),
+                 str(limit_kb), str(limit_kb),  # soft, hard block limits
+                 '0', '0',  # no inode limits
+                 '/'],
+                check=True, capture_output=True, timeout=30
+            )
+
+            logger.info(f"Set disk quota {disk_limit_gb}GB for customer {customer_id} (project {project_id})")
+            return project_id
+
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"Failed to set quota for customer {customer_id}: {e}")
+            return None
+        except Exception as e:
+            logger.warning(f"Quota setup error for customer {customer_id}: {e}")
+            return None
+
     def generate_docker_compose(self, customer_path, config):
         """Generate docker-compose.yml from template"""
         
@@ -940,6 +965,13 @@ class ProvisioningWorker:
             }
 
             logger.info(f"Generated configuration for customer {customer_id}")
+
+            # Set up disk quota
+            disk_limit_gb = job_data.get('disk_limit_gb', 25)
+            project_id = self.setup_disk_quota(customer_id, disk_limit_gb)
+            if project_id:
+                config['quota_project_id'] = project_id
+
             self.generate_docker_compose(customer_path, config)
 
             if self.is_port_in_use(config['web_port']):

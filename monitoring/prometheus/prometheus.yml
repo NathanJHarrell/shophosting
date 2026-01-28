@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers: []
+
+rule_files: []
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # ShopHosting webapp metrics (via public HTTPS endpoint)
+  - job_name: 'shophosting'
+    scrape_interval: 30s
+    scheme: https
+    static_configs:
+      - targets: ['shophosting.io']
+    metrics_path: /metrics
+
+  # Node exporter (optional - install separately for host metrics)
+  # - job_name: 'node'
+  #   static_configs:
+  #     - targets: ['host.docker.internal:9100']

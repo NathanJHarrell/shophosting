@@ -1,0 +1,25 @@
+[Unit]
+Description=ShopHosting Monitoring Worker
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=agileweb
+Group=agileweb
+WorkingDirectory=/opt/shophosting/provisioning
+ExecStart=/opt/shophosting/provisioning/venv/bin/python monitoring_worker.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+# Resource limits
+MemoryLimit=256M
+CPUQuota=25%
+
+[Install]
+WantedBy=multi-user.target

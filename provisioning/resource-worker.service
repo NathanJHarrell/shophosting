@@ -1,0 +1,21 @@
+[Unit]
+Description=ShopHosting Resource Usage Worker
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/shophosting/provisioning
+Environment="PATH=/opt/shophosting/provisioning/venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/shophosting/.env
+ExecStart=/opt/shophosting/provisioning/venv/bin/python /opt/shophosting/provisioning/resource_worker.py
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=append:/opt/shophosting/logs/resource_worker.log
+StandardError=append:/opt/shophosting/logs/resource_worker.log
+
+[Install]
+WantedBy=multi-user.target

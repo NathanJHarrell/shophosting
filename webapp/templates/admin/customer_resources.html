@@ -1,0 +1,124 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Resource Usage - {{ customer.domain }} - Admin{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Resource Usage: {{ customer.domain }}</h1>
+    <a href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}" class="btn btn-secondary">Back to Customer</a>
+</div>
+
+<div class="admin-grid">
+    <!-- Current Usage -->
+    <div class="admin-card">
+        <h3>Current Usage</h3>
+        <div class="resource-summary">
+            <div class="resource-stat">
+                <span class="label">Disk Space</span>
+                <span class="value {% if usage.disk.percent >= 90 %}critical{% elif usage.disk.percent >= 80 %}warning{% endif %}">
+                    {{ usage.disk.used_gb }} / {{ usage.disk.limit_gb }} GB ({{ usage.disk.percent }}%)
+                </span>
+                <div class="progress-bar">
+                    <div class="progress-fill {% if usage.disk.percent >= 90 %}critical{% elif usage.disk.percent >= 80 %}warning{% endif %}"
+                         style="width: {{ [usage.disk.percent, 100] | min }}%"></div>
+                </div>
+            </div>
+            <div class="resource-stat">
+                <span class="label">Monthly Bandwidth</span>
+                <span class="value {% if usage.bandwidth.percent >= 90 %}critical{% elif usage.bandwidth.percent >= 80 %}warning{% endif %}">
+                    {{ usage.bandwidth.used_gb }} / {{ usage.bandwidth.limit_gb }} GB ({{ usage.bandwidth.percent }}%)
+                </span>
+                <div class="progress-bar">
+                    <div class="progress-fill {% if usage.bandwidth.percent >= 90 %}critical{% elif usage.bandwidth.percent >= 80 %}warning{% endif %}"
+                         style="width: {{ [usage.bandwidth.percent, 100] | min }}%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Plan Info -->
+    <div class="admin-card">
+        <h3>Plan Limits</h3>
+        {% if plan %}
+        <table class="admin-table">
+            <tr><td>Plan</td><td>{{ plan.name }}</td></tr>
+            <tr><td>Disk Limit</td><td>{{ plan.disk_limit_gb }} GB</td></tr>
+            <tr><td>Bandwidth Limit</td><td>{{ plan.bandwidth_limit_gb }} GB/month</td></tr>
+            <tr><td>Memory</td><td>{{ plan.memory_limit }}</td></tr>
+            <tr><td>CPU</td><td>{{ plan.cpu_limit }}</td></tr>
+        </table>
+        {% else %}
+        <p>No plan assigned</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Recent Alerts -->
+<div class="admin-card">
+    <h3>Recent Alerts</h3>
+    {% if alerts %}
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Threshold</th>
+                <th>Usage</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for alert in alerts %}
+            <tr>
+                <td><span class="badge badge-{{ 'error' if 'critical' in alert.alert_type else 'warning' }}">{{ alert.alert_type }}</span></td>
+                <td>{{ alert.threshold_percent }}%</td>
+                <td>{{ (alert.current_usage_bytes / 1073741824) | round(2) }} GB</td>
+                <td>{{ alert.notified_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No alerts recorded</p>
+    {% endif %}
+</div>
+
+<!-- Usage History -->
+<div class="admin-card">
+    <h3>30-Day History</h3>
+    {% if history %}
+    <table class="admin-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Disk Used</th>
+                <th>Bandwidth</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for day in history %}
+            <tr>
+                <td>{{ day.date }}</td>
+                <td>{{ (day.disk_used_bytes / 1073741824) | round(2) }} GB</td>
+                <td>{{ (day.bandwidth_used_bytes / 1073741824) | round(2) }} GB</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p>No history available</p>
+    {% endif %}
+</div>
+
+<style>
+.resource-summary { display: grid; gap: 20px; }
+.resource-stat { margin-bottom: 16px; }
+.resource-stat .label { display: block; color: var(--text-secondary); margin-bottom: 4px; }
+.resource-stat .value { display: block; font-size: 1.25rem; font-weight: 600; margin-bottom: 8px; }
+.resource-stat .value.warning { color: var(--warning); }
+.resource-stat .value.critical { color: var(--error); }
+.progress-bar { height: 8px; background: var(--bg-surface); border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--success); border-radius: 4px; }
+.progress-fill.warning { background: var(--warning); }
+.progress-fill.critical { background: var(--error); }
+</style>
+{% endblock %}

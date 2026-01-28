@@ -1,0 +1,309 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Monitoring{% endblock %}
+{% block page_title %}Monitoring Dashboard{% endblock %}
+
+{% block content %}
+<!-- Summary Stats -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Total Monitored</div>
+        <div class="stat-value">{{ stats.total }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Up</div>
+        <div class="stat-value success">{{ stats.up }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Down</div>
+        <div class="stat-value error">{{ stats.down }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Degraded</div>
+        <div class="stat-value warning">{{ stats.degraded }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Avg Uptime (24h)</div>
+        <div class="stat-value {% if stats.avg_uptime >= 99 %}success{% elif stats.avg_uptime >= 95 %}warning{% else %}error{% endif %}">{{ stats.avg_uptime }}%</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Avg Response</div>
+        <div class="stat-value {% if stats.avg_response_time < 500 %}success{% elif stats.avg_response_time < 1000 %}warning{% else %}error{% endif %}">{{ stats.avg_response_time }}ms</div>
+    </div>
+</div>
+
+<!-- Unacknowledged Alerts -->
+{% if alerts %}
+<div class="card" style="margin-bottom: 24px; border-color: var(--error);">
+    <div class="card-header" style="background: var(--error-muted);">
+        <h3 class="card-title" style="color: var(--error);">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 8px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            Unacknowledged Alerts ({{ alerts|length }})
+        </h3>
+        <a href="{{ url_for('admin.monitoring_alerts') }}" class="btn btn-secondary btn-sm">View All Alerts</a>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Customer</th>
+                    <th>Type</th>
+                    <th>Message</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for alert in alerts %}
+                <tr>
+                    <td class="mono text-muted" style="white-space: nowrap;">{{ alert.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>
+                        <a href="{{ url_for('admin.monitoring_detail', customer_id=alert.customer_id) }}" style="color: var(--text-primary); text-decoration: none;">
+                            {{ alert.domain }}
+                        </a>
+                    </td>
+                    <td>
+                        <span class="badge badge-{% if alert.alert_type == 'down' %}error{% elif alert.alert_type == 'degraded' %}warning{% elif alert.alert_type == 'recovered' %}success{% else %}info{% endif %}">
+                            {{ alert.alert_type }}
+                        </span>
+                    </td>
+                    <td>{{ alert.message }}</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('admin.acknowledge_alert', alert_id=alert.id) }}" style="display: inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-secondary btn-sm">Acknowledge</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Customer Status Grid -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Customer Status</h3>
+        <span class="text-muted" id="last-updated">Last updated: just now</span>
+    </div>
+    <div class="card-body">
+        {% if statuses %}
+        <div class="monitoring-grid" id="status-grid">
+            {% for status in statuses %}
+            <div class="monitor-card {% if status.http_status == 'down' or status.container_status == 'down' %}status-down{% elif status.http_status == 'degraded' or status.container_status == 'degraded' %}status-degraded{% elif status.http_status == 'up' and status.container_status == 'up' %}status-up{% else %}status-unknown{% endif %}"
+                 data-customer-id="{{ status.customer_id }}">
+                <div class="monitor-card-header">
+                    <div class="monitor-status-dot {% if status.http_status == 'down' or status.container_status == 'down' %}dot-down{% elif status.http_status == 'degraded' or status.container_status == 'degraded' %}dot-degraded{% elif status.http_status == 'up' and status.container_status == 'up' %}dot-up{% else %}dot-unknown{% endif %}"></div>
+                    <a href="{{ url_for('admin.monitoring_detail', customer_id=status.customer_id) }}" class="monitor-domain">{{ status.domain }}</a>
+                </div>
+                <div class="monitor-metrics">
+                    <div class="monitor-metric">
+                        <span class="metric-label">HTTP</span>
+                        <span class="metric-value badge badge-{% if status.http_status == 'up' %}success{% elif status.http_status == 'down' %}error{% elif status.http_status == 'degraded' %}warning{% else %}suspended{% endif %}">{{ status.http_status }}</span>
+                    </div>
+                    <div class="monitor-metric">
+                        <span class="metric-label">Container</span>
+                        <span class="metric-value badge badge-{% if status.container_status == 'up' %}success{% elif status.container_status == 'down' %}error{% elif status.container_status == 'degraded' %}warning{% else %}suspended{% endif %}">{{ status.container_status }}</span>
+                    </div>
+                </div>
+                <div class="monitor-details">
+                    {% if status.last_http_response_ms %}
+                    <span class="detail-item" title="Response time">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        {{ status.last_http_response_ms }}ms
+                    </span>
+                    {% endif %}
+                    {% if status.cpu_percent %}
+                    <span class="detail-item {% if status.cpu_percent > 80 %}text-warning{% endif %}" title="CPU usage">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path></svg>
+                        {{ status.cpu_percent|round(1) }}%
+                    </span>
+                    {% endif %}
+                    {% if status.memory_usage_mb %}
+                    <span class="detail-item" title="Memory usage">
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path></svg>
+                        {{ status.memory_usage_mb }}MB
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="monitor-uptime">
+                    <div class="uptime-bar">
+                        <div class="uptime-fill" style="width: {{ status.uptime_24h|round(0) }}%;"></div>
+                    </div>
+                    <span class="uptime-label">{{ status.uptime_24h|round(2) }}% uptime</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 60px 20px; color: var(--text-tertiary);">
+            <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity: 0.5; margin-bottom: 16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+            <p>No active customers being monitored yet.</p>
+            <p style="margin-top: 8px;">Monitoring data will appear once the monitoring worker is running.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .monitoring-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 16px;
+    }
+
+    .monitor-card {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 16px;
+        transition: all 0.2s;
+    }
+
+    .monitor-card:hover {
+        border-color: var(--border-accent);
+    }
+
+    .monitor-card.status-down {
+        border-color: var(--error);
+        background: var(--error-muted);
+    }
+
+    .monitor-card.status-degraded {
+        border-color: var(--warning);
+        background: var(--warning-muted);
+    }
+
+    .monitor-card.status-up {
+        border-color: var(--border-subtle);
+    }
+
+    .monitor-card-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .monitor-status-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .dot-up { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .dot-down { background: var(--error); box-shadow: 0 0 8px var(--error); animation: pulse-error 2s infinite; }
+    .dot-degraded { background: var(--warning); box-shadow: 0 0 8px var(--warning); }
+    .dot-unknown { background: var(--text-muted); }
+
+    @keyframes pulse-error {
+        0%, 100% { box-shadow: 0 0 8px var(--error); }
+        50% { box-shadow: 0 0 16px var(--error); }
+    }
+
+    .monitor-domain {
+        font-weight: 600;
+        color: var(--text-primary);
+        text-decoration: none;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .monitor-domain:hover {
+        color: var(--accent-cyan);
+    }
+
+    .monitor-metrics {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 12px;
+    }
+
+    .monitor-metric {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .metric-label {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .monitor-details {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 12px;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+    }
+
+    .detail-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .monitor-uptime {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .uptime-bar {
+        flex: 1;
+        height: 6px;
+        background: var(--bg-hover);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .uptime-fill {
+        height: 100%;
+        background: var(--gradient-primary);
+        transition: width 0.3s ease;
+    }
+
+    .uptime-label {
+        font-size: 0.75rem;
+        color: var(--text-tertiary);
+        white-space: nowrap;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script nonce="{{ csp_nonce() }}">
+// Auto-refresh every 30 seconds
+let lastUpdate = new Date();
+
+function updateTimestamp() {
+    const now = new Date();
+    const diff = Math.floor((now - lastUpdate) / 1000);
+    let text = 'just now';
+    if (diff >= 60) {
+        const mins = Math.floor(diff / 60);
+        text = mins + ' minute' + (mins > 1 ? 's' : '') + ' ago';
+    } else if (diff >= 10) {
+        text = diff + ' seconds ago';
+    }
+    document.getElementById('last-updated').textContent = 'Last updated: ' + text;
+}
+
+setInterval(updateTimestamp, 5000);
+
+// Full page refresh every 30 seconds
+setTimeout(function() {
+    location.reload();
+}, 30000);
+</script>
+{% endblock %}

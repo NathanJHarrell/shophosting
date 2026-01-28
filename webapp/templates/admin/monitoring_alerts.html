@@ -1,0 +1,115 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Monitoring Alerts{% endblock %}
+{% block page_title %}Alert History{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<div style="margin-bottom: 24px;">
+    <a href="{{ url_for('admin.monitoring') }}" style="color: var(--text-secondary); text-decoration: none;">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="vertical-align: middle;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+        Back to Monitoring
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">All Alerts</h3>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Customer</th>
+                    <th>Type</th>
+                    <th>Message</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for alert in alerts %}
+                <tr class="{% if not alert.acknowledged %}unacked-row{% endif %}">
+                    <td class="mono text-muted" style="white-space: nowrap;">{{ alert.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>
+                        <a href="{{ url_for('admin.monitoring_detail', customer_id=alert.customer_id) }}" style="color: var(--text-primary); text-decoration: none;">
+                            {{ alert.domain }}
+                        </a>
+                        <div class="text-muted" style="font-size: 0.8rem;">{{ alert.company_name or alert.email }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-{% if alert.alert_type == 'down' %}error{% elif alert.alert_type == 'degraded' %}warning{% elif alert.alert_type == 'recovered' %}success{% else %}info{% endif %}">
+                            {{ alert.alert_type }}
+                        </span>
+                    </td>
+                    <td style="max-width: 300px;">{{ alert.message }}</td>
+                    <td>
+                        {% if alert.email_sent %}
+                        <span class="text-success" title="Email sent">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        </span>
+                        {% else %}
+                        <span class="text-muted" title="Email not sent">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if alert.acknowledged %}
+                        <span class="badge badge-success" title="Acknowledged at {{ alert.acknowledged_at.strftime('%Y-%m-%d %H:%M') if alert.acknowledged_at else 'N/A' }}">
+                            Acked
+                        </span>
+                        {% else %}
+                        <span class="badge badge-warning">
+                            Pending
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if not alert.acknowledged %}
+                        <form method="POST" action="{{ url_for('admin.acknowledge_alert', alert_id=alert.id) }}" style="display: inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-secondary btn-sm">Acknowledge</button>
+                        </form>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-muted" style="text-align: center; padding: 40px;">
+                        No alerts recorded.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Pagination -->
+{% if alerts|length >= 50 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('admin.monitoring_alerts', page=page-1) }}">Previous</a>
+    {% endif %}
+    <span class="active">Page {{ page }}</span>
+    <a href="{{ url_for('admin.monitoring_alerts', page=page+1) }}">Next</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .unacked-row {
+        background: var(--warning-muted);
+    }
+
+    .unacked-row:hover td {
+        background: rgba(245, 158, 11, 0.15);
+    }
+</style>
+{% endblock %}

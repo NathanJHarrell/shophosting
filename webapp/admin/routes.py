@@ -25,6 +25,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import Customer, PortManager, get_db_connection, PricingPlan, Subscription, Invoice
 from models import Ticket, TicketMessage, TicketAttachment, TicketCategory, ConsultationAppointment
 from models import Server, ServerSelector
+from models import MonitoringCheck, CustomerMonitoringStatus, MonitoringAlert
+from models import ResourceUsage, ResourceAlert
 
 logger = logging.getLogger(__name__)
 
@@ -236,6 +238,31 @@ def customer_detail(customer_id):
                            audit_logs=audit_logs,
                            provisioning_logs=provisioning_logs,
                            in_progress_job=in_progress_job)
+
+
+@admin_bp.route('/customers/<int:customer_id>/resources')
+@admin_required
+def customer_resources(customer_id):
+    """View detailed resource usage for a customer"""
+    admin = get_current_admin()
+    customer = Customer.get_by_id(customer_id)
+
+    if not customer:
+        flash('Customer not found', 'error')
+        return redirect(url_for('admin.customers'))
+
+    usage = customer.get_resource_usage()
+    history = ResourceUsage.get_usage_history(customer_id, days=30)
+    alerts = ResourceAlert.get_recent_for_customer(customer_id, limit=20)
+    plan = PricingPlan.get_by_id(customer.plan_id) if customer.plan_id else None
+
+    return render_template('admin/customer_resources.html',
+                           admin=admin,
+                           customer=customer,
+                           usage=usage,
+                           history=history,
+                           alerts=alerts,
+                           plan=plan)
 
 
 @admin_bp.route('/customers/<int:customer_id>/suspend', methods=['POST'])
@@ -3288,7 +3315,7 @@ def _render_about_page(content):
 
 def _render_contact_page(content):
     hero = content.get('hero', {})
-    
+
     return f'''
     <div class="container">
         <section class="hero">
@@ -3297,3 +3324,112 @@ def _render_contact_page(content):
         </section>
     </div>
     '''
+
+
+# =============================================================================
+# Monitoring Dashboard
+# =============================================================================
+
+@admin_bp.route('/monitoring')
+@admin_required
+def monitoring():
+    """Main monitoring dashboard"""
+    admin = get_current_admin()
+    stats = CustomerMonitoringStatus.get_summary_stats()
+    statuses = CustomerMonitoringStatus.get_all_statuses()
+    alerts = MonitoringAlert.get_unacknowledged(limit=10)
+
+    return render_template('admin/monitoring.html',
+                          admin=admin,
+                          stats=stats,
+                          statuses=statuses,
+                          alerts=alerts)
+
+
+@admin_bp.route('/monitoring/<int:customer_id>')
+@admin_required
+def monitoring_detail(customer_id):
+    """Per-customer monitoring detail page"""
+    admin = get_current_admin()
+    customer = Customer.get_by_id(customer_id)
+
+    if not customer:
+        flash('Customer not found.', 'error')
+        return redirect(url_for('admin.monitoring'))
+
+    status = CustomerMonitoringStatus.get_or_create(customer_id)
+    checks = MonitoringCheck.get_recent_by_customer(customer_id, hours=24)
+    alerts = MonitoringAlert.get_by_customer(customer_id, limit=20)
+
+    # Prepare chart data for response times
+    chart_data = []
+    for check in reversed(checks):
+        if check.check_type == 'http' and check.response_time_ms:
+            chart_data.append({
+                'time': check.checked_at.strftime('%H:%M'),
+                'value': check.response_time_ms,
+                'status': check.status
+            })
+
+    return render_template('admin/monitoring_detail.html',
+                          admin=admin,
+                          customer=customer,
+                          status=status,
+                          checks=checks,
+                          alerts=alerts,
+                          chart_data=chart_data)
+
+
+@admin_bp.route('/monitoring/alerts')
+@admin_required
+def monitoring_alerts():
+    """Alert history page"""
+    admin = get_current_admin()
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+
+    alerts = MonitoringAlert.get_recent(limit=per_page, offset=(page - 1) * per_page)
+
+    return render_template('admin/monitoring_alerts.html',
+                          admin=admin,
+                          alerts=alerts,
+                          page=page)
+
+
+@admin_bp.route('/monitoring/alerts/<int:alert_id>/acknowledge', methods=['POST'])
+@admin_required
+def acknowledge_alert(alert_id):
+    """Acknowledge an alert"""
+    admin = get_current_admin()
+    alert = MonitoringAlert.get_by_id(alert_id)
+
+    if alert:
+        alert.acknowledge(admin.id)
+        log_admin_action(admin.id, 'acknowledge_alert', 'alert', alert_id,
+                        f'Acknowledged monitoring alert', request.remote_addr)
+        flash('Alert acknowledged.', 'success')
+    else:
+        flash('Alert not found.', 'error')
+
+    return redirect(request.referrer or url_for('admin.monitoring'))
+
+
+@admin_bp.route('/api/monitoring/status')
+@admin_required
+def api_monitoring_status():
+    """AJAX endpoint for live status updates"""
+    stats = CustomerMonitoringStatus.get_summary_stats()
+    statuses = CustomerMonitoringStatus.get_all_statuses()
+
+    # Convert datetime objects to strings for JSON
+    for s in statuses:
+        for key in ['last_http_check', 'last_container_check', 'last_state_change',
+                    'last_alert_sent', 'updated_at']:
+            if s.get(key) and hasattr(s[key], 'isoformat'):
+                s[key] = s[key].isoformat()
+
+    return jsonify({
+        'stats': stats,
+        'statuses': statuses,
+        'unacknowledged_count': MonitoringAlert.get_unacknowledged_count()
+    })

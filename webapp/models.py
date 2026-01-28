@@ -125,10 +125,10 @@ class Customer:
 
     def __init__(self, id=None, email=None, password_hash=None, company_name=None,
                  domain=None, platform=None, status='pending', web_port=None,
-                 server_id=None, db_name=None, db_user=None, db_password=None,
-                 admin_user=None, admin_password=None, error_message=None,
-                 stripe_customer_id=None, plan_id=None, staging_count=None,
-                 created_at=None, updated_at=None):
+                 server_id=None, quota_project_id=None, db_name=None, db_user=None,
+                 db_password=None, admin_user=None, admin_password=None,
+                 error_message=None, stripe_customer_id=None, plan_id=None,
+                 staging_count=None, created_at=None, updated_at=None):
         self.id = id
         self.email = email
         self.password_hash = password_hash
@@ -138,6 +138,7 @@ class Customer:
         self.status = status
         self.web_port = web_port
         self.server_id = server_id
+        self.quota_project_id = quota_project_id
         self.db_name = db_name
         self.db_user = db_user
         self.db_password = db_password
@@ -196,13 +197,13 @@ class Customer:
                 cursor.execute("""
                     INSERT INTO customers
                     (email, password_hash, company_name, domain, platform, status, web_port,
-                     server_id, stripe_customer_id, plan_id, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                     server_id, quota_project_id, stripe_customer_id, plan_id, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     self.email, self.password_hash, self.company_name,
                     self.domain, self.platform, self.status, self.web_port,
-                    self.server_id, self.stripe_customer_id, self.plan_id,
-                    self.created_at, self.updated_at
+                    self.server_id, self.quota_project_id, self.stripe_customer_id,
+                    self.plan_id, self.created_at, self.updated_at
                 ))
                 self.id = cursor.lastrowid
             else:
@@ -211,13 +212,14 @@ class Customer:
                     UPDATE customers SET
                         email = %s, password_hash = %s, company_name = %s,
                         domain = %s, platform = %s, status = %s, web_port = %s,
-                        server_id = %s, stripe_customer_id = %s, plan_id = %s, updated_at = %s
+                        server_id = %s, quota_project_id = %s, stripe_customer_id = %s,
+                        plan_id = %s, updated_at = %s
                     WHERE id = %s
                 """, (
                     self.email, self.password_hash, self.company_name,
                     self.domain, self.platform, self.status, self.web_port,
-                    self.server_id, self.stripe_customer_id, self.plan_id,
-                    datetime.now(), self.id
+                    self.server_id, self.quota_project_id, self.stripe_customer_id,
+                    self.plan_id, datetime.now(), self.id
                 ))
 
             conn.commit()
@@ -231,7 +233,7 @@ class Customer:
         """Delete customer from database"""
         if self.id is None:
             return False
-            
+
         conn = get_db_connection()
         cursor = conn.cursor()
 
@@ -242,6 +244,33 @@ class Customer:
         finally:
             cursor.close()
             conn.close()
+
+    def get_resource_usage(self):
+        """Get current resource usage with limits"""
+        plan = PricingPlan.get_by_id(self.plan_id) if self.plan_id else None
+
+        disk_used = ResourceUsage.get_current_disk_usage(self.id)
+        bandwidth_used = ResourceUsage.get_monthly_bandwidth(self.id)
+
+        disk_limit = (plan.disk_limit_gb * 1024 * 1024 * 1024) if plan else 25 * 1024 * 1024 * 1024
+        bandwidth_limit = (plan.bandwidth_limit_gb * 1024 * 1024 * 1024) if plan else 250 * 1024 * 1024 * 1024
+
+        return {
+            'disk': {
+                'used_bytes': disk_used,
+                'limit_bytes': disk_limit,
+                'used_gb': round(disk_used / (1024 * 1024 * 1024), 2),
+                'limit_gb': plan.disk_limit_gb if plan else 25,
+                'percent': round((disk_used / disk_limit) * 100, 1) if disk_limit > 0 else 0
+            },
+            'bandwidth': {
+                'used_bytes': bandwidth_used,
+                'limit_bytes': bandwidth_limit,
+                'used_gb': round(bandwidth_used / (1024 * 1024 * 1024), 2),
+                'limit_gb': plan.bandwidth_limit_gb if plan else 250,
+                'percent': round((bandwidth_used / bandwidth_limit) * 100, 1) if bandwidth_limit > 0 else 0
+            }
+        }
 
     # =========================================================================
     # Static Query Methods
@@ -439,7 +468,8 @@ class PricingPlan:
     def __init__(self, id=None, name=None, slug=None, platform=None, tier_type=None,
                  price_monthly=None, store_limit=1, stripe_product_id=None,
                  stripe_price_id=None, features=None, memory_limit='1g',
-                 cpu_limit='1.0', is_active=True, display_order=0,
+                 cpu_limit='1.0', disk_limit_gb=25, bandwidth_limit_gb=250,
+                 is_active=True, display_order=0,
                  created_at=None, updated_at=None):
         self.id = id
         self.name = name
@@ -453,6 +483,8 @@ class PricingPlan:
         self.features = features if features else {}
         self.memory_limit = memory_limit
         self.cpu_limit = cpu_limit
+        self.disk_limit_gb = disk_limit_gb
+        self.bandwidth_limit_gb = bandwidth_limit_gb
         self.is_active = is_active
         self.display_order = display_order
         self.created_at = created_at
@@ -627,6 +659,198 @@ class PricingPlan:
 
     def __repr__(self):
         return f"<PricingPlan {self.id}: {self.slug}>"
+
+
+# =============================================================================
+# ResourceUsage Model
+# =============================================================================
+
+class ResourceUsage:
+    """Daily resource usage snapshot for a customer"""
+
+    def __init__(self, id=None, customer_id=None, date=None,
+                 disk_used_bytes=0, bandwidth_used_bytes=0, created_at=None):
+        self.id = id
+        self.customer_id = customer_id
+        self.date = date
+        self.disk_used_bytes = disk_used_bytes
+        self.bandwidth_used_bytes = bandwidth_used_bytes
+        self.created_at = created_at
+
+    def save(self):
+        """Save or update resource usage record"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            # Use INSERT ... ON DUPLICATE KEY UPDATE for upsert
+            cursor.execute("""
+                INSERT INTO resource_usage (customer_id, date, disk_used_bytes, bandwidth_used_bytes)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    disk_used_bytes = VALUES(disk_used_bytes),
+                    bandwidth_used_bytes = VALUES(bandwidth_used_bytes)
+            """, (self.customer_id, self.date, self.disk_used_bytes, self.bandwidth_used_bytes))
+            conn.commit()
+            if self.id is None:
+                self.id = cursor.lastrowid
+            return self
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_for_customer(customer_id, date):
+        """Get usage for a specific customer and date"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute(
+                "SELECT * FROM resource_usage WHERE customer_id = %s AND date = %s",
+                (customer_id, date)
+            )
+            row = cursor.fetchone()
+            if row:
+                return ResourceUsage(**row)
+            return None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_monthly_bandwidth(customer_id):
+        """Get total bandwidth used in current billing month"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT COALESCE(SUM(bandwidth_used_bytes), 0)
+                FROM resource_usage
+                WHERE customer_id = %s
+                AND date >= DATE_FORMAT(NOW(), '%%Y-%%m-01')
+            """, (customer_id,))
+            result = cursor.fetchone()
+            return result[0] if result else 0
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_current_disk_usage(customer_id):
+        """Get most recent disk usage for customer"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT disk_used_bytes FROM resource_usage
+                WHERE customer_id = %s
+                ORDER BY date DESC LIMIT 1
+            """, (customer_id,))
+            result = cursor.fetchone()
+            return result[0] if result else 0
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_usage_history(customer_id, days=30):
+        """Get usage history for last N days"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT * FROM resource_usage
+                WHERE customer_id = %s
+                AND date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+                ORDER BY date ASC
+            """, (customer_id, days))
+            rows = cursor.fetchall()
+            return [ResourceUsage(**row) for row in rows]
+        finally:
+            cursor.close()
+            conn.close()
+
+
+# =============================================================================
+# ResourceAlert Model
+# =============================================================================
+
+class ResourceAlert:
+    """Resource limit alert record"""
+
+    ALERT_TYPES = ['disk_warning', 'disk_critical', 'bandwidth_warning', 'bandwidth_critical']
+
+    def __init__(self, id=None, customer_id=None, alert_type=None,
+                 threshold_percent=None, current_usage_bytes=None,
+                 limit_bytes=None, notified_at=None):
+        self.id = id
+        self.customer_id = customer_id
+        self.alert_type = alert_type
+        self.threshold_percent = threshold_percent
+        self.current_usage_bytes = current_usage_bytes
+        self.limit_bytes = limit_bytes
+        self.notified_at = notified_at
+
+    def save(self):
+        """Save alert record"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO resource_alerts
+                (customer_id, alert_type, threshold_percent, current_usage_bytes, limit_bytes)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (self.customer_id, self.alert_type, self.threshold_percent,
+                  self.current_usage_bytes, self.limit_bytes))
+            conn.commit()
+            self.id = cursor.lastrowid
+            return self
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def was_recently_sent(customer_id, alert_type, hours=24):
+        """Check if this alert type was sent recently"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) FROM resource_alerts
+                WHERE customer_id = %s
+                AND alert_type = %s
+                AND notified_at > DATE_SUB(NOW(), INTERVAL %s HOUR)
+            """, (customer_id, alert_type, hours))
+            count = cursor.fetchone()[0]
+            return count > 0
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_recent_for_customer(customer_id, limit=10):
+        """Get recent alerts for a customer"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT * FROM resource_alerts
+                WHERE customer_id = %s
+                ORDER BY notified_at DESC
+                LIMIT %s
+            """, (customer_id, limit))
+            rows = cursor.fetchall()
+            return [ResourceAlert(**row) for row in rows]
+        finally:
+            cursor.close()
+            conn.close()
 
 
 # =============================================================================
@@ -1754,6 +1978,382 @@ class CustomerBackupJob:
         return f"<CustomerBackupJob {self.id}: {self.job_type} - {self.status}>"
 
 
+class StagingPortManager:
+    """Manages port allocation for staging environment containers"""
+    # Using 10001-10100 to avoid conflict with phpMyAdmin ports (9001-9100)
+    PORT_RANGE_START = 10001
+    PORT_RANGE_END = 10100
+
+    @staticmethod
+    def get_next_available_port():
+        """Get the next available port for a new staging environment"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            # Get all currently used staging ports
+            cursor.execute("SELECT web_port FROM staging_environments WHERE web_port IS NOT NULL AND status != 'deleted'")
+            used_ports = {row[0] for row in cursor.fetchall()}
+
+            # Find first available port in range
+            for port in range(StagingPortManager.PORT_RANGE_START, StagingPortManager.PORT_RANGE_END + 1):
+                if port not in used_ports:
+                    return port
+
+            return None  # No ports available
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def is_port_available(port):
+        """Check if a specific port is available"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("SELECT COUNT(*) FROM staging_environments WHERE web_port = %s AND status != 'deleted'", (port,))
+            count = cursor.fetchone()[0]
+            return count == 0
+        finally:
+            cursor.close()
+            conn.close()
+
+
+# =============================================================================
+# Staging Environment Model
+# =============================================================================
+
+class StagingEnvironment:
+    """Staging environment model for customer staging sites"""
+
+    MAX_STAGING_PER_CUSTOMER = 3
+    STATUSES = ['creating', 'active', 'syncing', 'failed', 'deleted']
+
+    def __init__(self, id=None, customer_id=None, name=None, staging_domain=None,
+                 status='creating', web_port=None, db_name=None, db_user=None,
+                 db_password=None, source_snapshot_date=None, last_push_date=None,
+                 created_at=None, updated_at=None):
+        self.id = id
+        self.customer_id = customer_id
+        self.name = name
+        self.staging_domain = staging_domain
+        self.status = status
+        self.web_port = web_port
+        self.db_name = db_name
+        self.db_user = db_user
+        self.db_password = db_password
+        self.source_snapshot_date = source_snapshot_date
+        self.last_push_date = last_push_date
+        self.created_at = created_at or datetime.now()
+        self.updated_at = updated_at or datetime.now()
+
+    # =========================================================================
+    # Database Operations
+    # =========================================================================
+
+    def save(self):
+        """Save staging environment to database (insert or update)"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            if self.id is None:
+                cursor.execute("""
+                    INSERT INTO staging_environments
+                    (customer_id, name, staging_domain, status, web_port,
+                     db_name, db_user, db_password, source_snapshot_date,
+                     created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    self.customer_id, self.name, self.staging_domain, self.status,
+                    self.web_port, self.db_name, self.db_user, self.db_password,
+                    self.source_snapshot_date, self.created_at, self.updated_at
+                ))
+                self.id = cursor.lastrowid
+
+                # Update customer's staging count
+                cursor.execute("""
+                    UPDATE customers SET staging_count = (
+                        SELECT COUNT(*) FROM staging_environments
+                        WHERE customer_id = %s AND status != 'deleted'
+                    ) WHERE id = %s
+                """, (self.customer_id, self.customer_id))
+            else:
+                cursor.execute("""
+                    UPDATE staging_environments SET
+                        name = %s, staging_domain = %s, status = %s, web_port = %s,
+                        db_name = %s, db_user = %s, db_password = %s,
+                        source_snapshot_date = %s, last_push_date = %s, updated_at = %s
+                    WHERE id = %s
+                """, (
+                    self.name, self.staging_domain, self.status, self.web_port,
+                    self.db_name, self.db_user, self.db_password,
+                    self.source_snapshot_date, self.last_push_date,
+                    datetime.now(), self.id
+                ))
+
+            conn.commit()
+            return self
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    def update_status(self, status):
+        """Update staging environment status"""
+        self.status = status
+        self.updated_at = datetime.now()
+        return self.save()
+
+    def mark_deleted(self):
+        """Mark staging environment as deleted"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            self.status = 'deleted'
+            cursor.execute("""
+                UPDATE staging_environments SET status = 'deleted', updated_at = %s
+                WHERE id = %s
+            """, (datetime.now(), self.id))
+
+            # Update customer's staging count
+            cursor.execute("""
+                UPDATE customers SET staging_count = (
+                    SELECT COUNT(*) FROM staging_environments
+                    WHERE customer_id = %s AND status != 'deleted'
+                ) WHERE id = %s
+            """, (self.customer_id, self.customer_id))
+
+            conn.commit()
+            return True
+        finally:
+            cursor.close()
+            conn.close()
+
+    # =========================================================================
+    # Static Query Methods
+    # =========================================================================
+
+    @staticmethod
+    def get_by_id(staging_id):
+        """Get staging environment by ID"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("SELECT * FROM staging_environments WHERE id = %s", (staging_id,))
+            row = cursor.fetchone()
+
+            if row:
+                return StagingEnvironment(**row)
+            return None
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_customer(customer_id, include_deleted=False):
+        """Get all staging environments for a customer"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            if include_deleted:
+                cursor.execute("""
+                    SELECT * FROM staging_environments
+                    WHERE customer_id = %s
+                    ORDER BY created_at DESC
+                """, (customer_id,))
+            else:
+                cursor.execute("""
+                    SELECT * FROM staging_environments
+                    WHERE customer_id = %s AND status != 'deleted'
+                    ORDER BY created_at DESC
+                """, (customer_id,))
+
+            rows = cursor.fetchall()
+            return [StagingEnvironment(**row) for row in rows]
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_domain(staging_domain):
+        """Get staging environment by domain"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("SELECT * FROM staging_environments WHERE staging_domain = %s", (staging_domain,))
+            row = cursor.fetchone()
+
+            if row:
+                return StagingEnvironment(**row)
+            return None
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def count_by_customer(customer_id):
+        """Count active staging environments for a customer"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) FROM staging_environments
+                WHERE customer_id = %s AND status != 'deleted'
+            """, (customer_id,))
+            return cursor.fetchone()[0]
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def can_create_staging(customer_id):
+        """Check if customer can create another staging environment"""
+        count = StagingEnvironment.count_by_customer(customer_id)
+        return count < StagingEnvironment.MAX_STAGING_PER_CUSTOMER
+
+    @staticmethod
+    def get_all(include_deleted=False, page=1, per_page=20):
+        """Get all staging environments (for admin)"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            where = "1=1" if include_deleted else "se.status != 'deleted'"
+            offset = (page - 1) * per_page
+
+            # Get count
+            cursor.execute(f"SELECT COUNT(*) as count FROM staging_environments se WHERE {where}")
+            total = cursor.fetchone()['count']
+
+            # Get paginated results with customer info
+            cursor.execute(f"""
+                SELECT se.*, c.email as customer_email, c.domain as production_domain,
+                       c.company_name as customer_company, c.platform
+                FROM staging_environments se
+                JOIN customers c ON se.customer_id = c.id
+                WHERE {where}
+                ORDER BY se.created_at DESC
+                LIMIT %s OFFSET %s
+            """, (per_page, offset))
+
+            rows = cursor.fetchall()
+            return rows, total
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    # =========================================================================
+    # Sync History Methods
+    # =========================================================================
+
+    def log_sync(self, sync_type, status='pending'):
+        """Log a sync operation"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO staging_sync_history
+                (staging_id, sync_type, status, started_at, created_at)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (self.id, sync_type, status, datetime.now(), datetime.now()))
+
+            conn.commit()
+            return cursor.lastrowid
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def update_sync_status(sync_id, status, error_message=None):
+        """Update sync operation status"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            if status in ['completed', 'failed']:
+                cursor.execute("""
+                    UPDATE staging_sync_history
+                    SET status = %s, completed_at = %s, error_message = %s
+                    WHERE id = %s
+                """, (status, datetime.now(), error_message, sync_id))
+            else:
+                cursor.execute("""
+                    UPDATE staging_sync_history SET status = %s WHERE id = %s
+                """, (status, sync_id))
+
+            conn.commit()
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    def get_sync_history(self, limit=10):
+        """Get sync history for this staging environment"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT * FROM staging_sync_history
+                WHERE staging_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+            """, (self.id, limit))
+
+            return cursor.fetchall()
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    # =========================================================================
+    # Utility Methods
+    # =========================================================================
+
+    @staticmethod
+    def generate_staging_domain(customer_id, staging_number):
+        """Generate staging domain for a customer"""
+        return f"cust{customer_id}-staging-{staging_number}.shophosting.io"
+
+    def get_staging_url(self):
+        """Get full staging site URL"""
+        return f"https://{self.staging_domain}"
+
+    def to_dict(self):
+        """Convert to dictionary"""
+        return {
+            'id': self.id,
+            'customer_id': self.customer_id,
+            'name': self.name,
+            'staging_domain': self.staging_domain,
+            'staging_url': self.get_staging_url(),
+            'status': self.status,
+            'web_port': self.web_port,
+            'source_snapshot_date': self.source_snapshot_date.isoformat() if self.source_snapshot_date else None,
+            'last_push_date': self.last_push_date.isoformat() if self.last_push_date else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+    def __repr__(self):
+        return f"<StagingEnvironment {self.id}: {self.staging_domain}>"
+
+
 # =============================================================================
 # Server Model
 # =============================================================================
@@ -2099,3 +2699,552 @@ class ServerSelector:
             })
 
         return stats
+
+
+# =============================================================================
+# Monitoring Models
+# =============================================================================
+
+class MonitoringCheck:
+    """Individual monitoring check result"""
+
+    def __init__(self, id=None, customer_id=None, check_type=None, status=None,
+                 response_time_ms=None, details=None, checked_at=None):
+        self.id = id
+        self.customer_id = customer_id
+        self.check_type = check_type
+        self.status = status
+        self.response_time_ms = response_time_ms
+        self.details = details if details else {}
+        self.checked_at = checked_at or datetime.now()
+
+    def save(self):
+        """Store check result in database"""
+        import json
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            details_json = json.dumps(self.details) if self.details else None
+            cursor.execute("""
+                INSERT INTO monitoring_checks
+                (customer_id, check_type, status, response_time_ms, details, checked_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                self.customer_id, self.check_type, self.status,
+                self.response_time_ms, details_json, self.checked_at
+            ))
+            self.id = cursor.lastrowid
+            conn.commit()
+            return self
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_recent_by_customer(customer_id, hours=24):
+        """Get recent checks for a customer"""
+        import json
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT * FROM monitoring_checks
+                WHERE customer_id = %s AND checked_at > DATE_SUB(NOW(), INTERVAL %s HOUR)
+                ORDER BY checked_at DESC
+            """, (customer_id, hours))
+            rows = cursor.fetchall()
+            checks = []
+            for row in rows:
+                if row.get('details') and isinstance(row['details'], str):
+                    row['details'] = json.loads(row['details'])
+                checks.append(MonitoringCheck(**row))
+            return checks
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def cleanup_old_checks(hours=48):
+        """Delete checks older than specified hours"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                DELETE FROM monitoring_checks
+                WHERE checked_at < DATE_SUB(NOW(), INTERVAL %s HOUR)
+            """, (hours,))
+            deleted = cursor.rowcount
+            conn.commit()
+            return deleted
+        finally:
+            cursor.close()
+            conn.close()
+
+    def __repr__(self):
+        return f"<MonitoringCheck {self.id}: {self.customer_id} {self.check_type}={self.status}>"
+
+
+class CustomerMonitoringStatus:
+    """Current monitoring status for a customer (one row per customer)"""
+
+    def __init__(self, customer_id=None, http_status='unknown', container_status='unknown',
+                 last_http_check=None, last_container_check=None, last_http_response_ms=None,
+                 cpu_percent=None, memory_percent=None, memory_usage_mb=None, disk_usage_mb=None,
+                 uptime_24h=0.00, consecutive_failures=0, last_state_change=None,
+                 last_alert_sent=None, updated_at=None):
+        self.customer_id = customer_id
+        self.http_status = http_status
+        self.container_status = container_status
+        self.last_http_check = last_http_check
+        self.last_container_check = last_container_check
+        self.last_http_response_ms = last_http_response_ms
+        self.cpu_percent = cpu_percent
+        self.memory_percent = memory_percent
+        self.memory_usage_mb = memory_usage_mb
+        self.disk_usage_mb = disk_usage_mb
+        self.uptime_24h = uptime_24h
+        self.consecutive_failures = consecutive_failures
+        self.last_state_change = last_state_change
+        self.last_alert_sent = last_alert_sent
+        self.updated_at = updated_at
+
+    @staticmethod
+    def get_or_create(customer_id):
+        """Get existing status or create new one"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT * FROM customer_monitoring_status WHERE customer_id = %s
+            """, (customer_id,))
+            row = cursor.fetchone()
+
+            if row:
+                return CustomerMonitoringStatus(**row)
+
+            # Create new status record
+            cursor.execute("""
+                INSERT INTO customer_monitoring_status (customer_id) VALUES (%s)
+            """, (customer_id,))
+            conn.commit()
+
+            return CustomerMonitoringStatus(customer_id=customer_id)
+        finally:
+            cursor.close()
+            conn.close()
+
+    def update_http_status(self, status, response_time_ms=None):
+        """Update HTTP check status"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            # Track state changes
+            state_change_sql = ""
+            if status != self.http_status:
+                state_change_sql = ", last_state_change = NOW()"
+
+            cursor.execute(f"""
+                UPDATE customer_monitoring_status
+                SET http_status = %s, last_http_check = NOW(), last_http_response_ms = %s{state_change_sql}
+                WHERE customer_id = %s
+            """, (status, response_time_ms, self.customer_id))
+            conn.commit()
+
+            self.http_status = status
+            self.last_http_response_ms = response_time_ms
+            self.last_http_check = datetime.now()
+        finally:
+            cursor.close()
+            conn.close()
+
+    def update_container_status(self, status, cpu_percent=None, memory_mb=None, disk_mb=None):
+        """Update container and resource metrics"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE customer_monitoring_status
+                SET container_status = %s, last_container_check = NOW(),
+                    cpu_percent = %s, memory_usage_mb = %s, disk_usage_mb = %s
+                WHERE customer_id = %s
+            """, (status, cpu_percent, memory_mb, disk_mb, self.customer_id))
+            conn.commit()
+
+            self.container_status = status
+            self.cpu_percent = cpu_percent
+            self.memory_usage_mb = memory_mb
+            self.disk_usage_mb = disk_mb
+            self.last_container_check = datetime.now()
+        finally:
+            cursor.close()
+            conn.close()
+
+    def calculate_uptime_24h(self):
+        """Calculate uptime percentage from last 24h of checks"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN status = 'up' THEN 1 ELSE 0 END) as up_count
+                FROM monitoring_checks
+                WHERE customer_id = %s
+                    AND check_type = 'http'
+                    AND checked_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+            """, (self.customer_id,))
+            row = cursor.fetchone()
+
+            if row and row['total'] > 0:
+                uptime = (row['up_count'] / row['total']) * 100
+            else:
+                uptime = 0.0
+
+            # Update the stored uptime
+            cursor.execute("""
+                UPDATE customer_monitoring_status SET uptime_24h = %s WHERE customer_id = %s
+            """, (uptime, self.customer_id))
+            conn.commit()
+
+            self.uptime_24h = uptime
+            return uptime
+        finally:
+            cursor.close()
+            conn.close()
+
+    def increment_failures(self):
+        """Increment consecutive failure count"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE customer_monitoring_status
+                SET consecutive_failures = consecutive_failures + 1
+                WHERE customer_id = %s
+            """, (self.customer_id,))
+            conn.commit()
+            self.consecutive_failures += 1
+        finally:
+            cursor.close()
+            conn.close()
+
+    def reset_failures(self):
+        """Reset consecutive failure count"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE customer_monitoring_status
+                SET consecutive_failures = 0
+                WHERE customer_id = %s
+            """, (self.customer_id,))
+            conn.commit()
+            self.consecutive_failures = 0
+        finally:
+            cursor.close()
+            conn.close()
+
+    def should_alert(self, threshold=3, cooldown_seconds=300):
+        """Check if alert should be sent (threshold failures, cooldown period)"""
+        if self.consecutive_failures < threshold:
+            return False
+
+        if self.last_alert_sent:
+            elapsed = (datetime.now() - self.last_alert_sent).total_seconds()
+            if elapsed < cooldown_seconds:
+                return False
+
+        return True
+
+    def mark_alert_sent(self):
+        """Update last_alert_sent timestamp"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE customer_monitoring_status
+                SET last_alert_sent = NOW()
+                WHERE customer_id = %s
+            """, (self.customer_id,))
+            conn.commit()
+            self.last_alert_sent = datetime.now()
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_all_statuses():
+        """Get all customer monitoring statuses with customer info"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT cms.*, c.email, c.domain, c.company_name, c.status as customer_status
+                FROM customer_monitoring_status cms
+                JOIN customers c ON cms.customer_id = c.id
+                WHERE c.status = 'active'
+                ORDER BY
+                    CASE cms.http_status
+                        WHEN 'down' THEN 1
+                        WHEN 'degraded' THEN 2
+                        WHEN 'unknown' THEN 3
+                        ELSE 4
+                    END,
+                    c.domain
+            """)
+            return cursor.fetchall()
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_summary_stats():
+        """Get aggregate monitoring statistics"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT
+                    COUNT(*) as total,
+                    SUM(CASE WHEN http_status = 'up' AND container_status = 'up' THEN 1 ELSE 0 END) as up,
+                    SUM(CASE WHEN http_status = 'down' OR container_status = 'down' THEN 1 ELSE 0 END) as down,
+                    SUM(CASE WHEN http_status = 'degraded' OR container_status = 'degraded' THEN 1 ELSE 0 END) as degraded,
+                    SUM(CASE WHEN http_status = 'unknown' OR container_status = 'unknown' THEN 1 ELSE 0 END) as unknown,
+                    AVG(uptime_24h) as avg_uptime,
+                    AVG(last_http_response_ms) as avg_response_time
+                FROM customer_monitoring_status cms
+                JOIN customers c ON cms.customer_id = c.id
+                WHERE c.status = 'active'
+            """)
+            row = cursor.fetchone()
+            return {
+                'total': row['total'] or 0,
+                'up': row['up'] or 0,
+                'down': row['down'] or 0,
+                'degraded': row['degraded'] or 0,
+                'unknown': row['unknown'] or 0,
+                'avg_uptime': round(row['avg_uptime'] or 0, 2),
+                'avg_response_time': int(row['avg_response_time'] or 0)
+            }
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_down_count():
+        """Get count of customers with down status"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) FROM customer_monitoring_status cms
+                JOIN customers c ON cms.customer_id = c.id
+                WHERE c.status = 'active'
+                AND (cms.http_status = 'down' OR cms.container_status = 'down')
+            """)
+            return cursor.fetchone()[0]
+        finally:
+            cursor.close()
+            conn.close()
+
+    def __repr__(self):
+        return f"<CustomerMonitoringStatus {self.customer_id}: http={self.http_status}>"
+
+
+class MonitoringAlert:
+    """Alert record for monitoring events"""
+
+    def __init__(self, id=None, customer_id=None, alert_type=None, message=None,
+                 details=None, email_sent=False, acknowledged=False,
+                 acknowledged_by=None, acknowledged_at=None, created_at=None):
+        self.id = id
+        self.customer_id = customer_id
+        self.alert_type = alert_type
+        self.message = message
+        self.details = details if details else {}
+        self.email_sent = email_sent
+        self.acknowledged = acknowledged
+        self.acknowledged_by = acknowledged_by
+        self.acknowledged_at = acknowledged_at
+        self.created_at = created_at or datetime.now()
+
+    def save(self):
+        """Create alert record"""
+        import json
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            details_json = json.dumps(self.details) if self.details else None
+            cursor.execute("""
+                INSERT INTO monitoring_alerts
+                (customer_id, alert_type, message, details, created_at)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                self.customer_id, self.alert_type, self.message,
+                details_json, self.created_at
+            ))
+            self.id = cursor.lastrowid
+            conn.commit()
+            return self
+        finally:
+            cursor.close()
+            conn.close()
+
+    def mark_email_sent(self):
+        """Mark alert as email sent"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE monitoring_alerts SET email_sent = TRUE WHERE id = %s
+            """, (self.id,))
+            conn.commit()
+            self.email_sent = True
+        finally:
+            cursor.close()
+            conn.close()
+
+    def acknowledge(self, admin_id):
+        """Mark alert as acknowledged"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                UPDATE monitoring_alerts
+                SET acknowledged = TRUE, acknowledged_by = %s, acknowledged_at = NOW()
+                WHERE id = %s
+            """, (admin_id, self.id))
+            conn.commit()
+            self.acknowledged = True
+            self.acknowledged_by = admin_id
+            self.acknowledged_at = datetime.now()
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_id(alert_id):
+        """Get alert by ID"""
+        import json
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("SELECT * FROM monitoring_alerts WHERE id = %s", (alert_id,))
+            row = cursor.fetchone()
+            if row:
+                if row.get('details') and isinstance(row['details'], str):
+                    row['details'] = json.loads(row['details'])
+                return MonitoringAlert(**row)
+            return None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_unacknowledged(limit=50):
+        """Get unacknowledged alerts"""
+        import json
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT ma.*, c.email, c.domain, c.company_name
+                FROM monitoring_alerts ma
+                JOIN customers c ON ma.customer_id = c.id
+                WHERE ma.acknowledged = FALSE
+                ORDER BY ma.created_at DESC
+                LIMIT %s
+            """, (limit,))
+            rows = cursor.fetchall()
+            for row in rows:
+                if row.get('details') and isinstance(row['details'], str):
+                    row['details'] = json.loads(row['details'])
+            return rows
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_recent(limit=50, offset=0):
+        """Get recent alerts with pagination"""
+        import json
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT ma.*, c.email, c.domain, c.company_name
+                FROM monitoring_alerts ma
+                JOIN customers c ON ma.customer_id = c.id
+                ORDER BY ma.created_at DESC
+                LIMIT %s OFFSET %s
+            """, (limit, offset))
+            rows = cursor.fetchall()
+            for row in rows:
+                if row.get('details') and isinstance(row['details'], str):
+                    row['details'] = json.loads(row['details'])
+            return rows
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_customer(customer_id, limit=20):
+        """Get alerts for a specific customer"""
+        import json
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT * FROM monitoring_alerts
+                WHERE customer_id = %s
+                ORDER BY created_at DESC
+                LIMIT %s
+            """, (customer_id, limit))
+            rows = cursor.fetchall()
+            alerts = []
+            for row in rows:
+                if row.get('details') and isinstance(row['details'], str):
+                    row['details'] = json.loads(row['details'])
+                alerts.append(MonitoringAlert(**row))
+            return alerts
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_unacknowledged_count():
+        """Get count of unacknowledged alerts"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT COUNT(*) FROM monitoring_alerts WHERE acknowledged = FALSE
+            """)
+            return cursor.fetchone()[0]
+        finally:
+            cursor.close()
+            conn.close()
+
+    def __repr__(self):
+        return f"<MonitoringAlert {self.id}: {self.alert_type} for customer {self.customer_id}>"

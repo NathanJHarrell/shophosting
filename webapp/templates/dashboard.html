@@ -373,7 +373,90 @@
         text-decoration: underline;
     }
 
+    /* Monitoring Panels */
+    .monitoring-panels {
+        padding: 16px;
+    }
+
+    .monitoring-stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .monitoring-stats iframe {
+        border-radius: var(--radius-md);
+        background: var(--bg-surface);
+    }
+
+    .monitoring-chart iframe {
+        border-radius: var(--radius-md);
+        background: var(--bg-surface);
+    }
+
     /* Responsive */
+    /* Resource Usage */
+    .resource-usage-card {
+        margin-top: 24px;
+    }
+
+    .resource-bars {
+        padding: 24px 28px;
+    }
+
+    .resource-item {
+        margin-bottom: 20px;
+    }
+
+    .resource-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .resource-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+
+    .resource-label {
+        color: var(--text-secondary);
+        font-size: 0.925rem;
+        font-weight: 500;
+    }
+
+    .resource-value {
+        color: var(--text-primary);
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+
+    .resource-bar {
+        height: 8px;
+        background: var(--bg-surface);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .resource-bar-fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.3s ease;
+    }
+
+    .resource-bar-fill.healthy {
+        background: var(--success);
+    }
+
+    .resource-bar-fill.warning {
+        background: var(--warning);
+    }
+
+    .resource-bar-fill.critical {
+        background: var(--error);
+    }
+
     @media (max-width: 640px) {
         .info-row {
             flex-direction: column;
@@ -393,6 +476,10 @@
 
         .quick-link {
             justify-content: center;
+        }
+
+        .monitoring-stats {
+            grid-template-columns: 1fr;
         }
     }
 </style>
@@ -503,6 +590,61 @@
             <div class="security-notice">
                 <strong>Important:</strong>
                 <span>Please change your admin password after your first login for security.</span>
+            </div>
+        </div>
+
+        <!-- Resource Usage -->
+        <div class="info-card resource-usage-card">
+            <div class="info-card-header">
+                <h2 class="info-card-title">Resource Usage</h2>
+            </div>
+            <div class="resource-bars">
+                {% set usage = customer.get_resource_usage() %}
+
+                <!-- Disk Usage -->
+                <div class="resource-item">
+                    <div class="resource-header">
+                        <span class="resource-label">Disk Space</span>
+                        <span class="resource-value">{{ usage.disk.used_gb }} / {{ usage.disk.limit_gb }} GB ({{ usage.disk.percent }}%)</span>
+                    </div>
+                    <div class="resource-bar">
+                        <div class="resource-bar-fill {% if usage.disk.percent >= 90 %}critical{% elif usage.disk.percent >= 80 %}warning{% else %}healthy{% endif %}"
+                             style="width: {{ [usage.disk.percent, 100] | min }}%"></div>
+                    </div>
+                </div>
+
+                <!-- Bandwidth Usage -->
+                <div class="resource-item">
+                    <div class="resource-header">
+                        <span class="resource-label">Bandwidth (This Month)</span>
+                        <span class="resource-value">{{ usage.bandwidth.used_gb }} / {{ usage.bandwidth.limit_gb }} GB ({{ usage.bandwidth.percent }}%)</span>
+                    </div>
+                    <div class="resource-bar">
+                        <div class="resource-bar-fill {% if usage.bandwidth.percent >= 90 %}critical{% elif usage.bandwidth.percent >= 80 %}warning{% else %}healthy{% endif %}"
+                             style="width: {{ [usage.bandwidth.percent, 100] | min }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Site Performance Monitoring -->
+        <div class="info-card" style="margin-top: 24px;">
+            <div class="info-card-header">
+                <h2 class="info-card-title">Site Performance</h2>
+            </div>
+            <div class="monitoring-panels">
+                <div class="monitoring-stats">
+                    <iframe src="https://shophosting.io/grafana/d-solo/customer-metrics/customer-metrics?orgId=1&var-customer_id={{ customer.id }}&panelId=1&theme=dark"
+                            width="100%" height="120" frameborder="0"></iframe>
+                    <iframe src="https://shophosting.io/grafana/d-solo/customer-metrics/customer-metrics?orgId=1&var-customer_id={{ customer.id }}&panelId=2&theme=dark"
+                            width="100%" height="120" frameborder="0"></iframe>
+                    <iframe src="https://shophosting.io/grafana/d-solo/customer-metrics/customer-metrics?orgId=1&var-customer_id={{ customer.id }}&panelId=3&theme=dark"
+                            width="100%" height="120" frameborder="0"></iframe>
+                </div>
+                <div class="monitoring-chart">
+                    <iframe src="https://shophosting.io/grafana/d-solo/customer-metrics/customer-metrics?orgId=1&var-customer_id={{ customer.id }}&panelId=4&theme=dark"
+                            width="100%" height="250" frameborder="0"></iframe>
+                </div>
             </div>
         </div>
 

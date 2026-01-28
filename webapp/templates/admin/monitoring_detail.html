@@ -1,0 +1,327 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Monitoring - {{ customer.domain }}{% endblock %}
+{% block page_title %}Monitoring: {{ customer.domain }}{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb -->
+<div style="margin-bottom: 24px;">
+    <a href="{{ url_for('admin.monitoring') }}" style="color: var(--text-secondary); text-decoration: none;">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="vertical-align: middle;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+        Back to Monitoring
+    </a>
+</div>
+
+<!-- Status Overview -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">HTTP Status</div>
+        <div class="stat-value {% if status.http_status == 'up' %}success{% elif status.http_status == 'down' %}error{% elif status.http_status == 'degraded' %}warning{% endif %}">
+            {{ status.http_status|upper }}
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Container Status</div>
+        <div class="stat-value {% if status.container_status == 'up' %}success{% elif status.container_status == 'down' %}error{% elif status.container_status == 'degraded' %}warning{% endif %}">
+            {{ status.container_status|upper }}
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Response Time</div>
+        <div class="stat-value {% if status.last_http_response_ms and status.last_http_response_ms < 500 %}success{% elif status.last_http_response_ms and status.last_http_response_ms < 1000 %}warning{% else %}error{% endif %}">
+            {{ status.last_http_response_ms or 'N/A' }}{% if status.last_http_response_ms %}ms{% endif %}
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">24h Uptime</div>
+        <div class="stat-value {% if status.uptime_24h >= 99 %}success{% elif status.uptime_24h >= 95 %}warning{% else %}error{% endif %}">
+            {{ status.uptime_24h|round(2) }}%
+        </div>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+    <!-- Left column -->
+    <div>
+        <!-- Response Time Chart -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Response Time (Last 24h)</h3>
+            </div>
+            <div class="card-body">
+                {% if chart_data %}
+                <canvas id="responseChart" height="200"></canvas>
+                {% else %}
+                <div style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+                    No response time data available yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Recent Checks -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Recent Checks</h3>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Response</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for check in checks[:30] %}
+                        <tr>
+                            <td class="mono text-muted" style="white-space: nowrap;">{{ check.checked_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                            <td>
+                                <span class="badge badge-{% if check.check_type == 'http' %}info{% else %}suspended{% endif %}">
+                                    {{ check.check_type }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge badge-{% if check.status == 'up' %}success{% elif check.status == 'down' %}error{% elif check.status == 'degraded' %}warning{% else %}suspended{% endif %}">
+                                    {{ check.status }}
+                                </span>
+                            </td>
+                            <td class="mono">
+                                {% if check.response_time_ms %}{{ check.response_time_ms }}ms{% else %}-{% endif %}
+                            </td>
+                            <td class="text-muted" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                {% if check.details %}
+                                    {% if check.details.cpu %}CPU: {{ check.details.cpu|round(1) }}%{% endif %}
+                                    {% if check.details.memory_mb %} Mem: {{ check.details.memory_mb }}MB{% endif %}
+                                {% else %}-{% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-muted">No checks recorded yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column -->
+    <div>
+        <!-- Customer Info -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Customer Info</h3>
+            </div>
+            <div class="card-body">
+                <table style="width: 100%;">
+                    <tr>
+                        <td class="text-muted" style="padding: 8px 0;">Email</td>
+                        <td style="padding: 8px 0;">{{ customer.email }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted" style="padding: 8px 0;">Company</td>
+                        <td style="padding: 8px 0;">{{ customer.company_name or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted" style="padding: 8px 0;">Platform</td>
+                        <td style="padding: 8px 0;"><span class="badge badge-info">{{ customer.platform }}</span></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted" style="padding: 8px 0;">Status</td>
+                        <td style="padding: 8px 0;"><span class="badge badge-{{ customer.status }}">{{ customer.status }}</span></td>
+                    </tr>
+                </table>
+                <div style="margin-top: 16px;">
+                    <a href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}" class="btn btn-secondary btn-sm" style="width: 100%;">
+                        View Customer Details
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resource Usage -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Resource Usage</h3>
+            </div>
+            <div class="card-body">
+                <div class="resource-item">
+                    <div class="resource-header">
+                        <span>CPU</span>
+                        <span class="{% if status.cpu_percent and status.cpu_percent > 80 %}text-warning{% endif %}">{{ status.cpu_percent|round(1) if status.cpu_percent else 'N/A' }}{% if status.cpu_percent %}%{% endif %}</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar {% if status.cpu_percent and status.cpu_percent > 80 %}warning{% endif %}" style="width: {{ status.cpu_percent or 0 }}%;"></div>
+                    </div>
+                </div>
+                <div class="resource-item" style="margin-top: 16px;">
+                    <div class="resource-header">
+                        <span>Memory</span>
+                        <span>{{ status.memory_usage_mb or 'N/A' }}{% if status.memory_usage_mb %} MB{% endif %}</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar" style="width: {{ (status.memory_usage_mb / 1024 * 100) if status.memory_usage_mb else 0 }}%;"></div>
+                    </div>
+                </div>
+                {% if status.disk_usage_mb %}
+                <div class="resource-item" style="margin-top: 16px;">
+                    <div class="resource-header">
+                        <span>Disk</span>
+                        <span>{{ status.disk_usage_mb }} MB</span>
+                    </div>
+                </div>
+                {% endif %}
+                <div style="margin-top: 16px; font-size: 0.8rem; color: var(--text-muted);">
+                    Last updated: {{ status.last_container_check.strftime('%Y-%m-%d %H:%M:%S') if status.last_container_check else 'Never' }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Alerts -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Recent Alerts</h3>
+            </div>
+            <div class="card-body">
+                {% if alerts %}
+                <div class="alert-list">
+                    {% for alert in alerts[:10] %}
+                    <div class="alert-item {% if not alert.acknowledged %}unacked{% endif %}">
+                        <div class="alert-header">
+                            <span class="badge badge-{% if alert.alert_type == 'down' %}error{% elif alert.alert_type == 'degraded' %}warning{% elif alert.alert_type == 'recovered' %}success{% else %}info{% endif %}">
+                                {{ alert.alert_type }}
+                            </span>
+                            <span class="alert-time">{{ alert.created_at.strftime('%m/%d %H:%M') }}</span>
+                        </div>
+                        <div class="alert-message">{{ alert.message }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-muted" style="text-align: center; padding: 20px;">
+                    No alerts for this customer.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .resource-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 6px;
+        font-size: 0.9rem;
+    }
+
+    .resource-item .progress {
+        height: 6px;
+    }
+
+    .alert-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .alert-item {
+        padding: 12px;
+        background: var(--bg-surface);
+        border-radius: var(--radius-sm);
+        border-left: 3px solid var(--border-subtle);
+    }
+
+    .alert-item.unacked {
+        border-left-color: var(--error);
+        background: var(--error-muted);
+    }
+
+    .alert-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+
+    .alert-time {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+    }
+
+    .alert-message {
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+{% if chart_data %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script nonce="{{ csp_nonce() }}">
+const chartData = {{ chart_data | tojson }};
+
+const ctx = document.getElementById('responseChart').getContext('2d');
+new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: chartData.map(d => d.time),
+        datasets: [{
+            label: 'Response Time (ms)',
+            data: chartData.map(d => d.value),
+            borderColor: '#0088ff',
+            backgroundColor: 'rgba(0, 136, 255, 0.1)',
+            fill: true,
+            tension: 0.4,
+            pointRadius: 0,
+            pointHoverRadius: 4
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            x: {
+                grid: {
+                    color: 'rgba(255,255,255,0.05)'
+                },
+                ticks: {
+                    color: '#71717a',
+                    maxTicksLimit: 12
+                }
+            },
+            y: {
+                grid: {
+                    color: 'rgba(255,255,255,0.05)'
+                },
+                ticks: {
+                    color: '#71717a',
+                    callback: function(value) {
+                        return value + 'ms';
+                    }
+                },
+                beginAtZero: true
+            }
+        },
+        interaction: {
+            intersect: false,
+            mode: 'index'
+        }
+    }
+});
+</script>
+{% endif %}
+{% endblock %}
