@@ -633,6 +633,120 @@ class PricingPlan:
 
 
 # =============================================================================
+# ResourceUsage Model
+# =============================================================================
+
+class ResourceUsage:
+    """Daily resource usage snapshot for a customer"""
+
+    def __init__(self, id=None, customer_id=None, date=None,
+                 disk_used_bytes=0, bandwidth_used_bytes=0, created_at=None):
+        self.id = id
+        self.customer_id = customer_id
+        self.date = date
+        self.disk_used_bytes = disk_used_bytes
+        self.bandwidth_used_bytes = bandwidth_used_bytes
+        self.created_at = created_at
+
+    def save(self):
+        """Save or update resource usage record"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            # Use INSERT ... ON DUPLICATE KEY UPDATE for upsert
+            cursor.execute("""
+                INSERT INTO resource_usage (customer_id, date, disk_used_bytes, bandwidth_used_bytes)
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    disk_used_bytes = VALUES(disk_used_bytes),
+                    bandwidth_used_bytes = VALUES(bandwidth_used_bytes)
+            """, (self.customer_id, self.date, self.disk_used_bytes, self.bandwidth_used_bytes))
+            conn.commit()
+            if self.id is None:
+                self.id = cursor.lastrowid
+            return self
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_for_customer(customer_id, date):
+        """Get usage for a specific customer and date"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute(
+                "SELECT * FROM resource_usage WHERE customer_id = %s AND date = %s",
+                (customer_id, date)
+            )
+            row = cursor.fetchone()
+            if row:
+                return ResourceUsage(**row)
+            return None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_monthly_bandwidth(customer_id):
+        """Get total bandwidth used in current billing month"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT COALESCE(SUM(bandwidth_used_bytes), 0)
+                FROM resource_usage
+                WHERE customer_id = %s
+                AND date >= DATE_FORMAT(NOW(), '%%Y-%%m-01')
+            """, (customer_id,))
+            result = cursor.fetchone()
+            return result[0] if result else 0
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_current_disk_usage(customer_id):
+        """Get most recent disk usage for customer"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                SELECT disk_used_bytes FROM resource_usage
+                WHERE customer_id = %s
+                ORDER BY date DESC LIMIT 1
+            """, (customer_id,))
+            result = cursor.fetchone()
+            return result[0] if result else 0
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_usage_history(customer_id, days=30):
+        """Get usage history for last N days"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("""
+                SELECT * FROM resource_usage
+                WHERE customer_id = %s
+                AND date >= DATE_SUB(CURDATE(), INTERVAL %s DAY)
+                ORDER BY date ASC
+            """, (customer_id, days))
+            rows = cursor.fetchall()
+            return [ResourceUsage(**row) for row in rows]
+        finally:
+            cursor.close()
+            conn.close()
+
+
+# =============================================================================
 # Subscription Model
 # =============================================================================
 
