@@ -1,0 +1,6 @@
+# Sudoers configuration for ShopHosting backup operations
+# Install to /etc/sudoers.d/shophosting-backups
+
+agileweb ALL=(root) NOPASSWD: /opt/shophosting/scripts/customer-backup.sh *
+agileweb ALL=(root) NOPASSWD: /opt/shophosting/scripts/customer-restore.sh *
+agileweb ALL=(root) NOPASSWD: /bin/bash -c *

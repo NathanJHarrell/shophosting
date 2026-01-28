@@ -1,0 +1,18 @@
+[Unit]
+Description=ShopHosting.io Backup Worker
+After=network.target redis-server.service mysql.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/shophosting/provisioning
+Environment="PATH=/opt/shophosting/provisioning/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/opt/shophosting/provisioning/venv/bin/python /opt/shophosting/provisioning/backup_worker.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

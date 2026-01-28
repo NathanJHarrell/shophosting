@@ -31,6 +31,8 @@ sys.path.insert(0, '/opt/shophosting/provisioning')
 
 from models import Customer, PortManager, PricingPlan, Subscription, Invoice, init_db_pool, get_db_connection
 from models import Ticket, TicketMessage, TicketAttachment, TicketCategory, ConsultationAppointment
+from models import StagingEnvironment, StagingPortManager
+from models import CustomerBackupJob
 from enqueue_provisioning import ProvisioningQueue
 from stripe_integration import init_stripe, create_checkout_session, process_webhook, create_portal_session
 from stripe_integration.checkout import get_checkout_session
@@ -1543,6 +1545,218 @@ def serve_attachment(attachment_id):
         download_name=attachment.original_filename,
         as_attachment=True
     )
+
+
+# =============================================================================
+# Customer Backup Routes
+# =============================================================================
+
+@app.route('/backups')
+@login_required
+def backups():
+    """Customer backups page"""
+    customer = Customer.get_by_id(current_user.id)
+    active_job = CustomerBackupJob.get_active_job(customer.id)
+    recent_jobs = CustomerBackupJob.get_recent_jobs(customer.id, limit=5)
+
+    # Get manual backups from restic
+    manual_backups = get_customer_manual_backups(customer.id)
+
+    # Get daily backups (filtered to this customer's data)
+    daily_backups = get_customer_daily_backups(customer.id)
+
+    return render_template('backups.html',
+                          customer=customer,
+                          active_job=active_job,
+                          recent_jobs=recent_jobs,
+                          manual_backups=manual_backups,
+                          daily_backups=daily_backups)
+
+
+@app.route('/backups/create', methods=['POST'])
+@login_required
+def backup_create():
+    """Create a manual backup"""
+    customer = Customer.get_by_id(current_user.id)
+
+    # Check for active job
+    active_job = CustomerBackupJob.get_active_job(customer.id)
+    if active_job:
+        return jsonify({
+            'success': False,
+            'message': 'A backup operation is already in progress'
+        }), 400
+
+    backup_type = request.form.get('backup_type', 'both')
+    if backup_type not in ('db', 'files', 'both'):
+        return jsonify({'success': False, 'message': 'Invalid backup type'}), 400
+
+    try:
+        # Create job record
+        job = CustomerBackupJob(
+            customer_id=customer.id,
+            job_type='backup',
+            backup_type=backup_type,
+            status='pending'
+        )
+        job.save()
+
+        # Queue the job
+        from redis import Redis
+        from rq import Queue
+
+        redis_host = os.getenv('REDIS_HOST', 'localhost')
+        redis_conn = Redis(host=redis_host, port=6379)
+        queue = Queue('backups', connection=redis_conn)
+
+        from backup_worker import create_backup_job
+        queue.enqueue(create_backup_job, job.id, job_timeout=700)
+
+        logger.info(f"Backup job {job.id} queued for customer {customer.id}")
+        return jsonify({'success': True, 'message': 'Backup started', 'job_id': job.id})
+
+    except Exception as e:
+        logger.error(f"Failed to queue backup: {e}")
+        return jsonify({'success': False, 'message': 'Failed to start backup'}), 500
+
+
+@app.route('/backups/<snapshot_id>/restore', methods=['POST'])
+@login_required
+def backup_restore(snapshot_id):
+    """Restore from a backup"""
+    customer = Customer.get_by_id(current_user.id)
+
+    # Check for active job
+    active_job = CustomerBackupJob.get_active_job(customer.id)
+    if active_job:
+        return jsonify({
+            'success': False,
+            'message': 'A backup operation is already in progress'
+        }), 400
+
+    # Verify confirmation
+    confirmation = request.form.get('confirmation', '')
+    if confirmation != 'RESTORE':
+        return jsonify({
+            'success': False,
+            'message': 'Please type RESTORE to confirm'
+        }), 400
+
+    restore_type = request.form.get('restore_type', 'both')
+    if restore_type not in ('db', 'files', 'both'):
+        return jsonify({'success': False, 'message': 'Invalid restore type'}), 400
+
+    try:
+        # Create job record
+        job = CustomerBackupJob(
+            customer_id=customer.id,
+            job_type='restore',
+            backup_type=restore_type,
+            snapshot_id=snapshot_id,
+            status='pending'
+        )
+        job.save()
+
+        # Queue the job
+        from redis import Redis
+        from rq import Queue
+
+        redis_host = os.getenv('REDIS_HOST', 'localhost')
+        redis_conn = Redis(host=redis_host, port=6379)
+        queue = Queue('backups', connection=redis_conn)
+
+        from backup_worker import restore_backup_job
+        queue.enqueue(restore_backup_job, job.id, job_timeout=1300)
+
+        logger.info(f"Restore job {job.id} queued for customer {customer.id}")
+        return jsonify({'success': True, 'message': 'Restore started', 'job_id': job.id})
+
+    except Exception as e:
+        logger.error(f"Failed to queue restore: {e}")
+        return jsonify({'success': False, 'message': 'Failed to start restore'}), 500
+
+
+@app.route('/api/backups/status')
+@login_required
+def backup_status():
+    """Get current backup job status"""
+    customer = Customer.get_by_id(current_user.id)
+    active_job = CustomerBackupJob.get_active_job(customer.id)
+
+    if active_job:
+        return jsonify({
+            'has_active_job': True,
+            'job': active_job.to_dict()
+        })
+    else:
+        # Check for recently failed job to show error
+        recent_jobs = CustomerBackupJob.get_recent_jobs(customer.id, limit=1)
+        last_failed = None
+        if recent_jobs and recent_jobs[0].status == 'failed':
+            last_failed = recent_jobs[0].to_dict()
+
+        return jsonify({
+            'has_active_job': False,
+            'last_failed': last_failed
+        })
+
+
+def get_customer_manual_backups(customer_id, limit=5):
+    """Get manual backups for a customer from restic"""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['sudo', 'bash', '-c',
+             f'export RESTIC_REPOSITORY="sftp:sh-backup@15.204.249.219:/home/sh-backup/manual-backups" && '
+             f'export RESTIC_PASSWORD_FILE="/opt/shophosting/.manual-restic-password" && '
+             f'export HOME=/root && '
+             f'restic snapshots --json --tag "customer-{customer_id}" --tag "manual"'],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        logger.info(f"Manual backup list for customer {customer_id}: returncode={result.returncode}, stdout_len={len(result.stdout)}, stderr={result.stderr[:200] if result.stderr else 'none'}")
+
+        if result.returncode == 0 and result.stdout.strip():
+            import json
+            snapshots = json.loads(result.stdout)
+            # Sort by time descending and limit
+            snapshots.sort(key=lambda x: x.get('time', ''), reverse=True)
+            return snapshots[:limit]
+    except Exception as e:
+        logger.error(f"Error fetching manual backups: {e}")
+
+    return []
+
+
+def get_customer_daily_backups(customer_id, limit=10):
+    """Get daily backups that contain this customer's data"""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['sudo', 'bash', '-c',
+             f'export RESTIC_REPOSITORY="sftp:sh-backup@15.204.249.219:/home/sh-backup/backups" && '
+             f'export RESTIC_PASSWORD_FILE="/root/.restic-password" && '
+             f'export HOME=/root && '
+             f'restic snapshots --json --tag "daily"'],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if result.returncode == 0 and result.stdout.strip():
+            import json
+            snapshots = json.loads(result.stdout)
+            # Filter to snapshots that have customer path, sort descending
+            customer_path = f"/var/customers/customer-{customer_id}"
+            filtered = [s for s in snapshots if any(customer_path in p for p in s.get('paths', []))]
+            filtered.sort(key=lambda x: x.get('time', ''), reverse=True)
+            return filtered[:limit]
+    except Exception as e:
+        logger.error(f"Error fetching daily backups: {e}")
+
+    return []
 
 
 # =============================================================================

@@ -1,200 +1,192 @@
 #!/bin/bash
 # Customer Restore Script
-# Restores customer data from restic snapshots
-# Usage: ./customer-restore.sh <customer_id> <snapshot_id> <target> [--force]
-#
-# target options: db, files, all
+# Restores a customer's site from a backup snapshot
+# Usage: customer-restore.sh <customer_id> <snapshot_id> <restore_type: db|files|both> <source: manual|daily>
 
 set -euo pipefail
 
-if [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ]; then
-    echo "Usage: $0 <customer_id> <snapshot_id> <db|files|all>"
-    echo ""
-    echo "Examples:"
-    echo "  $0 6 f724d41e db        # Restore only database from snapshot"
-    echo "  $0 6 f724d41e files     # Restore only files from snapshot"
-    echo "  $0 6 f724d41e all       # Restore both database and files"
+# Arguments
+CUSTOMER_ID="${1:-}"
+SNAPSHOT_ID="${2:-}"
+RESTORE_TYPE="${3:-both}"
+SOURCE="${4:-manual}"
+
+if [ -z "$CUSTOMER_ID" ] || [ -z "$SNAPSHOT_ID" ]; then
+    echo "Usage: $0 <customer_id> <snapshot_id> <restore_type: db|files|both> <source: manual|daily>"
     exit 1
 fi
 
-CUSTOMER_ID="$1"
-SNAPSHOT_ID="$2"
-TARGET="$3"
-FORCE_FLAG="${4:-}"
-
-CUSTOMER_DIR="/var/customers/customer-${CUSTOMER_ID}"
-
-if [ ! -d "$CUSTOMER_DIR" ]; then
-    echo "ERROR: Customer directory not found: $CUSTOMER_DIR"
-    exit 1
+# Configuration based on source
+if [ "$SOURCE" = "manual" ]; then
+    RESTIC_REPOSITORY="sftp:sh-backup@15.204.249.219:/home/sh-backup/manual-backups"
+    RESTIC_PASSWORD_FILE="/opt/shophosting/.manual-restic-password"
+else
+    RESTIC_REPOSITORY="sftp:sh-backup@15.204.249.219:/home/sh-backup/backups"
+    RESTIC_PASSWORD_FILE="/root/.restic-password"
 fi
 
-# Configuration
-RESTIC_REPOSITORY="sftp:sh-backup@15.204.249.219:/home/sh-backup/backups"
-RESTIC_PASSWORD_FILE="/root/.restic-password"
-RESTORE_DIR="/tmp/shophosting-restore-${CUSTOMER_ID}-${SNAPSHOT_ID}"
-BACKUP_LOG="/var/log/shophosting-customer-restore.log"
+CUSTOMER_PATH="/var/customers/customer-${CUSTOMER_ID}"
+RESTORE_DIR="/tmp/restore-customer-${CUSTOMER_ID}-$(date +%s)"
+MAINTENANCE_FILE="${CUSTOMER_PATH}/.maintenance"
 
+# Load environment variables safely (handle special characters in values)
+ENV_FILE="/opt/shophosting/.env"
+DB_HOST=$(grep -E "^DB_HOST=" "$ENV_FILE" | cut -d= -f2-)
+DB_USER=$(grep -E "^DB_USER=" "$ENV_FILE" | cut -d= -f2-)
+DB_PASSWORD=$(grep -E "^DB_PASSWORD=" "$ENV_FILE" | cut -d= -f2-)
+
+# Export for restic
 export RESTIC_REPOSITORY
 export RESTIC_PASSWORD_FILE
 export HOME=/root
 export XDG_CACHE_HOME=/root/.cache
 
 log() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [Customer ${CUSTOMER_ID} Restore from ${SNAPSHOT_ID}] $1" | tee -a "$BACKUP_LOG"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-log "=========================================="
-log "Starting restore for customer ${CUSTOMER_ID}"
-log "Target: ${TARGET}"
-log "Snapshot: ${SNAPSHOT_ID}"
-log "=========================================="
-
-# Validate target
-if [[ ! "$TARGET" =~ ^(db|files|all)$ ]]; then
-    log "ERROR: Invalid target: ${TARGET}. Must be db, files, or all"
+error_exit() {
+    log "ERROR: $1"
+    # Always try to disable maintenance mode on error
+    rm -f "$MAINTENANCE_FILE" 2>/dev/null || true
     exit 1
+}
+
+cleanup() {
+    log "Cleaning up..."
+    rm -rf "$RESTORE_DIR" 2>/dev/null || true
+    rm -f "$MAINTENANCE_FILE" 2>/dev/null || true
+}
+
+trap cleanup EXIT
+
+# Validate customer directory exists
+if [ ! -d "$CUSTOMER_PATH" ]; then
+    error_exit "Customer directory not found: $CUSTOMER_PATH"
 fi
 
-# Detect platform
-if [ -f "${CUSTOMER_DIR}/.platform" ]; then
-    PLATFORM=$(cat "${CUSTOMER_DIR}/.platform")
+# Verify snapshot exists and belongs to this customer
+log "Verifying snapshot $SNAPSHOT_ID..."
+if [ "$SOURCE" = "manual" ]; then
+    # For manual backups, verify customer tag
+    SNAPSHOT_INFO=$(restic snapshots --json "$SNAPSHOT_ID" 2>/dev/null | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+if data:
+    tags = data[0].get('tags', [])
+    if 'customer-${CUSTOMER_ID}' in tags:
+        print('valid')
+    else:
+        print('invalid')
+else:
+    print('notfound')
+" 2>/dev/null)
 else
-    if [ -f "${CUSTOMER_DIR}/docker-compose.yml" ]; then
-        if grep -q "wordpress" "${CUSTOMER_DIR}/docker-compose.yml"; then
-            PLATFORM="woocommerce"
-        elif grep -q "magento" "${CUSTOMER_DIR}/docker-compose.yml"; then
-            PLATFORM="magento"
-        else
-            PLATFORM="unknown"
-        fi
-    else
-        PLATFORM="unknown"
-    fi
+    # For daily backups, verify snapshot contains customer path
+    SNAPSHOT_INFO=$(restic ls "$SNAPSHOT_ID" 2>/dev/null | grep -q "/var/customers/customer-${CUSTOMER_ID}" && echo "valid" || echo "invalid")
 fi
 
-log "Detected platform: ${PLATFORM}"
+if [ "$SNAPSHOT_INFO" != "valid" ]; then
+    error_exit "Snapshot $SNAPSHOT_ID not found or does not belong to customer $CUSTOMER_ID"
+fi
+
+log "Starting restore for customer $CUSTOMER_ID from snapshot $SNAPSHOT_ID (type: $RESTORE_TYPE)"
+
+# Enable maintenance mode
+log "Enabling maintenance mode..."
+touch "$MAINTENANCE_FILE"
+
+# Stop customer containers
+log "Stopping customer containers..."
+cd "$CUSTOMER_PATH"
+docker compose down 2>/dev/null || log "Warning: Could not stop containers (may not be running)"
 
 # Create restore directory
 mkdir -p "$RESTORE_DIR"
 
-# Check if snapshot exists
-log "Verifying snapshot..."
-SNAPSHOT_CHECK=$(restic find --tag customer-"${CUSTOMER_ID}" --json 2>/dev/null | grep -o "\"id\":\"${SNAPSHOT_ID}\"" || true)
-if [ -z "$SNAPSHOT_CHECK" ]; then
-    log "ERROR: Snapshot ${SNAPSHOT_ID} not found for customer ${CUSTOMER_ID}"
-    rm -rf "$RESTORE_DIR"
-    exit 1
-fi
-log "Snapshot verified"
+# Restore files if requested
+if [ "$RESTORE_TYPE" = "files" ] || [ "$RESTORE_TYPE" = "both" ]; then
+    log "Restoring customer files..."
 
-# Restore database
-if [[ "$TARGET" == "db" ]] || [[ "$TARGET" == "all" ]]; then
-    log "Restoring database..."
-    
-    DB_DUMP_PATH="${RESTORE_DIR}/database.sql"
-    
-    restic dump "${SNAPSHOT_ID}" --tag customer-"${CUSTOMER_ID}" --path "/tmp/shophosting-customer-backup-${CUSTOMER_ID}/database.sql" > "$DB_DUMP_PATH" 2>/dev/null || \
-    restic dump "${SNAPSHOT_ID}" --tag customer-"${CUSTOMER_ID}" --path "/var/customers/customer-${CUSTOMER_ID}/database.sql" > "$DB_DUMP_PATH" 2>/dev/null || \
-    restic dump "${SNAPSHOT_ID}" --tag customer-"${CUSTOMER_ID}" > "$DB_DUMP_PATH" 2>/dev/null
-    
-    if [ ! -s "$DB_DUMP_PATH" ]; then
-        log "Warning: No database backup found in snapshot"
+    restic restore "$SNAPSHOT_ID" \
+        --target "$RESTORE_DIR" \
+        --include "/var/customers/customer-${CUSTOMER_ID}" \
+        || error_exit "File restore failed"
+
+    # Determine what to restore (wordpress or volumes/files)
+    if [ -d "$RESTORE_DIR/var/customers/customer-${CUSTOMER_ID}/wordpress" ]; then
+        RESTORED_FILES="$RESTORE_DIR/var/customers/customer-${CUSTOMER_ID}/wordpress"
+        TARGET_FILES="$CUSTOMER_PATH/wordpress"
+    elif [ -d "$RESTORE_DIR/var/customers/customer-${CUSTOMER_ID}/volumes/files" ]; then
+        RESTORED_FILES="$RESTORE_DIR/var/customers/customer-${CUSTOMER_ID}/volumes/files"
+        TARGET_FILES="$CUSTOMER_PATH/volumes/files"
     else
-        log "Database dump found: $(du -h "$DB_DUMP_PATH" | cut -f1)"
-        
-        # Restore based on platform
-        case "$PLATFORM" in
-            woocommerce)
-                DB_CONTAINER="${CUSTOMER_ID}-wordpress"
-                if docker ps --format '{{.Names}}' | grep -q "^${DB_CONTAINER}$"; then
-                    log "Dropping and recreating database..."
-                    docker exec "$DB_CONTAINER" mysql -u root -p"${MYSQL_ROOT_PASSWORD:-rootpassword}" -e "DROP DATABASE IF EXISTS wordpress" 2>/dev/null || \
-                    docker exec "$DB_CONTAINER" mysql -u root -prootpassword -e "DROP DATABASE IF EXISTS wordpress" 2>/dev/null
-                    docker exec "$DB_CONTAINER" mysql -u root -p"${MYSQL_ROOT_PASSWORD:-rootpassword}" -e "CREATE DATABASE wordpress CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" 2>/dev/null || \
-                    docker exec "$DB_CONTAINER" mysql -u root -prootpassword -e "CREATE DATABASE wordpress CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" 2>/dev/null
-                    
-                    log "Importing database..."
-                    cat "$DB_DUMP_PATH" | docker exec -i "$DB_CONTAINER" mysql -u root -p"${MYSQL_ROOT_PASSWORD:-rootpassword}" wordpress 2>/dev/null || \
-                    cat "$DB_DUMP_PATH" | docker exec -i "$DB_CONTAINER" mysql -u root -prootpassword wordpress 2>/dev/null
-                    
-                    log "Database restored successfully"
-                else
-                    log "ERROR: Database container not found"
-                    rm -rf "$RESTORE_DIR"
-                    exit 1
-                fi
-                ;;
-            magento)
-                DB_CONTAINER="${CUSTOMER_ID}-mysql"
-                if docker ps --format '{{.Names}}' | grep -q "^${DB_CONTAINER}$"; then
-                    log "Dropping and recreating database..."
-                    docker exec "$DB_CONTAINER" mysql -u root -p"${MYSQL_ROOT_PASSWORD:-rootpassword}" -e "DROP DATABASE IF EXISTS magento" 2>/dev/null
-                    docker exec "$DB_CONTAINER" mysql -u root -p"${MYSQL_ROOT_PASSWORD:-rootpassword}" -e "CREATE DATABASE magento CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci" 2>/dev/null
-                    
-                    log "Importing database..."
-                    cat "$DB_DUMP_PATH" | docker exec -i "$DB_CONTAINER" mysql -u root -p"${MYSQL_ROOT_PASSWORD:-rootpassword}" magento 2>/dev/null
-                    
-                    log "Database restored successfully"
-                else
-                    log "ERROR: Database container not found"
-                    rm -rf "$RESTORE_DIR"
-                    exit 1
-                fi
-                ;;
-            *)
-                log "ERROR: Unknown platform, cannot restore database"
-                rm -rf "$RESTORE_DIR"
-                exit 1
-                ;;
-        esac
+        log "Warning: No files found in snapshot for customer path"
+        RESTORED_FILES=""
     fi
-fi
 
-# Restore files
-if [[ "$TARGET" == "files" ]] || [[ "$TARGET" == "all" ]]; then
-    log "Restoring files..."
-    
-    # Stop containers first
-    log "Stopping customer containers..."
-    cd "$CUSTOMER_DIR"
-    docker compose down 2>/dev/null || docker-compose down 2>/dev/null || true
-    
-    # Restore files from snapshot
-    log "Extracting files from snapshot..."
-    restic restore "${SNAPSHOT_ID}" --tag customer-"${CUSTOMER_ID}" --target "${RESTORE_DIR}/files" --include "/var/customers/customer-${CUSTOMER_ID}" 2>/dev/null || \
-    restic restore "${SNAPSHOT_ID}" --target "${RESTORE_DIR}/files" 2>/dev/null
-    
-    if [ -d "${RESTORE_DIR}/files/var/customers/customer-${CUSTOMER_ID}" ]; then
-        # Copy files back
-        log "Copying restored files..."
-        rsync -a --delete "${RESTORE_DIR}/files/var/customers/customer-${CUSTOMER_ID}/" "${CUSTOMER_DIR}/" 2>/dev/null || \
-        cp -a "${RESTORE_DIR}/files/var/customers/customer-${CUSTOMER_ID}/"* "${CUSTOMER_DIR}/" 2>/dev/null || \
-        true
-        
-        # Ensure proper permissions
-        if [ -d "${CUSTOMER_DIR}/wordpress" ]; then
-            chown -R 33:33 "${CUSTOMER_DIR}/wordpress" 2>/dev/null || true
+    if [ -n "$RESTORED_FILES" ] && [ -d "$RESTORED_FILES" ]; then
+        # Backup current files
+        BACKUP_SUFFIX=$(date +%Y%m%d%H%M%S)
+        if [ -d "$TARGET_FILES" ]; then
+            mv "$TARGET_FILES" "${TARGET_FILES}.pre-restore-${BACKUP_SUFFIX}"
         fi
-        
+
+        # Move restored files into place
+        mv "$RESTORED_FILES" "$TARGET_FILES"
         log "Files restored successfully"
-    else
-        log "Warning: No customer files found in snapshot"
+
+        # Cleanup old backup after successful restore
+        rm -rf "${TARGET_FILES}.pre-restore-${BACKUP_SUFFIX}" 2>/dev/null || true
     fi
-    
-    # Restart containers
-    log "Restarting customer containers..."
-    cd "$CUSTOMER_DIR"
-    docker compose up -d 2>/dev/null || docker-compose up -d 2>/dev/null || true
 fi
 
-# Cleanup
-log "Cleaning up temporary files..."
-rm -rf "$RESTORE_DIR"
+# Restore database if requested
+if [ "$RESTORE_TYPE" = "db" ] || [ "$RESTORE_TYPE" = "both" ]; then
+    log "Restoring customer database..."
 
-log "=========================================="
+    CUSTOMER_DB="customer_${CUSTOMER_ID}"
+
+    # For manual backups, SQL is in /tmp/customer-backup-ID/
+    # For daily backups, SQL is in /tmp/shophosting-db-dumps/
+    if [ "$SOURCE" = "manual" ]; then
+        SQL_PATH="/tmp/customer-backup-${CUSTOMER_ID}/${CUSTOMER_DB}.sql"
+    else
+        SQL_PATH="/tmp/shophosting-db-dumps/${CUSTOMER_DB}.sql"
+    fi
+
+    # Restore SQL dump from snapshot
+    restic restore "$SNAPSHOT_ID" \
+        --target "$RESTORE_DIR" \
+        --include "$SQL_PATH" \
+        || log "Warning: Could not restore database dump"
+
+    RESTORED_SQL="$RESTORE_DIR$SQL_PATH"
+
+    if [ -f "$RESTORED_SQL" ]; then
+        log "Importing database from $RESTORED_SQL..."
+        mysql -h "${DB_HOST:-localhost}" \
+            -u "${DB_USER:-shophosting_app}" \
+            -p"${DB_PASSWORD}" \
+            "$CUSTOMER_DB" < "$RESTORED_SQL" \
+            || error_exit "Database import failed"
+        log "Database restored successfully"
+    else
+        log "Warning: No database dump found in snapshot"
+    fi
+fi
+
+# Start customer containers
+log "Starting customer containers..."
+cd "$CUSTOMER_PATH"
+docker compose up -d || error_exit "Failed to start containers"
+
+# Wait for containers to be ready
+log "Waiting for containers to be ready..."
+sleep 10
+
+# Disable maintenance mode (handled by trap, but do explicitly)
+rm -f "$MAINTENANCE_FILE"
+
 log "Restore completed successfully"
-log "Target restored: ${TARGET}"
-log "=========================================="
-
 exit 0
