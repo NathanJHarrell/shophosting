@@ -1,0 +1,6 @@
+# Sudoers configuration for ShopHosting backup operations
+# Install to /etc/sudoers.d/shophosting-backups
+
+www-data ALL=(root) NOPASSWD: /opt/shophosting/scripts/customer-backup.sh
+www-data ALL=(root) NOPASSWD: /opt/shophosting/scripts/customer-restore.sh
+www-data ALL=(root) NOPASSWD: /bin/bash -c export RESTIC_REPOSITORY=* && export RESTIC_PASSWORD_FILE=* && export HOME=/root && restic snapshots *
