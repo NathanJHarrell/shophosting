@@ -304,5 +304,9 @@
         });
     }
 </script>
+{% block dashboard_js_block %}
+<script nonce="{{ csp_nonce() }}">
 {% block dashboard_js %}{% endblock %}
+</script>
+{% endblock %}
 {% endblock %}

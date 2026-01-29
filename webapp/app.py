@@ -854,9 +854,21 @@ def dashboard_health():
 def dashboard_backups():
     """Backups management page"""
     customer = Customer.get_by_id(current_user.id)
+    active_job = CustomerBackupJob.get_active_job(customer.id)
+    recent_jobs = CustomerBackupJob.get_recent_jobs(customer.id, limit=5)
+
+    # Get manual backups from restic
+    manual_backups = get_customer_manual_backups(customer.id)
+
+    # Get daily backups (filtered to this customer's data)
+    daily_backups = get_customer_daily_backups(customer.id)
 
     return render_template('dashboard/backups.html',
                           customer=customer,
+                          active_job=active_job,
+                          recent_jobs=recent_jobs,
+                          manual_backups=manual_backups,
+                          daily_backups=daily_backups,
                           active_page='backups')
 
 
@@ -865,11 +877,26 @@ def dashboard_backups():
 def dashboard_staging():
     """Staging environments page"""
     customer = Customer.get_by_id(current_user.id)
-    staging_envs = StagingEnvironment.get_by_customer(customer.id) if hasattr(StagingEnvironment, 'get_by_customer') else []
+    if not customer:
+        flash('Customer account not found.', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Defensive handling in case staging_environments table doesn't exist yet
+    try:
+        staging_envs = StagingEnvironment.get_by_customer(customer.id)
+        can_create = StagingEnvironment.can_create_staging(customer.id) and customer.status == 'active'
+        max_staging = StagingEnvironment.MAX_STAGING_PER_CUSTOMER
+    except Exception as e:
+        app.logger.warning(f"Staging feature not available: {e}")
+        staging_envs = []
+        can_create = False
+        max_staging = 3
 
     return render_template('dashboard/staging.html',
                           customer=customer,
                           staging_envs=staging_envs,
+                          can_create=can_create,
+                          max_staging=max_staging,
                           active_page='staging')
 
 
@@ -878,10 +905,98 @@ def dashboard_staging():
 def dashboard_domains():
     """Domains management page"""
     customer = Customer.get_by_id(current_user.id)
+    if not customer:
+        flash('Customer account not found.', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Server IP for DNS configuration
+    server_ip = os.environ.get('SERVER_IP', '147.135.8.170')
 
     return render_template('dashboard/domains.html',
                           customer=customer,
+                          server_ip=server_ip,
                           active_page='domains')
+
+
+@app.route('/api/domain/health')
+@login_required
+def api_domain_health():
+    """Check domain health (DNS resolution, SSL status)"""
+    import socket
+    import ssl
+    from datetime import datetime
+
+    customer = Customer.get_by_id(current_user.id)
+    if not customer or not customer.domain:
+        return jsonify({'error': 'No domain configured'}), 400
+
+    domain = customer.domain
+    server_ip = os.environ.get('SERVER_IP', '147.135.8.170')
+    result = {
+        'domain': domain,
+        'dns': {'status': 'unknown', 'resolved_ip': None, 'points_to_us': False},
+        'ssl': {'status': 'unknown', 'issuer': None, 'expiry': None, 'days_remaining': None},
+        'http': {'status': 'unknown'}
+    }
+
+    # Check DNS resolution
+    try:
+        resolved_ip = socket.gethostbyname(domain)
+        result['dns']['resolved_ip'] = resolved_ip
+        result['dns']['points_to_us'] = (resolved_ip == server_ip)
+        result['dns']['status'] = 'ok' if resolved_ip == server_ip else 'misconfigured'
+    except socket.gaierror:
+        result['dns']['status'] = 'not_found'
+    except Exception as e:
+        result['dns']['status'] = 'error'
+        result['dns']['error'] = str(e)
+
+    # Check SSL certificate
+    try:
+        context = ssl.create_default_context()
+        with socket.create_connection((domain, 443), timeout=10) as sock:
+            with context.wrap_socket(sock, server_hostname=domain) as ssock:
+                cert = ssock.getpeercert()
+                # Get expiry date
+                expiry_str = cert.get('notAfter', '')
+                if expiry_str:
+                    expiry = datetime.strptime(expiry_str, '%b %d %H:%M:%S %Y %Z')
+                    result['ssl']['expiry'] = expiry.strftime('%Y-%m-%d')
+                    result['ssl']['days_remaining'] = (expiry - datetime.utcnow()).days
+
+                # Get issuer
+                issuer = dict(x[0] for x in cert.get('issuer', []))
+                result['ssl']['issuer'] = issuer.get('organizationName', issuer.get('commonName', 'Unknown'))
+                result['ssl']['status'] = 'valid'
+    except ssl.SSLCertVerificationError as e:
+        result['ssl']['status'] = 'invalid'
+        result['ssl']['error'] = 'Certificate verification failed'
+    except socket.timeout:
+        result['ssl']['status'] = 'timeout'
+    except ConnectionRefusedError:
+        result['ssl']['status'] = 'no_https'
+    except Exception as e:
+        result['ssl']['status'] = 'error'
+        result['ssl']['error'] = str(e)[:100]
+
+    # Check HTTP connectivity
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            f'https://{domain}',
+            headers={'User-Agent': 'ShopHosting Health Check'}
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            result['http']['status'] = 'ok'
+            result['http']['status_code'] = response.status
+    except urllib.error.HTTPError as e:
+        result['http']['status'] = 'ok'  # Server responded, even if error
+        result['http']['status_code'] = e.code
+    except Exception as e:
+        result['http']['status'] = 'error'
+        result['http']['error'] = str(e)[:100]
+
+    return jsonify(result)
 
 
 @app.route('/dashboard/billing')
@@ -889,11 +1004,23 @@ def dashboard_domains():
 def dashboard_billing():
     """Billing page"""
     customer = Customer.get_by_id(current_user.id)
-    plan = PricingPlan.get_by_id(customer.plan_id) if customer.plan_id else None
+
+    # Get subscription and plan
+    subscription = Subscription.get_by_customer_id(customer.id)
+    plan = None
+    if subscription and subscription.plan_id:
+        plan = PricingPlan.get_by_id(subscription.plan_id)
+    elif customer.plan_id:
+        plan = PricingPlan.get_by_id(customer.plan_id)
+
+    # Get invoices
+    invoices = Invoice.get_by_customer_id(customer.id)
 
     return render_template('dashboard/billing.html',
                           customer=customer,
+                          subscription=subscription,
                           plan=plan,
+                          invoices=invoices,
                           active_page='billing')
 
 
@@ -911,11 +1038,21 @@ def dashboard_settings():
 @app.route('/dashboard/support')
 @login_required
 def dashboard_support():
-    """Support page"""
+    """Support ticketing page"""
     customer = Customer.get_by_id(current_user.id)
+    status_filter = request.args.get('status')
+    page = request.args.get('page', 1, type=int)
+
+    tickets, total = Ticket.get_by_customer(current_user.id, status=status_filter, page=page)
+    total_pages = (total + 19) // 20
 
     return render_template('dashboard/support.html',
                           customer=customer,
+                          tickets=tickets,
+                          total=total,
+                          page=page,
+                          total_pages=total_pages,
+                          status_filter=status_filter,
                           active_page='support')
 
 
