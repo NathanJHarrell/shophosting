@@ -578,7 +578,7 @@
                 <h3>Password</h3>
                 <p>Last changed: {{ customer.password_changed_at.strftime('%B %d, %Y') if customer.password_changed_at else 'Never' }}</p>
             </div>
-            <button class="btn-sm" onclick="openModal('password-modal')">Change Password</button>
+            <button class="btn-sm" data-action="open-modal" data-modal="password-modal">Change Password</button>
         </div>
     </div>
 
@@ -608,7 +608,7 @@
                 <h3>Authenticator App</h3>
                 <p>Use an app like Google Authenticator or Authy</p>
             </div>
-            <button class="btn-sm btn-danger" onclick="openModal('disable-2fa-modal')">Disable 2FA</button>
+            <button class="btn-sm btn-danger" data-action="open-modal" data-modal="disable-2fa-modal">Disable 2FA</button>
         </div>
         <div class="settings-item">
             <div class="settings-info">
@@ -619,7 +619,7 @@
                 <span class="backup-codes-count {% if tfa_settings.backup_codes_remaining <= 2 %}critical{% elif tfa_settings.backup_codes_remaining <= 5 %}low{% endif %}">
                     {{ tfa_settings.backup_codes_remaining }} remaining
                 </span>
-                <button class="btn-sm" onclick="openModal('regenerate-codes-modal')">Regenerate</button>
+                <button class="btn-sm" data-action="open-modal" data-modal="regenerate-codes-modal">Regenerate</button>
             </div>
         </div>
         {% else %}
@@ -628,7 +628,7 @@
                 <h3>Enable Two-Factor Authentication</h3>
                 <p>Add an extra layer of security to your account</p>
             </div>
-            <button class="btn-sm btn-success" onclick="startTwoFactorSetup()">Enable 2FA</button>
+            <button class="btn-sm btn-success" data-action="start-2fa-setup">Enable 2FA</button>
         </div>
         {% endif %}
     </div>
@@ -648,7 +648,7 @@
                 </svg>
                 Active Sessions
             </span>
-            <button class="btn-sm btn-danger" onclick="openModal('logout-all-modal')">Logout All Sessions</button>
+            <button class="btn-sm btn-danger" data-action="open-modal" data-modal="logout-all-modal">Logout All Sessions</button>
         </div>
 
         {% if active_sessions %}
@@ -728,13 +728,13 @@
     <div class="modal">
         <div class="modal-header">
             <h2>Change Password</h2>
-            <button class="modal-close" onclick="closeModal('password-modal')">
+            <button class="modal-close" data-action="close-modal" data-modal="password-modal">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
             </button>
         </div>
-        <form id="password-form" onsubmit="changePassword(event)">
+        <form id="password-form" data-action="change-password">
             <div class="modal-body">
                 <div id="password-alert"></div>
                 <div class="form-group">
@@ -752,7 +752,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn-secondary" onclick="closeModal('password-modal')">Cancel</button>
+                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="password-modal">Cancel</button>
                 <button type="submit" class="btn-primary" id="password-submit">
                     <span class="spinner"></span>
                     Update Password
@@ -767,7 +767,7 @@
     <div class="modal">
         <div class="modal-header">
             <h2>Set Up Two-Factor Authentication</h2>
-            <button class="modal-close" onclick="closeModal('setup-2fa-modal')">
+            <button class="modal-close" data-action="close-modal" data-modal="setup-2fa-modal">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
@@ -835,12 +835,12 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button type="button" class="btn-secondary" onclick="closeModal('setup-2fa-modal')" id="setup-cancel-btn">Cancel</button>
-            <button type="button" class="btn-primary" onclick="verify2FACode()" id="setup-verify-btn">
+            <button type="button" class="btn-secondary" data-action="close-modal" data-modal="setup-2fa-modal" id="setup-cancel-btn">Cancel</button>
+            <button type="button" class="btn-primary" data-action="verify-2fa" id="setup-verify-btn">
                 <span class="spinner"></span>
                 Verify & Enable
             </button>
-            <button type="button" class="btn-primary" onclick="closeModal('setup-2fa-modal'); location.reload();" id="setup-done-btn" style="display: none;">
+            <button type="button" class="btn-primary" data-action="close-modal-reload" data-modal="setup-2fa-modal" id="setup-done-btn" style="display: none;">
                 Done
             </button>
         </div>
@@ -852,13 +852,13 @@
     <div class="modal">
         <div class="modal-header">
             <h2>Disable Two-Factor Authentication</h2>
-            <button class="modal-close" onclick="closeModal('disable-2fa-modal')">
+            <button class="modal-close" data-action="close-modal" data-modal="disable-2fa-modal">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
             </button>
         </div>
-        <form id="disable-2fa-form" onsubmit="disable2FA(event)">
+        <form id="disable-2fa-form" data-action="disable-2fa">
             <div class="modal-body">
                 <div id="disable-2fa-alert"></div>
                 <div class="alert alert-warning">
@@ -870,7 +870,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn-secondary" onclick="closeModal('disable-2fa-modal')">Cancel</button>
+                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="disable-2fa-modal">Cancel</button>
                 <button type="submit" class="btn-primary" style="background: var(--accent-red);">
                     <span class="spinner"></span>
                     Disable 2FA
@@ -885,7 +885,7 @@
     <div class="modal">
         <div class="modal-header">
             <h2>Regenerate Backup Codes</h2>
-            <button class="modal-close" onclick="closeModal('regenerate-codes-modal')">
+            <button class="modal-close" data-action="close-modal" data-modal="regenerate-codes-modal">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
@@ -915,12 +915,12 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button type="button" class="btn-secondary" onclick="closeModal('regenerate-codes-modal')" id="regen-cancel-btn">Cancel</button>
-            <button type="button" class="btn-primary" onclick="regenerateBackupCodes()" id="regen-confirm-btn">
+            <button type="button" class="btn-secondary" data-action="close-modal" data-modal="regenerate-codes-modal" id="regen-cancel-btn">Cancel</button>
+            <button type="button" class="btn-primary" data-action="regenerate-backup-codes" id="regen-confirm-btn">
                 <span class="spinner"></span>
                 Regenerate Codes
             </button>
-            <button type="button" class="btn-primary" onclick="closeModal('regenerate-codes-modal'); location.reload();" id="regen-done-btn" style="display: none;">
+            <button type="button" class="btn-primary" data-action="close-modal-reload" data-modal="regenerate-codes-modal" id="regen-done-btn" style="display: none;">
                 Done
             </button>
         </div>
@@ -932,13 +932,13 @@
     <div class="modal">
         <div class="modal-header">
             <h2>Logout All Sessions</h2>
-            <button class="modal-close" onclick="closeModal('logout-all-modal')">
+            <button class="modal-close" data-action="close-modal" data-modal="logout-all-modal">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
             </button>
         </div>
-        <form id="logout-all-form" onsubmit="logoutAllSessions(event)">
+        <form id="logout-all-form" data-action="logout-all">
             <div class="modal-body">
                 <div id="logout-all-alert"></div>
                 <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px;">
@@ -950,7 +950,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn-secondary" onclick="closeModal('logout-all-modal')">Cancel</button>
+                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="logout-all-modal">Cancel</button>
                 <button type="submit" class="btn-primary">
                     <span class="spinner"></span>
                     Logout All Sessions
@@ -1301,4 +1301,40 @@ async function logoutAllSessions(e) {
         setLoading(btn, false);
     }
 }
+
+// Event delegation for all data-action elements
+document.addEventListener('click', function(e) {
+    var target = e.target.closest('[data-action]');
+    if (!target) return;
+
+    var action = target.getAttribute('data-action');
+    var modal = target.getAttribute('data-modal');
+
+    switch (action) {
+        case 'open-modal':
+            openModal(modal);
+            break;
+        case 'close-modal':
+            closeModal(modal);
+            break;
+        case 'close-modal-reload':
+            closeModal(modal);
+            location.reload();
+            break;
+        case 'start-2fa-setup':
+            startTwoFactorSetup();
+            break;
+        case 'verify-2fa':
+            verify2FACode();
+            break;
+        case 'regenerate-backup-codes':
+            regenerateBackupCodes();
+            break;
+    }
+});
+
+// Form submit handlers
+document.getElementById('password-form').addEventListener('submit', changePassword);
+document.getElementById('disable-2fa-form').addEventListener('submit', disable2FA);
+document.getElementById('logout-all-form').addEventListener('submit', logoutAllSessions);
 {% endblock %}

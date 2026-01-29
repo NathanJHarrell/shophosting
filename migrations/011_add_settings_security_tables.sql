@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS customer_login_history (
     location VARCHAR(100),
     success BOOLEAN DEFAULT TRUE,
     failure_reason VARCHAR(100),
-    session_id VARCHAR(64),
+    session_id VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
     INDEX idx_customer_created (customer_id, created_at DESC),
