@@ -33,6 +33,13 @@ from models import Customer, PortManager, PricingPlan, Subscription, Invoice, in
 from models import Ticket, TicketMessage, TicketAttachment, TicketCategory, ConsultationAppointment
 from models import StagingEnvironment, StagingPortManager
 from models import CustomerBackupJob
+from models import Customer2FASettings, CustomerLoginHistory, CustomerVerificationToken
+import pyotp
+import hashlib
+import secrets
+import json
+import base64
+import io
 from enqueue_provisioning import ProvisioningQueue
 from stripe_integration import init_stripe, create_checkout_session, process_webhook, create_portal_session
 from stripe_integration.checkout import get_checkout_session
@@ -672,7 +679,18 @@ def login():
         customer = Customer.get_by_email(form.email.data.lower().strip())
 
         if customer and customer.check_password(form.password.data):
+            # Check if 2FA is enabled
+            tfa_settings = Customer2FASettings.get_by_customer(customer.id)
+            if tfa_settings and tfa_settings.is_enabled:
+                # Store pending 2FA verification in session
+                session['pending_2fa_customer_id'] = customer.id
+                session['pending_2fa_next'] = request.args.get('next')
+                logger.info(f"2FA required for customer: {customer.email}")
+                return redirect(url_for('auth_2fa'))
+
+            # No 2FA, complete login
             login_user(customer)
+            _record_login(customer.id, success=True)
             logger.info(f"Customer login: {customer.email}")
 
             next_page = request.args.get('next')
@@ -680,9 +698,36 @@ def login():
                 return redirect(next_page)
             return redirect(url_for('dashboard'))
         else:
+            # Record failed login attempt if customer exists
+            if customer:
+                _record_login(customer.id, success=False, failure_reason='invalid_password')
             flash('Invalid email or password', 'error')
 
     return render_template('login.html', form=form)
+
+
+def _record_login(customer_id, success=True, failure_reason=None):
+    """Helper to record login history"""
+    try:
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ip_address and ',' in ip_address:
+            ip_address = ip_address.split(',')[0].strip()
+        user_agent = request.headers.get('User-Agent', '')
+        session_id = session.sid if hasattr(session, 'sid') else session.get('_id')
+        if not session_id:
+            session_id = secrets.token_hex(32)
+            session['_id'] = session_id
+
+        CustomerLoginHistory.create(
+            customer_id=customer_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            success=success,
+            failure_reason=failure_reason,
+            session_id=session_id if success else None
+        )
+    except Exception as e:
+        logger.error(f"Failed to record login history: {e}")
 
 
 @app.route('/logout')
@@ -693,6 +738,185 @@ def logout():
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('index'))
+
+
+# =============================================================================
+# Two-Factor Authentication Routes
+# =============================================================================
+
+@app.route('/auth/2fa')
+def auth_2fa():
+    """2FA verification page during login"""
+    customer_id = session.get('pending_2fa_customer_id')
+    if not customer_id:
+        return redirect(url_for('login'))
+
+    customer = Customer.get_by_id(customer_id)
+    if not customer:
+        session.pop('pending_2fa_customer_id', None)
+        return redirect(url_for('login'))
+
+    # Check for lockout
+    lockout_until = session.get('2fa_lockout_until')
+    if lockout_until and datetime.now().timestamp() < lockout_until:
+        remaining = int(lockout_until - datetime.now().timestamp())
+        flash(f'Too many failed attempts. Try again in {remaining // 60} minutes.', 'error')
+
+    return render_template('auth/2fa_verify.html', customer=customer)
+
+
+@app.route('/auth/2fa/verify', methods=['POST'])
+@limiter.limit("5 per minute")
+def auth_2fa_verify():
+    """Verify 2FA code during login"""
+    customer_id = session.get('pending_2fa_customer_id')
+    if not customer_id:
+        return jsonify({'success': False, 'error': 'Session expired'}), 401
+
+    # Check for lockout
+    lockout_until = session.get('2fa_lockout_until')
+    if lockout_until and datetime.now().timestamp() < lockout_until:
+        remaining = int(lockout_until - datetime.now().timestamp())
+        return jsonify({'success': False, 'error': f'Locked out. Try again in {remaining // 60} minutes.'}), 429
+
+    data = request.get_json()
+    code = data.get('code', '').strip()
+
+    if not code:
+        return jsonify({'success': False, 'error': 'Code is required'}), 400
+
+    customer = Customer.get_by_id(customer_id)
+    tfa_settings = Customer2FASettings.get_by_customer(customer_id)
+
+    if not customer or not tfa_settings or not tfa_settings.is_enabled:
+        session.pop('pending_2fa_customer_id', None)
+        return jsonify({'success': False, 'error': 'Invalid session'}), 401
+
+    # Track attempts
+    attempts = session.get('2fa_attempts', 0)
+
+    # Try TOTP code
+    totp = pyotp.TOTP(tfa_settings.totp_secret)
+    if totp.verify(code, valid_window=1):
+        # Success - complete login
+        session.pop('pending_2fa_customer_id', None)
+        session.pop('2fa_attempts', None)
+        session.pop('2fa_lockout_until', None)
+
+        login_user(customer)
+        _record_login(customer.id, success=True)
+        tfa_settings.update_last_used()
+        logger.info(f"2FA verified for customer: {customer.email}")
+
+        next_page = session.pop('pending_2fa_next', None)
+        return jsonify({'success': True, 'redirect': next_page or url_for('dashboard')})
+
+    # Try backup code
+    if len(code) == 8 and tfa_settings.backup_codes:
+        code_hash = hashlib.sha256(code.upper().encode()).hexdigest()
+        backup_codes = json.loads(tfa_settings.backup_codes)
+        if code_hash in backup_codes:
+            # Valid backup code
+            tfa_settings.use_backup_code(code_hash)
+
+            session.pop('pending_2fa_customer_id', None)
+            session.pop('2fa_attempts', None)
+            session.pop('2fa_lockout_until', None)
+
+            login_user(customer)
+            _record_login(customer.id, success=True)
+            logger.info(f"2FA backup code used for customer: {customer.email}")
+
+            next_page = session.pop('pending_2fa_next', None)
+            return jsonify({
+                'success': True,
+                'redirect': next_page or url_for('dashboard'),
+                'warning': f'Backup code used. {tfa_settings.backup_codes_remaining - 1} remaining.'
+            })
+
+    # Failed attempt
+    attempts += 1
+    session['2fa_attempts'] = attempts
+
+    if attempts >= 5:
+        # Lock out for 15 minutes
+        session['2fa_lockout_until'] = datetime.now().timestamp() + (15 * 60)
+        _record_login(customer_id, success=False, failure_reason='2fa_lockout')
+        logger.warning(f"2FA lockout triggered for customer: {customer.email}")
+        return jsonify({'success': False, 'error': 'Too many failed attempts. Locked out for 15 minutes.'}), 429
+
+    return jsonify({'success': False, 'error': 'Invalid code', 'attempts_remaining': 5 - attempts}), 401
+
+
+@app.route('/auth/2fa/recovery/send', methods=['POST'])
+@limiter.limit("3 per hour")
+def auth_2fa_recovery_send():
+    """Send 2FA recovery code via email"""
+    customer_id = session.get('pending_2fa_customer_id')
+    if not customer_id:
+        return jsonify({'success': False, 'error': 'Session expired'}), 401
+
+    customer = Customer.get_by_id(customer_id)
+    if not customer:
+        return jsonify({'success': False, 'error': 'Invalid session'}), 401
+
+    # Generate 8-character recovery code
+    recovery_code = secrets.token_hex(4).upper()
+    code_hash = hashlib.sha256(recovery_code.encode()).hexdigest()
+
+    # Store hashed code as verification token
+    CustomerVerificationToken.create(
+        customer_id=customer_id,
+        token=code_hash,
+        token_type='2fa_recovery',
+        expires_minutes=15
+    )
+
+    # Send email
+    try:
+        from email_utils import send_2fa_recovery_email
+        send_2fa_recovery_email(customer.email, recovery_code)
+        logger.info(f"2FA recovery email sent to: {customer.email}")
+        return jsonify({'success': True, 'message': 'Recovery code sent to your email'})
+    except Exception as e:
+        logger.error(f"Failed to send 2FA recovery email: {e}")
+        return jsonify({'success': False, 'error': 'Failed to send email'}), 500
+
+
+@app.route('/auth/2fa/recovery/verify', methods=['POST'])
+@limiter.limit("5 per minute")
+def auth_2fa_recovery_verify():
+    """Verify email recovery code"""
+    customer_id = session.get('pending_2fa_customer_id')
+    if not customer_id:
+        return jsonify({'success': False, 'error': 'Session expired'}), 401
+
+    data = request.get_json()
+    code = data.get('code', '').strip().upper()
+
+    if not code:
+        return jsonify({'success': False, 'error': 'Code is required'}), 400
+
+    code_hash = hashlib.sha256(code.encode()).hexdigest()
+    token = CustomerVerificationToken.verify(code_hash, '2fa_recovery')
+
+    if not token or token.customer_id != customer_id:
+        return jsonify({'success': False, 'error': 'Invalid or expired code'}), 401
+
+    # Valid - complete login
+    token.mark_used()
+    customer = Customer.get_by_id(customer_id)
+
+    session.pop('pending_2fa_customer_id', None)
+    session.pop('2fa_attempts', None)
+    session.pop('2fa_lockout_until', None)
+
+    login_user(customer)
+    _record_login(customer.id, success=True)
+    logger.info(f"2FA email recovery used for customer: {customer.email}")
+
+    next_page = session.pop('pending_2fa_next', None)
+    return jsonify({'success': True, 'redirect': next_page or url_for('dashboard')})
 
 
 # =============================================================================
@@ -1027,12 +1251,288 @@ def dashboard_billing():
 @app.route('/dashboard/settings')
 @login_required
 def dashboard_settings():
-    """Account settings page"""
+    """Account settings page with security features"""
     customer = Customer.get_by_id(current_user.id)
+
+    # Get 2FA settings
+    tfa_settings = Customer2FASettings.get_by_customer(current_user.id)
+
+    # Get login history
+    login_history = CustomerLoginHistory.get_by_customer(current_user.id, limit=10)
+
+    # Get active sessions
+    current_session_id = session.get('_id')
+    active_sessions = CustomerLoginHistory.get_active_sessions(
+        current_user.id,
+        current_session_id=current_session_id
+    )
 
     return render_template('dashboard/settings.html',
                           customer=customer,
+                          tfa_settings=tfa_settings,
+                          login_history=login_history,
+                          active_sessions=active_sessions,
                           active_page='settings')
+
+
+# =============================================================================
+# Settings API Routes
+# =============================================================================
+
+@app.route('/api/settings/password', methods=['POST'])
+@csrf.exempt
+@login_required
+@limiter.limit("5 per hour")
+def api_settings_password():
+    """Change password"""
+    data = request.get_json()
+    current_password = data.get('current_password', '')
+    new_password = data.get('new_password', '')
+
+    if not current_password or not new_password:
+        return jsonify({'success': False, 'error': 'Both passwords are required'}), 400
+
+    customer = Customer.get_by_id(current_user.id)
+
+    if not customer.check_password(current_password):
+        security_logger.warning(f"Password change failed - wrong current password: {customer.email}")
+        return jsonify({'success': False, 'error': 'Current password is incorrect'}), 401
+
+    if len(new_password) < 8:
+        return jsonify({'success': False, 'error': 'New password must be at least 8 characters'}), 400
+
+    # Update password
+    customer.set_password(new_password)
+    customer.update_password_changed_at()
+
+    security_logger.info(f"Password changed for customer: {customer.email}")
+    return jsonify({'success': True, 'message': 'Password updated successfully'})
+
+
+@app.route('/api/settings/2fa/setup', methods=['POST'])
+@csrf.exempt
+@login_required
+@limiter.limit("10 per hour")
+def api_settings_2fa_setup():
+    """Generate TOTP secret and QR code for 2FA setup"""
+    customer = Customer.get_by_id(current_user.id)
+
+    # Generate new secret
+    secret = pyotp.random_base32()
+
+    # Store in database (not yet enabled)
+    Customer2FASettings.create(current_user.id, secret)
+
+    # Generate provisioning URI for QR code
+    totp = pyotp.TOTP(secret)
+    provisioning_uri = totp.provisioning_uri(
+        name=customer.email,
+        issuer_name='ShopHosting.io'
+    )
+
+    # Generate QR code as base64
+    try:
+        import qrcode
+        qr = qrcode.QRCode(version=1, box_size=4, border=2)
+        qr.add_data(provisioning_uri)
+        qr.make(fit=True)
+        img = qr.make_image(fill_color="black", back_color="white")
+
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        buffer.seek(0)
+        qr_base64 = base64.b64encode(buffer.getvalue()).decode()
+    except ImportError:
+        # qrcode library not installed, return URI for client-side generation
+        qr_base64 = None
+
+    return jsonify({
+        'success': True,
+        'secret': secret,
+        'qr_code': f'data:image/png;base64,{qr_base64}' if qr_base64 else None,
+        'provisioning_uri': provisioning_uri
+    })
+
+
+@app.route('/api/settings/2fa/verify', methods=['POST'])
+@csrf.exempt
+@login_required
+@limiter.limit("10 per hour")
+def api_settings_2fa_verify():
+    """Verify TOTP code and enable 2FA"""
+    data = request.get_json()
+    code = data.get('code', '').strip()
+
+    if not code or len(code) != 6:
+        return jsonify({'success': False, 'error': 'Invalid code format'}), 400
+
+    tfa_settings = Customer2FASettings.get_by_customer(current_user.id)
+    if not tfa_settings or not tfa_settings.totp_secret:
+        return jsonify({'success': False, 'error': 'Setup not started'}), 400
+
+    if tfa_settings.is_enabled:
+        return jsonify({'success': False, 'error': '2FA is already enabled'}), 400
+
+    # Verify code
+    totp = pyotp.TOTP(tfa_settings.totp_secret)
+    if not totp.verify(code, valid_window=1):
+        return jsonify({'success': False, 'error': 'Invalid code'}), 401
+
+    # Generate backup codes
+    backup_codes = []
+    backup_codes_hashed = []
+    for _ in range(10):
+        code = secrets.token_hex(4).upper()  # 8-char codes
+        backup_codes.append(code)
+        backup_codes_hashed.append(hashlib.sha256(code.encode()).hexdigest())
+
+    # Enable 2FA
+    tfa_settings.enable(json.dumps(backup_codes_hashed))
+
+    customer = Customer.get_by_id(current_user.id)
+    security_logger.info(f"2FA enabled for customer: {customer.email}")
+
+    return jsonify({
+        'success': True,
+        'message': '2FA enabled successfully',
+        'backup_codes': backup_codes
+    })
+
+
+@app.route('/api/settings/2fa/disable', methods=['POST'])
+@csrf.exempt
+@login_required
+@limiter.limit("5 per hour")
+def api_settings_2fa_disable():
+    """Disable 2FA"""
+    data = request.get_json()
+    password = data.get('password', '')
+
+    if not password:
+        return jsonify({'success': False, 'error': 'Password is required'}), 400
+
+    customer = Customer.get_by_id(current_user.id)
+    if not customer.check_password(password):
+        security_logger.warning(f"2FA disable failed - wrong password: {customer.email}")
+        return jsonify({'success': False, 'error': 'Incorrect password'}), 401
+
+    tfa_settings = Customer2FASettings.get_by_customer(current_user.id)
+    if not tfa_settings or not tfa_settings.is_enabled:
+        return jsonify({'success': False, 'error': '2FA is not enabled'}), 400
+
+    tfa_settings.disable()
+
+    security_logger.info(f"2FA disabled for customer: {customer.email}")
+    return jsonify({'success': True, 'message': '2FA disabled successfully'})
+
+
+@app.route('/api/settings/2fa/backup-codes/regenerate', methods=['POST'])
+@csrf.exempt
+@login_required
+@limiter.limit("5 per hour")
+def api_settings_2fa_backup_codes_regenerate():
+    """Regenerate backup codes"""
+    data = request.get_json()
+    password = data.get('password', '')
+
+    if not password:
+        return jsonify({'success': False, 'error': 'Password is required'}), 400
+
+    customer = Customer.get_by_id(current_user.id)
+    if not customer.check_password(password):
+        return jsonify({'success': False, 'error': 'Incorrect password'}), 401
+
+    tfa_settings = Customer2FASettings.get_by_customer(current_user.id)
+    if not tfa_settings or not tfa_settings.is_enabled:
+        return jsonify({'success': False, 'error': '2FA is not enabled'}), 400
+
+    # Generate new backup codes
+    backup_codes = []
+    backup_codes_hashed = []
+    for _ in range(10):
+        code = secrets.token_hex(4).upper()
+        backup_codes.append(code)
+        backup_codes_hashed.append(hashlib.sha256(code.encode()).hexdigest())
+
+    tfa_settings.regenerate_backup_codes(json.dumps(backup_codes_hashed))
+
+    security_logger.info(f"Backup codes regenerated for customer: {customer.email}")
+    return jsonify({
+        'success': True,
+        'message': 'Backup codes regenerated',
+        'backup_codes': backup_codes
+    })
+
+
+@app.route('/api/settings/sessions', methods=['GET'])
+@login_required
+def api_settings_sessions():
+    """Get active sessions"""
+    current_session_id = session.get('_id')
+    sessions = CustomerLoginHistory.get_active_sessions(
+        current_user.id,
+        current_session_id=current_session_id
+    )
+
+    return jsonify({
+        'success': True,
+        'sessions': [{
+            'id': s.id,
+            'ip_address': s.ip_address,
+            'user_agent': s.user_agent,
+            'created_at': s.created_at.isoformat() if s.created_at else None,
+            'is_current': getattr(s, 'is_current', False)
+        } for s in sessions]
+    })
+
+
+@app.route('/api/settings/sessions/logout-all', methods=['POST'])
+@csrf.exempt
+@login_required
+@limiter.limit("5 per hour")
+def api_settings_logout_all():
+    """Logout all sessions except current"""
+    data = request.get_json()
+    password = data.get('password', '')
+
+    if not password:
+        return jsonify({'success': False, 'error': 'Password is required'}), 400
+
+    customer = Customer.get_by_id(current_user.id)
+    if not customer.check_password(password):
+        return jsonify({'success': False, 'error': 'Incorrect password'}), 401
+
+    current_session_id = session.get('_id')
+    count = CustomerLoginHistory.invalidate_all_sessions(
+        current_user.id,
+        except_session_id=current_session_id
+    )
+
+    security_logger.info(f"All sessions logged out for customer: {customer.email}")
+    return jsonify({
+        'success': True,
+        'message': f'Logged out {count} other session(s)'
+    })
+
+
+@app.route('/api/settings/login-history', methods=['GET'])
+@login_required
+def api_settings_login_history():
+    """Get login history"""
+    history = CustomerLoginHistory.get_by_customer(current_user.id, limit=20)
+
+    return jsonify({
+        'success': True,
+        'history': [{
+            'id': h.id,
+            'ip_address': h.ip_address,
+            'user_agent': h.user_agent,
+            'location': h.location,
+            'success': h.success,
+            'failure_reason': h.failure_reason,
+            'created_at': h.created_at.isoformat() if h.created_at else None
+        } for h in history]
+    })
 
 
 @app.route('/dashboard/support')

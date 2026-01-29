@@ -396,3 +396,72 @@ def send_resource_alert(customer, alert_type, resource_type, used_gb, limit_gb, 
     """
 
     return send_email(customer.email, subject, html_body)
+
+
+def send_2fa_recovery_email(to_email, recovery_code):
+    """
+    Send 2FA recovery code via email.
+
+    Args:
+        to_email: Customer's email address
+        recovery_code: The 8-character recovery code
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    subject = "ShopHosting.io - Your 2FA Recovery Code"
+
+    html_body = f"""
+    <html>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f4f4f5;">
+        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+            <h1 style="margin: 0; color: white; font-size: 24px;">Two-Factor Authentication</h1>
+            <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.7);">Recovery Code Request</p>
+        </div>
+
+        <div style="background: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            <p style="color: #374151; font-size: 16px; margin-bottom: 20px;">
+                You requested to bypass two-factor authentication. Use the code below to complete your login:
+            </p>
+
+            <div style="background: #f0f9ff; border: 2px dashed #0ea5e9; border-radius: 8px; padding: 20px; text-align: center; margin: 25px 0;">
+                <span style="font-family: 'Courier New', monospace; font-size: 32px; font-weight: 700; letter-spacing: 4px; color: #0369a1;">
+                    {recovery_code}
+                </span>
+            </div>
+
+            <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #92400e; font-size: 14px;">
+                    <strong>Security Notice:</strong> This code expires in 15 minutes. If you did not request this code, please secure your account immediately.
+                </p>
+            </div>
+
+            <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
+                For your security, this code can only be used once and will expire shortly. After logging in, we recommend reviewing your account security settings.
+            </p>
+        </div>
+
+        <div style="text-align: center; padding: 20px; color: #9ca3af; font-size: 12px;">
+            <p style="margin: 0;">This email was sent by ShopHosting.io</p>
+            <p style="margin: 5px 0 0 0;">If you didn't request this, please ignore this email.</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    text_body = f"""
+Two-Factor Authentication Recovery Code
+
+You requested to bypass two-factor authentication. Use the code below to complete your login:
+
+Recovery Code: {recovery_code}
+
+IMPORTANT: This code expires in 15 minutes.
+
+If you did not request this code, please secure your account immediately.
+
+--
+ShopHosting.io
+"""
+
+    return send_email(to_email, subject, html_body, text_body)

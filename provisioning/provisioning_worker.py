@@ -183,8 +183,15 @@ class ProvisioningWorker:
             logger.error(f"Database connection failed: {e}")
             raise ProvisioningError(f"Database connection failed: {e}")
     
-    def update_customer_status(self, customer_id, status, error_message=None):
-        """Update customer provisioning status in database"""
+    def update_customer_status(self, customer_id, status, error_message=None, raise_on_error=False):
+        """Update customer provisioning status in database
+
+        Args:
+            customer_id: Customer ID to update
+            status: New status value
+            error_message: Optional error message
+            raise_on_error: If True, raises ProvisioningError on failure (use for critical updates)
+        """
         try:
             conn = self.get_db_connection()
             cursor = conn.cursor()
@@ -208,9 +215,18 @@ class ProvisioningWorker:
 
         except Exception as e:
             logger.error(f"Failed to update customer status: {e}")
+            if raise_on_error:
+                raise ProvisioningError(f"Failed to update customer status to '{status}': {e}")
 
-    def update_job_status(self, job_id, status, error_message=None):
-        """Update provisioning job status in database"""
+    def update_job_status(self, job_id, status, error_message=None, raise_on_error=False):
+        """Update provisioning job status in database
+
+        Args:
+            job_id: Job ID to update
+            status: New status value ('started', 'finished', 'failed')
+            error_message: Optional error message
+            raise_on_error: If True, raises ProvisioningError on failure (use for critical updates)
+        """
         try:
             conn = self.get_db_connection()
             cursor = conn.cursor()
@@ -242,9 +258,18 @@ class ProvisioningWorker:
 
         except Exception as e:
             logger.error(f"Failed to update job status: {e}")
+            if raise_on_error:
+                raise ProvisioningError(f"Failed to update job status to '{status}': {e}")
     
-    def save_customer_credentials(self, customer_id, credentials):
-        """Save customer credentials to database"""
+    def save_customer_credentials(self, customer_id, credentials, raise_on_error=True):
+        """Save customer credentials to database
+
+        Args:
+            customer_id: Customer ID to update
+            credentials: Dict containing db_name, db_user, db_password, admin_user, admin_password, web_port
+            raise_on_error: If True (default), raises ProvisioningError on failure. This is critical
+                           because without saved credentials, the customer cannot access their site.
+        """
         try:
             conn = self.get_db_connection()
             cursor = conn.cursor()
@@ -278,6 +303,8 @@ class ProvisioningWorker:
 
         except Exception as e:
             logger.error(f"Failed to save credentials: {e}")
+            if raise_on_error:
+                raise ProvisioningError(f"Failed to save customer credentials: {e}")
     
     def generate_password(self, length=16):
         """Generate a secure random password"""
@@ -1001,10 +1028,11 @@ class ProvisioningWorker:
             self.setup_backup_cron(customer_id, customer_path)
             
             logger.info(f"Provisioning completed successfully for customer {customer_id}")
-            self.update_customer_status(customer_id, 'active')
+            # Critical: These MUST succeed for provisioning to be considered complete
+            self.update_customer_status(customer_id, 'active', raise_on_error=True)
 
             if rq_job_id:
-                self.update_job_status(rq_job_id, 'finished')
+                self.update_job_status(rq_job_id, 'finished', raise_on_error=True)
 
             return {
                 'status': 'success',

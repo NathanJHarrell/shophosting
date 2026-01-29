@@ -128,7 +128,7 @@ class Customer:
                  server_id=None, quota_project_id=None, db_name=None, db_user=None,
                  db_password=None, admin_user=None, admin_password=None,
                  error_message=None, stripe_customer_id=None, plan_id=None,
-                 staging_count=None, created_at=None, updated_at=None):
+                 staging_count=None, password_changed_at=None, created_at=None, updated_at=None):
         self.id = id
         self.email = email
         self.password_hash = password_hash
@@ -148,6 +148,7 @@ class Customer:
         self.stripe_customer_id = stripe_customer_id
         self.plan_id = plan_id
         self.staging_count = staging_count or 0
+        self.password_changed_at = password_changed_at
         self.created_at = created_at or datetime.now()
         self.updated_at = updated_at or datetime.now()
 
@@ -162,6 +163,22 @@ class Customer:
     def check_password(self, password):
         """Verify password"""
         return check_password_hash(self.password_hash, password)
+
+    def update_password_changed_at(self):
+        """Update the password_changed_at timestamp and save new password"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE customers
+                SET password_hash = %s, password_changed_at = NOW()
+                WHERE id = %s
+            """, (self.password_hash, self.id))
+            conn.commit()
+            self.password_changed_at = datetime.now()
+        finally:
+            cursor.close()
+            conn.close()
 
     # =========================================================================
     # Flask-Login Required Properties
@@ -3248,3 +3265,359 @@ class MonitoringAlert:
 
     def __repr__(self):
         return f"<MonitoringAlert {self.id}: {self.alert_type} for customer {self.customer_id}>"
+
+
+class Customer2FASettings:
+    """Two-factor authentication settings for a customer"""
+    def __init__(self, id=None, customer_id=None, totp_secret=None, is_enabled=False,
+                 backup_codes=None, backup_codes_remaining=10, last_used_at=None,
+                 created_at=None, updated_at=None):
+        self.id = id
+        self.customer_id = customer_id
+        self.totp_secret = totp_secret
+        self.is_enabled = is_enabled
+        self.backup_codes = backup_codes  # JSON string of hashed backup codes
+        self.backup_codes_remaining = backup_codes_remaining
+        self.last_used_at = last_used_at
+        self.created_at = created_at
+        self.updated_at = updated_at
+
+    @staticmethod
+    def get_by_customer(customer_id):
+        """Get 2FA settings for a customer"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                SELECT * FROM customer_2fa_settings WHERE customer_id = %s
+            """, (customer_id,))
+            row = cursor.fetchone()
+            if row:
+                return Customer2FASettings(**row)
+            return None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def create(customer_id, totp_secret):
+        """Create 2FA settings for a customer (not yet enabled)"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO customer_2fa_settings (customer_id, totp_secret, is_enabled)
+                VALUES (%s, %s, FALSE)
+                ON DUPLICATE KEY UPDATE totp_secret = VALUES(totp_secret), is_enabled = FALSE
+            """, (customer_id, totp_secret))
+            conn.commit()
+            return cursor.lastrowid
+        finally:
+            cursor.close()
+            conn.close()
+
+    def enable(self, backup_codes_json):
+        """Enable 2FA and set backup codes"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE customer_2fa_settings
+                SET is_enabled = TRUE, backup_codes = %s, backup_codes_remaining = 10
+                WHERE customer_id = %s
+            """, (backup_codes_json, self.customer_id))
+            conn.commit()
+            self.is_enabled = True
+            self.backup_codes = backup_codes_json
+            self.backup_codes_remaining = 10
+        finally:
+            cursor.close()
+            conn.close()
+
+    def disable(self):
+        """Disable 2FA"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE customer_2fa_settings
+                SET is_enabled = FALSE, totp_secret = NULL, backup_codes = NULL, backup_codes_remaining = 0
+                WHERE customer_id = %s
+            """, (self.customer_id,))
+            conn.commit()
+            self.is_enabled = False
+            self.totp_secret = None
+            self.backup_codes = None
+            self.backup_codes_remaining = 0
+        finally:
+            cursor.close()
+            conn.close()
+
+    def use_backup_code(self, used_code_hash):
+        """Mark a backup code as used by removing it from the list"""
+        import json
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            # Remove used code from backup codes
+            codes = json.loads(self.backup_codes) if self.backup_codes else []
+            codes = [c for c in codes if c != used_code_hash]
+            new_codes_json = json.dumps(codes)
+
+            cursor.execute("""
+                UPDATE customer_2fa_settings
+                SET backup_codes = %s, backup_codes_remaining = %s, last_used_at = NOW()
+                WHERE customer_id = %s
+            """, (new_codes_json, len(codes), self.customer_id))
+            conn.commit()
+            self.backup_codes = new_codes_json
+            self.backup_codes_remaining = len(codes)
+        finally:
+            cursor.close()
+            conn.close()
+
+    def regenerate_backup_codes(self, new_codes_json):
+        """Regenerate backup codes"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE customer_2fa_settings
+                SET backup_codes = %s, backup_codes_remaining = 10
+                WHERE customer_id = %s
+            """, (new_codes_json, self.customer_id))
+            conn.commit()
+            self.backup_codes = new_codes_json
+            self.backup_codes_remaining = 10
+        finally:
+            cursor.close()
+            conn.close()
+
+    def update_last_used(self):
+        """Update the last used timestamp"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE customer_2fa_settings SET last_used_at = NOW() WHERE customer_id = %s
+            """, (self.customer_id,))
+            conn.commit()
+        finally:
+            cursor.close()
+            conn.close()
+
+    def __repr__(self):
+        return f"<Customer2FASettings customer_id={self.customer_id} enabled={self.is_enabled}>"
+
+
+class CustomerLoginHistory:
+    """Login history for audit trail and session display"""
+    def __init__(self, id=None, customer_id=None, ip_address=None, user_agent=None,
+                 location=None, success=True, failure_reason=None, session_id=None,
+                 created_at=None):
+        self.id = id
+        self.customer_id = customer_id
+        self.ip_address = ip_address
+        self.user_agent = user_agent
+        self.location = location
+        self.success = success
+        self.failure_reason = failure_reason
+        self.session_id = session_id
+        self.created_at = created_at
+
+    @staticmethod
+    def create(customer_id, ip_address, user_agent, location=None, success=True,
+               failure_reason=None, session_id=None):
+        """Record a login attempt"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO customer_login_history
+                (customer_id, ip_address, user_agent, location, success, failure_reason, session_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (customer_id, ip_address, user_agent[:500] if user_agent else None,
+                  location, success, failure_reason, session_id))
+            conn.commit()
+            return cursor.lastrowid
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_customer(customer_id, limit=20, include_failed=True):
+        """Get login history for a customer"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            if include_failed:
+                cursor.execute("""
+                    SELECT * FROM customer_login_history
+                    WHERE customer_id = %s
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                """, (customer_id, limit))
+            else:
+                cursor.execute("""
+                    SELECT * FROM customer_login_history
+                    WHERE customer_id = %s AND success = TRUE
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                """, (customer_id, limit))
+
+            rows = cursor.fetchall()
+            return [CustomerLoginHistory(**row) for row in rows]
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_active_sessions(customer_id, current_session_id=None):
+        """Get active sessions (recent successful logins with unique session IDs)"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                SELECT * FROM customer_login_history
+                WHERE customer_id = %s AND success = TRUE AND session_id IS NOT NULL
+                AND created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
+                ORDER BY created_at DESC
+            """, (customer_id,))
+
+            rows = cursor.fetchall()
+            # Deduplicate by session_id, keeping the most recent entry for each
+            seen_sessions = set()
+            sessions = []
+            for row in rows:
+                if row['session_id'] not in seen_sessions:
+                    seen_sessions.add(row['session_id'])
+                    entry = CustomerLoginHistory(**row)
+                    entry.is_current = (row['session_id'] == current_session_id)
+                    sessions.append(entry)
+            return sessions
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def invalidate_all_sessions(customer_id, except_session_id=None):
+        """Mark all sessions as logged out (for logout-all functionality)"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            if except_session_id:
+                cursor.execute("""
+                    UPDATE customer_login_history
+                    SET session_id = NULL
+                    WHERE customer_id = %s AND session_id != %s
+                """, (customer_id, except_session_id))
+            else:
+                cursor.execute("""
+                    UPDATE customer_login_history
+                    SET session_id = NULL
+                    WHERE customer_id = %s
+                """, (customer_id,))
+            conn.commit()
+            return cursor.rowcount
+        finally:
+            cursor.close()
+            conn.close()
+
+    def __repr__(self):
+        status = "success" if self.success else "failed"
+        return f"<CustomerLoginHistory {self.id}: {status} for customer {self.customer_id}>"
+
+
+class CustomerVerificationToken:
+    """Verification tokens for 2FA email recovery and other verification needs"""
+    TOKEN_TYPES = ('2fa_recovery', 'email_change', 'password_reset')
+
+    def __init__(self, id=None, customer_id=None, token=None, token_type=None,
+                 new_value=None, expires_at=None, used_at=None, created_at=None):
+        self.id = id
+        self.customer_id = customer_id
+        self.token = token
+        self.token_type = token_type
+        self.new_value = new_value  # For email_change, stores the new email
+        self.expires_at = expires_at
+        self.used_at = used_at
+        self.created_at = created_at
+
+    @staticmethod
+    def create(customer_id, token, token_type, expires_minutes=15, new_value=None):
+        """Create a new verification token"""
+        if token_type not in CustomerVerificationToken.TOKEN_TYPES:
+            raise ValueError(f"Invalid token type: {token_type}")
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            # Invalidate any existing tokens of the same type for this customer
+            cursor.execute("""
+                DELETE FROM customer_verification_tokens
+                WHERE customer_id = %s AND token_type = %s AND used_at IS NULL
+            """, (customer_id, token_type))
+
+            # Create new token
+            cursor.execute("""
+                INSERT INTO customer_verification_tokens
+                (customer_id, token, token_type, new_value, expires_at)
+                VALUES (%s, %s, %s, %s, DATE_ADD(NOW(), INTERVAL %s MINUTE))
+            """, (customer_id, token, token_type, new_value, expires_minutes))
+            conn.commit()
+            return cursor.lastrowid
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def verify(token, token_type):
+        """Verify a token and return the associated record if valid"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                SELECT * FROM customer_verification_tokens
+                WHERE token = %s AND token_type = %s
+                AND used_at IS NULL AND expires_at > NOW()
+            """, (token, token_type))
+            row = cursor.fetchone()
+            if row:
+                return CustomerVerificationToken(**row)
+            return None
+        finally:
+            cursor.close()
+            conn.close()
+
+    def mark_used(self):
+        """Mark token as used"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE customer_verification_tokens SET used_at = NOW() WHERE id = %s
+            """, (self.id,))
+            conn.commit()
+            self.used_at = datetime.now()
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def cleanup_expired():
+        """Delete expired tokens (maintenance task)"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                DELETE FROM customer_verification_tokens
+                WHERE expires_at < NOW() OR used_at IS NOT NULL
+            """)
+            conn.commit()
+            return cursor.rowcount
+        finally:
+            cursor.close()
+            conn.close()
+
+    def __repr__(self):
+        return f"<CustomerVerificationToken {self.id}: {self.token_type} for customer {self.customer_id}>"

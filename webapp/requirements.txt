@@ -15,6 +15,8 @@ email-validator==2.1.0
 # Security
 Flask-Limiter==3.5.0
 Flask-Talisman==1.1.0
+pyotp==2.9.0
+qrcode[pil]==7.4.2
 
 # Database
 mysql-connector-python==8.2.0

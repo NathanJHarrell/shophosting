@@ -3,30 +3,55 @@
 {% block page_title %}Settings{% endblock %}
 
 {% block dashboard_css %}
+.settings-section {
+    margin-bottom: 32px;
+}
+
+.settings-section-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+}
+
 .settings-card {
     background: var(--bg-elevated);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
     overflow: hidden;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
 }
 
 .settings-card-header {
-    padding: 20px 28px;
+    padding: 20px 24px;
     border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .settings-card-title {
-    font-size: 1.1rem;
+    font-size: 1rem;
     font-weight: 600;
     color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.settings-card-title svg {
+    width: 20px;
+    height: 20px;
+    color: var(--text-tertiary);
 }
 
 .settings-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 20px 28px;
+    padding: 16px 24px;
     border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -35,86 +60,1281 @@
 }
 
 .settings-info h3 {
-    font-size: 1rem;
+    font-size: 0.95rem;
     font-weight: 500;
     color: var(--text-primary);
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .settings-info p {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: var(--text-tertiary);
 }
 
 .settings-value {
     color: var(--text-secondary);
     font-size: 0.9rem;
+    font-family: 'Monaco', 'Consolas', monospace;
 }
 
 .btn-sm {
     padding: 8px 16px;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     background: var(--bg-surface);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-md);
     color: var(--text-primary);
     cursor: pointer;
     transition: all 0.2s ease;
+    font-weight: 500;
 }
 
 .btn-sm:hover {
     background: var(--bg-hover);
     border-color: var(--border-accent);
 }
+
+.btn-sm.btn-danger {
+    color: var(--accent-red);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.btn-sm.btn-danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.btn-sm.btn-success {
+    color: var(--accent-green);
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.btn-sm.btn-success:hover {
+    background: rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.5);
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-badge.enabled {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--accent-green);
+}
+
+.status-badge.disabled {
+    background: rgba(107, 114, 128, 0.1);
+    color: var(--text-tertiary);
+}
+
+.backup-codes-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.backup-codes-count.low {
+    color: var(--accent-orange);
+}
+
+.backup-codes-count.critical {
+    color: var(--accent-red);
+}
+
+/* Login History Table */
+.login-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.login-table th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.login-table td {
+    padding: 12px 16px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.login-table tr:last-child td {
+    border-bottom: none;
+}
+
+.login-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.login-status .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.login-status.success .dot {
+    background: var(--accent-green);
+}
+
+.login-status.failed .dot {
+    background: var(--accent-red);
+}
+
+.device-info {
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.current-session {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    color: var(--accent-cyan);
+    background: rgba(6, 182, 212, 0.1);
+    padding: 2px 8px;
+    border-radius: 100px;
+    margin-left: 8px;
+}
+
+/* Modals */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.modal-overlay.open {
+    display: flex;
+}
+
+.modal {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xl);
+    width: 100%;
+    max-width: 440px;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: modalIn 0.2s ease;
+}
+
+@keyframes modalIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.modal-header {
+    padding: 24px 24px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.modal-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.modal-footer {
+    padding: 0 24px 24px;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group:last-child {
+    margin-bottom: 0;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.form-control {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(0, 136, 255, 0.12);
+}
+
+.form-hint {
+    margin-top: 6px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.btn-primary {
+    background: var(--gradient-primary);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+    opacity: 0.9;
+}
+
+.btn-secondary {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+    background: var(--bg-hover);
+}
+
+/* 2FA Setup */
+.qr-container {
+    text-align: center;
+    padding: 20px;
+    background: white;
+    border-radius: var(--radius-lg);
+    margin: 16px 0;
+}
+
+.qr-container img {
+    max-width: 200px;
+}
+
+.secret-key {
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 0.9rem;
+    background: var(--bg-surface);
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    text-align: center;
+    letter-spacing: 2px;
+    margin: 16px 0;
+    word-break: break-all;
+}
+
+.backup-codes-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.backup-code {
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 0.9rem;
+    background: var(--bg-surface);
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    text-align: center;
+    letter-spacing: 1px;
+}
+
+.setup-step {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.step-number {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--gradient-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.step-content h4 {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.step-content p {
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+}
+
+.verify-code-input {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin: 20px 0;
+}
+
+.verify-code-input input {
+    width: 44px;
+    height: 52px;
+    text-align: center;
+    font-size: 1.25rem;
+    font-weight: 600;
+    font-family: 'Monaco', 'Consolas', monospace;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+}
+
+.verify-code-input input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(0, 136, 255, 0.12);
+}
+
+.alert {
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+}
+
+.alert-error {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: var(--accent-red);
+}
+
+.alert-success {
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: var(--accent-green);
+}
+
+.alert-warning {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: var(--accent-orange);
+}
+
+.spinner {
+    display: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 8px;
+}
+
+.btn.loading .spinner {
+    display: inline-block;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Hidden templates */
+.hidden-templates {
+    display: none;
+}
 {% endblock %}
 
 {% block dashboard_content %}
 <div class="page-header">
     <h1 class="page-title">Settings</h1>
-    <p class="page-subtitle">Manage your account preferences.</p>
+    <p class="page-subtitle">Manage your account and security preferences</p>
 </div>
 
-<div class="settings-card">
-    <div class="settings-card-header">
-        <h2 class="settings-card-title">Account Information</h2>
-    </div>
+<!-- Hidden templates for safe DOM cloning -->
+<div class="hidden-templates">
+    <div id="alert-template" class="alert"></div>
+    <div id="backup-code-template" class="backup-code"></div>
+    <p id="qr-loading-template" style="color: var(--text-muted);"></p>
+    <img id="qr-image-template" alt="QR Code">
+</div>
 
-    <div class="settings-item">
-        <div class="settings-info">
-            <h3>Email Address</h3>
-            <p>Your login email</p>
-        </div>
-        <span class="settings-value">{{ customer.email }}</span>
-    </div>
+<!-- Account Information -->
+<div class="settings-section">
+    <h2 class="settings-section-title">Account</h2>
 
-    <div class="settings-item">
-        <div class="settings-info">
-            <h3>Password</h3>
-            <p>Last changed: Never</p>
+    <div class="settings-card">
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Email Address</h3>
+                <p>Your login email for this account</p>
+            </div>
+            <span class="settings-value">{{ customer.email }}</span>
         </div>
-        <button class="btn-sm">Change Password</button>
-    </div>
 
-    <div class="settings-item">
-        <div class="settings-info">
-            <h3>Two-Factor Authentication</h3>
-            <p>Add an extra layer of security</p>
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Company Name</h3>
+                <p>Associated business name</p>
+            </div>
+            <span class="settings-value">{{ customer.company_name or 'Not set' }}</span>
         </div>
-        <button class="btn-sm">Enable 2FA</button>
+
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Member Since</h3>
+                <p>Account creation date</p>
+            </div>
+            <span class="settings-value">{{ customer.created_at.strftime('%B %d, %Y') if customer.created_at else 'Unknown' }}</span>
+        </div>
     </div>
 </div>
 
-<div class="settings-card">
-    <div class="settings-card-header">
-        <h2 class="settings-card-title">Notifications</h2>
+<!-- Security -->
+<div class="settings-section">
+    <h2 class="settings-section-title">Security</h2>
+
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <span class="settings-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                Password
+            </span>
+        </div>
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Password</h3>
+                <p>Last changed: {{ customer.password_changed_at.strftime('%B %d, %Y') if customer.password_changed_at else 'Never' }}</p>
+            </div>
+            <button class="btn-sm" data-action="open-modal" data-modal="password-modal">Change Password</button>
+        </div>
     </div>
 
-    <div class="settings-item">
-        <div class="settings-info">
-            <h3>Email Notifications</h3>
-            <p>Receive updates about your store</p>
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <span class="settings-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                Two-Factor Authentication
+            </span>
+            {% if tfa_settings and tfa_settings.is_enabled %}
+            <span class="status-badge enabled">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Enabled
+            </span>
+            {% else %}
+            <span class="status-badge disabled">Disabled</span>
+            {% endif %}
         </div>
-        <button class="btn-sm">Configure</button>
+
+        {% if tfa_settings and tfa_settings.is_enabled %}
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Authenticator App</h3>
+                <p>Use an app like Google Authenticator or Authy</p>
+            </div>
+            <button class="btn-sm btn-danger" data-action="open-modal" data-modal="disable-2fa-modal">Disable 2FA</button>
+        </div>
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Backup Codes</h3>
+                <p>Use these if you lose access to your authenticator</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <span class="backup-codes-count {% if tfa_settings.backup_codes_remaining <= 2 %}critical{% elif tfa_settings.backup_codes_remaining <= 5 %}low{% endif %}">
+                    {{ tfa_settings.backup_codes_remaining }} remaining
+                </span>
+                <button class="btn-sm" data-action="open-modal" data-modal="regenerate-codes-modal">Regenerate</button>
+            </div>
+        </div>
+        {% else %}
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Enable Two-Factor Authentication</h3>
+                <p>Add an extra layer of security to your account</p>
+            </div>
+            <button class="btn-sm btn-success" data-action="start-2fa-setup">Enable 2FA</button>
+        </div>
+        {% endif %}
     </div>
 </div>
+
+<!-- Sessions & Activity -->
+<div class="settings-section">
+    <h2 class="settings-section-title">Sessions & Activity</h2>
+
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <span class="settings-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                    <line x1="8" y1="21" x2="16" y2="21"/>
+                    <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+                Active Sessions
+            </span>
+            <button class="btn-sm btn-danger" data-action="open-modal" data-modal="logout-all-modal">Logout All Sessions</button>
+        </div>
+
+        {% if active_sessions %}
+        <table class="login-table">
+            <thead>
+                <tr>
+                    <th>Device / Browser</th>
+                    <th>IP Address</th>
+                    <th>Last Active</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in active_sessions[:5] %}
+                <tr>
+                    <td>
+                        <span class="device-info" title="{{ session.user_agent }}">{{ session.user_agent[:50] }}{% if session.user_agent|length > 50 %}...{% endif %}</span>
+                        {% if session.is_current %}<span class="current-session">This device</span>{% endif %}
+                    </td>
+                    <td>{{ session.ip_address or 'Unknown' }}</td>
+                    <td>{{ session.created_at.strftime('%b %d, %Y %H:%M') if session.created_at else 'Unknown' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="settings-item">
+            <p style="color: var(--text-tertiary); font-size: 0.85rem;">No active sessions found</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <span class="settings-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                Recent Login Activity
+            </span>
+        </div>
+
+        {% if login_history %}
+        <table class="login-table">
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>IP Address</th>
+                    <th>Date & Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for login in login_history %}
+                <tr>
+                    <td>
+                        <span class="login-status {% if login.success %}success{% else %}failed{% endif %}">
+                            <span class="dot"></span>
+                            {% if login.success %}Successful{% else %}Failed{% if login.failure_reason %} ({{ login.failure_reason }}){% endif %}{% endif %}
+                        </span>
+                    </td>
+                    <td>{{ login.ip_address or 'Unknown' }}</td>
+                    <td>{{ login.created_at.strftime('%b %d, %Y %H:%M') if login.created_at else 'Unknown' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="settings-item">
+            <p style="color: var(--text-tertiary); font-size: 0.85rem;">No login history available</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Password Change Modal -->
+<div class="modal-overlay" id="password-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Change Password</h2>
+            <button class="modal-close" data-action="close-modal" data-modal="password-modal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <form id="password-form" data-action="change-password">
+            <div class="modal-body">
+                <div id="password-alert"></div>
+                <div class="form-group">
+                    <label for="current-password">Current Password</label>
+                    <input type="password" id="current-password" class="form-control" required autocomplete="current-password">
+                </div>
+                <div class="form-group">
+                    <label for="new-password">New Password</label>
+                    <input type="password" id="new-password" class="form-control" required minlength="8" autocomplete="new-password">
+                    <p class="form-hint">Must be at least 8 characters</p>
+                </div>
+                <div class="form-group">
+                    <label for="confirm-password">Confirm New Password</label>
+                    <input type="password" id="confirm-password" class="form-control" required autocomplete="new-password">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="password-modal">Cancel</button>
+                <button type="submit" class="btn-primary" id="password-submit">
+                    <span class="spinner"></span>
+                    Update Password
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 2FA Setup Modal -->
+<div class="modal-overlay" id="setup-2fa-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Set Up Two-Factor Authentication</h2>
+            <button class="modal-close" data-action="close-modal" data-modal="setup-2fa-modal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="setup-2fa-alert"></div>
+
+            <div id="setup-step-1">
+                <div class="setup-step">
+                    <span class="step-number">1</span>
+                    <div class="step-content">
+                        <h4>Scan QR Code</h4>
+                        <p>Use Google Authenticator, Authy, or another TOTP app</p>
+                    </div>
+                </div>
+
+                <div class="qr-container" id="qr-container">
+                    <p style="color: var(--text-muted);">Loading...</p>
+                </div>
+
+                <div class="setup-step">
+                    <span class="step-number">2</span>
+                    <div class="step-content">
+                        <h4>Or enter code manually</h4>
+                        <p>If you can't scan the QR code</p>
+                    </div>
+                </div>
+
+                <div class="secret-key" id="secret-key">Loading...</div>
+
+                <div class="setup-step">
+                    <span class="step-number">3</span>
+                    <div class="step-content">
+                        <h4>Enter verification code</h4>
+                        <p>Enter the 6-digit code from your app</p>
+                    </div>
+                </div>
+
+                <div class="verify-code-input">
+                    <input type="text" maxlength="1" data-2fa-index="0" inputmode="numeric">
+                    <input type="text" maxlength="1" data-2fa-index="1" inputmode="numeric">
+                    <input type="text" maxlength="1" data-2fa-index="2" inputmode="numeric">
+                    <input type="text" maxlength="1" data-2fa-index="3" inputmode="numeric">
+                    <input type="text" maxlength="1" data-2fa-index="4" inputmode="numeric">
+                    <input type="text" maxlength="1" data-2fa-index="5" inputmode="numeric">
+                </div>
+            </div>
+
+            <div id="setup-step-2" style="display: none;">
+                <div class="alert alert-success">
+                    Two-factor authentication has been enabled!
+                </div>
+
+                <h4 style="margin-bottom: 12px;">Save Your Backup Codes</h4>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 16px;">
+                    Store these codes in a safe place. Each code can only be used once.
+                </p>
+
+                <div class="backup-codes-grid" id="backup-codes-display"></div>
+
+                <div class="alert alert-warning" style="margin-top: 16px;">
+                    These codes will only be shown once. Make sure to save them!
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-secondary" data-action="close-modal" data-modal="setup-2fa-modal" id="setup-cancel-btn">Cancel</button>
+            <button type="button" class="btn-primary" data-action="verify-2fa" id="setup-verify-btn">
+                <span class="spinner"></span>
+                Verify & Enable
+            </button>
+            <button type="button" class="btn-primary" data-action="close-modal-reload" data-modal="setup-2fa-modal" id="setup-done-btn" style="display: none;">
+                Done
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Disable 2FA Modal -->
+<div class="modal-overlay" id="disable-2fa-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Disable Two-Factor Authentication</h2>
+            <button class="modal-close" data-action="close-modal" data-modal="disable-2fa-modal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <form id="disable-2fa-form" data-action="disable-2fa">
+            <div class="modal-body">
+                <div id="disable-2fa-alert"></div>
+                <div class="alert alert-warning">
+                    Warning: Disabling 2FA will make your account less secure.
+                </div>
+                <div class="form-group">
+                    <label for="disable-2fa-password">Enter your password to confirm</label>
+                    <input type="password" id="disable-2fa-password" class="form-control" required autocomplete="current-password">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="disable-2fa-modal">Cancel</button>
+                <button type="submit" class="btn-primary" style="background: var(--accent-red);">
+                    <span class="spinner"></span>
+                    Disable 2FA
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Regenerate Backup Codes Modal -->
+<div class="modal-overlay" id="regenerate-codes-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Regenerate Backup Codes</h2>
+            <button class="modal-close" data-action="close-modal" data-modal="regenerate-codes-modal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="regenerate-codes-alert"></div>
+
+            <div id="regenerate-step-1">
+                <div class="alert alert-warning">
+                    This will invalidate all your existing backup codes.
+                </div>
+                <div class="form-group">
+                    <label for="regenerate-password">Enter your password to confirm</label>
+                    <input type="password" id="regenerate-password" class="form-control" required autocomplete="current-password">
+                </div>
+            </div>
+
+            <div id="regenerate-step-2" style="display: none;">
+                <div class="alert alert-success">
+                    New backup codes have been generated!
+                </div>
+                <div class="backup-codes-grid" id="new-backup-codes"></div>
+                <div class="alert alert-warning" style="margin-top: 16px;">
+                    Save these codes now. They will only be shown once.
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-secondary" data-action="close-modal" data-modal="regenerate-codes-modal" id="regen-cancel-btn">Cancel</button>
+            <button type="button" class="btn-primary" data-action="regenerate-backup-codes" id="regen-confirm-btn">
+                <span class="spinner"></span>
+                Regenerate Codes
+            </button>
+            <button type="button" class="btn-primary" data-action="close-modal-reload" data-modal="regenerate-codes-modal" id="regen-done-btn" style="display: none;">
+                Done
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Logout All Sessions Modal -->
+<div class="modal-overlay" id="logout-all-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Logout All Sessions</h2>
+            <button class="modal-close" data-action="close-modal" data-modal="logout-all-modal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <form id="logout-all-form" data-action="logout-all">
+            <div class="modal-body">
+                <div id="logout-all-alert"></div>
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px;">
+                    This will log out all devices except your current session. Other sessions will need to log in again.
+                </p>
+                <div class="form-group">
+                    <label for="logout-all-password">Enter your password to confirm</label>
+                    <input type="password" id="logout-all-password" class="form-control" required autocomplete="current-password">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="logout-all-modal">Cancel</button>
+                <button type="submit" class="btn-primary">
+                    <span class="spinner"></span>
+                    Logout All Sessions
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block dashboard_js %}
+// Modal functions
+function openModal(id) {
+    document.getElementById(id).classList.add('open');
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+}
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+            overlay.classList.remove('open');
+        }
+    });
+});
+
+// Helper functions
+function showAlert(containerId, message, type) {
+    var container = document.getElementById(containerId);
+    // Clear existing content
+    while (container.firstChild) {
+        container.removeChild(container.firstChild);
+    }
+    // Create alert using template
+    var alertEl = document.getElementById('alert-template').cloneNode(true);
+    alertEl.id = '';
+    alertEl.className = 'alert alert-' + type;
+    alertEl.textContent = message;
+    container.appendChild(alertEl);
+}
+
+function clearAlert(containerId) {
+    var container = document.getElementById(containerId);
+    while (container.firstChild) {
+        container.removeChild(container.firstChild);
+    }
+}
+
+function setLoading(btn, loading) {
+    if (loading) {
+        btn.classList.add('loading');
+        btn.disabled = true;
+    } else {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+    }
+}
+
+function displayBackupCodes(containerId, codes) {
+    var container = document.getElementById(containerId);
+    // Clear existing content
+    while (container.firstChild) {
+        container.removeChild(container.firstChild);
+    }
+    // Add each code
+    codes.forEach(function(code) {
+        var codeEl = document.getElementById('backup-code-template').cloneNode(true);
+        codeEl.id = '';
+        codeEl.textContent = code;
+        container.appendChild(codeEl);
+    });
+}
+
+// Password change
+async function changePassword(e) {
+    e.preventDefault();
+    var btn = document.getElementById('password-submit');
+    setLoading(btn, true);
+    clearAlert('password-alert');
+
+    var currentPassword = document.getElementById('current-password').value;
+    var newPassword = document.getElementById('new-password').value;
+    var confirmPassword = document.getElementById('confirm-password').value;
+
+    if (newPassword !== confirmPassword) {
+        showAlert('password-alert', 'New passwords do not match', 'error');
+        setLoading(btn, false);
+        return;
+    }
+
+    try {
+        var response = await fetch('/api/settings/password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                current_password: currentPassword,
+                new_password: newPassword
+            })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            showAlert('password-alert', 'Password updated successfully!', 'success');
+            document.getElementById('password-form').reset();
+            setTimeout(function() {
+                closeModal('password-modal');
+                location.reload();
+            }, 1500);
+        } else {
+            showAlert('password-alert', data.error || 'Failed to update password', 'error');
+        }
+    } catch (err) {
+        showAlert('password-alert', 'An error occurred. Please try again.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// 2FA Setup
+async function startTwoFactorSetup() {
+    openModal('setup-2fa-modal');
+    clearAlert('setup-2fa-alert');
+
+    document.getElementById('setup-step-1').style.display = 'block';
+    document.getElementById('setup-step-2').style.display = 'none';
+    document.getElementById('setup-verify-btn').style.display = 'inline-flex';
+    document.getElementById('setup-done-btn').style.display = 'none';
+    document.getElementById('setup-cancel-btn').style.display = 'inline-flex';
+
+    // Clear code inputs
+    document.querySelectorAll('[data-2fa-index]').forEach(function(i) { i.value = ''; });
+
+    try {
+        var response = await fetch('/api/settings/2fa/setup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            var qrContainer = document.getElementById('qr-container');
+            // Clear container
+            while (qrContainer.firstChild) {
+                qrContainer.removeChild(qrContainer.firstChild);
+            }
+
+            if (data.qr_code) {
+                var img = document.getElementById('qr-image-template').cloneNode(true);
+                img.id = '';
+                img.src = data.qr_code;
+                qrContainer.appendChild(img);
+            } else {
+                var p = document.getElementById('qr-loading-template').cloneNode(true);
+                p.id = '';
+                p.textContent = 'QR code unavailable. Use manual entry.';
+                qrContainer.appendChild(p);
+            }
+            document.getElementById('secret-key').textContent = data.secret;
+        } else {
+            showAlert('setup-2fa-alert', data.error || 'Failed to start 2FA setup', 'error');
+        }
+    } catch (err) {
+        showAlert('setup-2fa-alert', 'An error occurred. Please try again.', 'error');
+    }
+}
+
+// Setup code input handling
+function setup2FAInputs() {
+    var inputs = document.querySelectorAll('[data-2fa-index]');
+    inputs.forEach(function(input, idx) {
+        input.addEventListener('input', function(e) {
+            if (e.target.value.length === 1 && idx < 5) {
+                inputs[idx + 1].focus();
+            }
+            // Auto-submit when all filled
+            var code = Array.from(inputs).map(function(i) { return i.value; }).join('');
+            if (code.length === 6) {
+                verify2FACode();
+            }
+        });
+
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Backspace' && !e.target.value && idx > 0) {
+                inputs[idx - 1].focus();
+            }
+        });
+
+        input.addEventListener('paste', function(e) {
+            e.preventDefault();
+            var paste = (e.clipboardData || window.clipboardData).getData('text');
+            var chars = paste.replace(/\D/g, '').split('').slice(0, 6);
+            chars.forEach(function(char, i) {
+                if (inputs[i]) inputs[i].value = char;
+            });
+            if (chars.length === 6) verify2FACode();
+        });
+    });
+}
+setup2FAInputs();
+
+async function verify2FACode() {
+    var btn = document.getElementById('setup-verify-btn');
+    setLoading(btn, true);
+    clearAlert('setup-2fa-alert');
+
+    var code = Array.from(document.querySelectorAll('[data-2fa-index]')).map(function(i) { return i.value; }).join('');
+
+    if (code.length !== 6) {
+        showAlert('setup-2fa-alert', 'Please enter a 6-digit code', 'error');
+        setLoading(btn, false);
+        return;
+    }
+
+    try {
+        var response = await fetch('/api/settings/2fa/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: code })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            // Show backup codes
+            document.getElementById('setup-step-1').style.display = 'none';
+            document.getElementById('setup-step-2').style.display = 'block';
+            document.getElementById('setup-verify-btn').style.display = 'none';
+            document.getElementById('setup-done-btn').style.display = 'inline-flex';
+            document.getElementById('setup-cancel-btn').style.display = 'none';
+
+            displayBackupCodes('backup-codes-display', data.backup_codes);
+        } else {
+            showAlert('setup-2fa-alert', data.error || 'Invalid code', 'error');
+            document.querySelectorAll('[data-2fa-index]').forEach(function(i) { i.value = ''; });
+            document.querySelector('[data-2fa-index="0"]').focus();
+        }
+    } catch (err) {
+        showAlert('setup-2fa-alert', 'An error occurred. Please try again.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// Disable 2FA
+async function disable2FA(e) {
+    e.preventDefault();
+    var btn = e.target.querySelector('button[type="submit"]');
+    setLoading(btn, true);
+    clearAlert('disable-2fa-alert');
+
+    var password = document.getElementById('disable-2fa-password').value;
+
+    try {
+        var response = await fetch('/api/settings/2fa/disable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: password })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            showAlert('disable-2fa-alert', '2FA has been disabled', 'success');
+            setTimeout(function() {
+                closeModal('disable-2fa-modal');
+                location.reload();
+            }, 1500);
+        } else {
+            showAlert('disable-2fa-alert', data.error || 'Failed to disable 2FA', 'error');
+        }
+    } catch (err) {
+        showAlert('disable-2fa-alert', 'An error occurred. Please try again.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// Regenerate backup codes
+async function regenerateBackupCodes() {
+    var btn = document.getElementById('regen-confirm-btn');
+    setLoading(btn, true);
+    clearAlert('regenerate-codes-alert');
+
+    var password = document.getElementById('regenerate-password').value;
+
+    try {
+        var response = await fetch('/api/settings/2fa/backup-codes/regenerate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: password })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            document.getElementById('regenerate-step-1').style.display = 'none';
+            document.getElementById('regenerate-step-2').style.display = 'block';
+            document.getElementById('regen-confirm-btn').style.display = 'none';
+            document.getElementById('regen-done-btn').style.display = 'inline-flex';
+            document.getElementById('regen-cancel-btn').style.display = 'none';
+
+            displayBackupCodes('new-backup-codes', data.backup_codes);
+        } else {
+            showAlert('regenerate-codes-alert', data.error || 'Failed to regenerate codes', 'error');
+        }
+    } catch (err) {
+        showAlert('regenerate-codes-alert', 'An error occurred. Please try again.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// Logout all sessions
+async function logoutAllSessions(e) {
+    e.preventDefault();
+    var btn = e.target.querySelector('button[type="submit"]');
+    setLoading(btn, true);
+    clearAlert('logout-all-alert');
+
+    var password = document.getElementById('logout-all-password').value;
+
+    try {
+        var response = await fetch('/api/settings/sessions/logout-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: password })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            showAlert('logout-all-alert', data.message, 'success');
+            setTimeout(function() {
+                closeModal('logout-all-modal');
+                location.reload();
+            }, 1500);
+        } else {
+            showAlert('logout-all-alert', data.error || 'Failed to logout sessions', 'error');
+        }
+    } catch (err) {
+        showAlert('logout-all-alert', 'An error occurred. Please try again.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// Event delegation for all data-action elements
+document.addEventListener('click', function(e) {
+    var target = e.target.closest('[data-action]');
+    if (!target) return;
+
+    var action = target.getAttribute('data-action');
+    var modal = target.getAttribute('data-modal');
+
+    switch (action) {
+        case 'open-modal':
+            openModal(modal);
+            break;
+        case 'close-modal':
+            closeModal(modal);
+            break;
+        case 'close-modal-reload':
+            closeModal(modal);
+            location.reload();
+            break;
+        case 'start-2fa-setup':
+            startTwoFactorSetup();
+            break;
+        case 'verify-2fa':
+            verify2FACode();
+            break;
+        case 'regenerate-backup-codes':
+            regenerateBackupCodes();
+            break;
+    }
+});
+
+// Form submit handlers
+document.getElementById('password-form').addEventListener('submit', changePassword);
+document.getElementById('disable-2fa-form').addEventListener('submit', disable2FA);
+document.getElementById('logout-all-form').addEventListener('submit', logoutAllSessions);
 {% endblock %}
