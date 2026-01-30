@@ -1,0 +1,27 @@
+# Redis Sentinel Configuration Template
+# Copy this to sentinel-1.conf, sentinel-2.conf, sentinel-3.conf
+
+# Sentinel port
+port 26379
+
+# Monitor the master
+# sentinel monitor <master-name> <ip> <port> <quorum>
+# Quorum is the number of sentinels that need to agree the master is down
+sentinel monitor mymaster redis-master 6379 2
+
+# Master password
+sentinel auth-pass mymaster REDIS_PASSWORD_PLACEHOLDER
+
+# Time in milliseconds an instance should not be reachable for a Sentinel
+# starting to think it is down
+sentinel down-after-milliseconds mymaster 5000
+
+# Number of replicas that can be reconfigured to use the new master
+# after a failover at the same time
+sentinel parallel-syncs mymaster 1
+
+# Failover timeout in milliseconds
+sentinel failover-timeout mymaster 60000
+
+# Prevent sentinel from rewriting its config (for Docker)
+sentinel deny-scripts-reconfig yes

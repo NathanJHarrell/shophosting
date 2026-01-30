@@ -219,7 +219,34 @@ def get_rate_limit_key():
 
 
 # Configure Redis storage for rate limiting (shared across workers)
-redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
+# Supports both standalone Redis and Redis Sentinel
+def get_redis_uri():
+    """
+    Build Redis URI supporting both standalone and Sentinel configurations.
+
+    Environment variables:
+    - REDIS_URL: Direct Redis URL (standalone mode)
+    - REDIS_SENTINEL_HOSTS: Comma-separated sentinel hosts (e.g., "host1:26379,host2:26379")
+    - REDIS_SENTINEL_MASTER: Master name (default: mymaster)
+    - REDIS_PASSWORD: Optional password for authentication
+    """
+    sentinel_hosts = os.getenv('REDIS_SENTINEL_HOSTS')
+
+    if sentinel_hosts:
+        # Sentinel mode - build sentinel URI
+        master_name = os.getenv('REDIS_SENTINEL_MASTER', 'mymaster')
+        password = os.getenv('REDIS_PASSWORD', '')
+
+        # Format: redis+sentinel://:password@host1:port1,host2:port2/master_name/db
+        if password:
+            return f"redis+sentinel://:{password}@{sentinel_hosts}/{master_name}/1"
+        else:
+            return f"redis+sentinel://{sentinel_hosts}/{master_name}/1"
+    else:
+        # Standalone mode
+        return os.getenv('REDIS_URL', 'redis://localhost:6379/1')
+
+redis_url = get_redis_uri()
 
 # Disable rate limiting in test mode
 is_testing = os.getenv('FLASK_ENV') == 'testing'

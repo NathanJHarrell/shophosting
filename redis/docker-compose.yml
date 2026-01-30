@@ -1,0 +1,97 @@
+version: '3.8'
+
+# Redis Sentinel High Availability Configuration
+# Provides automatic failover with 1 master, 1 replica, and 3 sentinels
+
+services:
+  redis-master:
+    image: redis:7-alpine
+    container_name: redis-master
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis-master-data:/data
+    networks:
+      - redis-net
+    ports:
+      - "127.0.0.1:6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  redis-replica:
+    image: redis:7-alpine
+    container_name: redis-replica
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:-changeme}
+      --masterauth ${REDIS_PASSWORD:-changeme}
+      --replicaof redis-master 6379
+    volumes:
+      - redis-replica-data:/data
+    networks:
+      - redis-net
+    depends_on:
+      - redis-master
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  sentinel-1:
+    image: redis:7-alpine
+    container_name: redis-sentinel-1
+    command: redis-sentinel /etc/redis/sentinel.conf
+    volumes:
+      - ./sentinel-1.conf:/etc/redis/sentinel.conf
+    networks:
+      - redis-net
+    ports:
+      - "127.0.0.1:26379:26379"
+    depends_on:
+      - redis-master
+      - redis-replica
+    restart: unless-stopped
+
+  sentinel-2:
+    image: redis:7-alpine
+    container_name: redis-sentinel-2
+    command: redis-sentinel /etc/redis/sentinel.conf
+    volumes:
+      - ./sentinel-2.conf:/etc/redis/sentinel.conf
+    networks:
+      - redis-net
+    ports:
+      - "127.0.0.1:26380:26379"
+    depends_on:
+      - redis-master
+      - redis-replica
+    restart: unless-stopped
+
+  sentinel-3:
+    image: redis:7-alpine
+    container_name: redis-sentinel-3
+    command: redis-sentinel /etc/redis/sentinel.conf
+    volumes:
+      - ./sentinel-3.conf:/etc/redis/sentinel.conf
+    networks:
+      - redis-net
+    ports:
+      - "127.0.0.1:26381:26379"
+    depends_on:
+      - redis-master
+      - redis-replica
+    restart: unless-stopped
+
+networks:
+  redis-net:
+    driver: bridge
+
+volumes:
+  redis-master-data:
+  redis-replica-data:
