@@ -618,3 +618,120 @@ ShopHosting.io
 """
 
     return send_email(to_email, subject, html_body, text_body)
+
+
+def send_suspension_notification(customer, reason, disk_exceeded=False, bandwidth_exceeded=False,
+                                  disk_used_gb=None, disk_limit_gb=None,
+                                  bandwidth_used_gb=None, bandwidth_limit_gb=None):
+    """
+    Send notification to customer about account suspension due to resource limits.
+
+    Args:
+        customer: Customer object
+        reason: Suspension reason code
+        disk_exceeded: True if disk limit was exceeded
+        bandwidth_exceeded: True if bandwidth limit was exceeded
+        disk_used_gb: Current disk usage in GB
+        disk_limit_gb: Disk limit in GB
+        bandwidth_used_gb: Current bandwidth usage in GB
+        bandwidth_limit_gb: Bandwidth limit in GB
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    subject = "Important: Your ShopHosting.io Account Has Been Suspended"
+
+    # Build the reason explanation
+    exceeded_resources = []
+    if disk_exceeded:
+        exceeded_resources.append(f"Disk space: {disk_used_gb:.1f} GB used of {disk_limit_gb} GB limit")
+    if bandwidth_exceeded:
+        exceeded_resources.append(f"Bandwidth: {bandwidth_used_gb:.1f} GB used of {bandwidth_limit_gb} GB monthly limit")
+
+    exceeded_list = "".join([f"<li>{r}</li>" for r in exceeded_resources])
+
+    html_body = f"""
+    <html>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f4f4f5;">
+        <div style="background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+            <h1 style="margin: 0; color: white; font-size: 24px;">Account Suspended</h1>
+            <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.8);">{customer.domain}</p>
+        </div>
+
+        <div style="background: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            <p style="color: #374151; font-size: 16px; margin-bottom: 20px;">
+                Your ShopHosting.io account has been temporarily suspended because you have exceeded your plan's resource limits:
+            </p>
+
+            <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <p style="margin: 0 0 10px 0; color: #991b1b; font-weight: 600;">Resources Exceeded:</p>
+                <ul style="margin: 0; padding-left: 20px; color: #991b1b;">
+                    {exceeded_list}
+                </ul>
+            </div>
+
+            <h3 style="color: #374151; margin-top: 25px;">What This Means</h3>
+            <ul style="color: #6b7280; line-height: 1.8;">
+                <li>Your website is currently offline</li>
+                <li>Your data is safe and has not been deleted</li>
+                <li>You cannot access your dashboard until this is resolved</li>
+            </ul>
+
+            <h3 style="color: #374151; margin-top: 25px;">How to Restore Your Account</h3>
+            <p style="color: #6b7280;">You have two options:</p>
+            <ol style="color: #6b7280; line-height: 1.8;">
+                <li><strong>Upgrade your plan</strong> - Get more resources to accommodate your growth</li>
+                <li><strong>Reduce usage</strong> - Contact support to temporarily restore access so you can clean up files or optimize your site</li>
+            </ol>
+
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="https://shophosting.io/pricing" style="display: inline-block; background: #0088ff; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; margin-right: 10px;">
+                    View Plans
+                </a>
+                <a href="mailto:support@shophosting.io" style="display: inline-block; background: #6b7280; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600;">
+                    Contact Support
+                </a>
+            </div>
+
+            <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #92400e; font-size: 14px;">
+                    <strong>Note:</strong> Accounts suspended for more than 30 days may be subject to data deletion. Please contact us promptly to resolve this issue.
+                </p>
+            </div>
+        </div>
+
+        <div style="text-align: center; padding: 20px; color: #9ca3af; font-size: 12px;">
+            <p style="margin: 0;">This email was sent by ShopHosting.io</p>
+            <p style="margin: 5px 0 0 0;">Questions? Email us at support@shophosting.io</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    text_body = f"""
+Account Suspended - {customer.domain}
+
+Your ShopHosting.io account has been temporarily suspended because you have exceeded your plan's resource limits.
+
+Resources Exceeded:
+{chr(10).join(['- ' + r for r in exceeded_resources])}
+
+What This Means:
+- Your website is currently offline
+- Your data is safe and has not been deleted
+- You cannot access your dashboard until this is resolved
+
+How to Restore Your Account:
+1. Upgrade your plan - Get more resources to accommodate your growth
+2. Reduce usage - Contact support to temporarily restore access
+
+View plans: https://shophosting.io/pricing
+Contact support: support@shophosting.io
+
+Note: Accounts suspended for more than 30 days may be subject to data deletion.
+
+--
+ShopHosting.io
+"""
+
+    return send_email(customer.email, subject, html_body, text_body)

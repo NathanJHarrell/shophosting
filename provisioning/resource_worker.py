@@ -1,5 +1,5 @@
 """
-ShopHosting.io Resource Worker - Collects usage metrics and sends alerts
+ShopHosting.io Resource Worker - Collects usage metrics, sends alerts, and enforces limits
 """
 
 import os
@@ -13,7 +13,7 @@ import time
 sys.path.insert(0, '/opt/shophosting/webapp')
 
 from models import Customer, PricingPlan, ResourceUsage, ResourceAlert, get_db_connection
-from email_utils import send_resource_alert
+from email_utils import send_resource_alert, send_suspension_notification
 
 # Configure logging
 logging.basicConfig(
@@ -146,6 +146,125 @@ class ResourceWorker:
         )
         alert.save()
 
+    def enforce_limits(self, customer, disk_bytes, bandwidth_bytes):
+        """
+        Enforce resource limits - suspend customer if they exceed 100%.
+
+        Returns True if customer was suspended, False otherwise.
+        """
+        plan = PricingPlan.get_by_id(customer.plan_id) if customer.plan_id else None
+        if not plan:
+            return False
+
+        disk_limit = plan.disk_limit_gb * 1024 * 1024 * 1024
+        bandwidth_limit = plan.bandwidth_limit_gb * 1024 * 1024 * 1024
+
+        # Get monthly bandwidth total
+        monthly_bandwidth = ResourceUsage.get_monthly_bandwidth(customer.id)
+
+        # Determine if limits are exceeded
+        disk_exceeded = disk_limit > 0 and disk_bytes >= disk_limit
+        bandwidth_exceeded = bandwidth_limit > 0 and monthly_bandwidth >= bandwidth_limit
+
+        if not (disk_exceeded or bandwidth_exceeded):
+            return False
+
+        # Build suspension reason
+        reasons = []
+        if disk_exceeded:
+            disk_percent = (disk_bytes / disk_limit) * 100
+            reasons.append(f"disk usage {disk_percent:.0f}%")
+        if bandwidth_exceeded:
+            bw_percent = (monthly_bandwidth / bandwidth_limit) * 100
+            reasons.append(f"bandwidth usage {bw_percent:.0f}%")
+
+        reason = f"resource_limit_exceeded: {', '.join(reasons)}"
+
+        logger.warning(f"Customer {customer.id} exceeded limits: {reason}")
+
+        # Suspend the customer
+        if customer.suspend(reason, auto=True, disk_usage_bytes=disk_bytes,
+                           bandwidth_usage_bytes=monthly_bandwidth):
+            logger.info(f"Customer {customer.id} auto-suspended")
+
+            # Stop their containers
+            self._stop_customer_containers(customer)
+
+            # Send notification email
+            try:
+                send_suspension_notification(
+                    customer,
+                    reason='resource_limit_exceeded',
+                    disk_exceeded=disk_exceeded,
+                    bandwidth_exceeded=bandwidth_exceeded,
+                    disk_used_gb=disk_bytes / (1024 * 1024 * 1024),
+                    disk_limit_gb=plan.disk_limit_gb,
+                    bandwidth_used_gb=monthly_bandwidth / (1024 * 1024 * 1024),
+                    bandwidth_limit_gb=plan.bandwidth_limit_gb
+                )
+            except Exception as e:
+                logger.error(f"Failed to send suspension notification: {e}")
+
+            return True
+
+        return False
+
+    def _stop_customer_containers(self, customer):
+        """Stop all containers for a suspended customer"""
+        customer_dir = self.customers_base / f"customer-{customer.id}"
+        compose_file = customer_dir / "docker-compose.yml"
+
+        if not compose_file.exists():
+            logger.warning(f"No docker-compose.yml found for customer {customer.id}")
+            return False
+
+        try:
+            logger.info(f"Stopping containers for customer {customer.id}")
+            result = subprocess.run(
+                ['docker', 'compose', '-f', str(compose_file), 'stop'],
+                capture_output=True, text=True, timeout=120,
+                cwd=str(customer_dir)
+            )
+            if result.returncode != 0:
+                logger.error(f"Failed to stop containers: {result.stderr}")
+                return False
+            logger.info(f"Containers stopped for customer {customer.id}")
+            return True
+        except subprocess.TimeoutExpired:
+            logger.error(f"Timeout stopping containers for customer {customer.id}")
+            return False
+        except Exception as e:
+            logger.error(f"Error stopping containers for customer {customer.id}: {e}")
+            return False
+
+    def _start_customer_containers(self, customer):
+        """Start containers for a reactivated customer"""
+        customer_dir = self.customers_base / f"customer-{customer.id}"
+        compose_file = customer_dir / "docker-compose.yml"
+
+        if not compose_file.exists():
+            logger.warning(f"No docker-compose.yml found for customer {customer.id}")
+            return False
+
+        try:
+            logger.info(f"Starting containers for customer {customer.id}")
+            result = subprocess.run(
+                ['docker', 'compose', '-f', str(compose_file), 'start'],
+                capture_output=True, text=True, timeout=120,
+                cwd=str(customer_dir)
+            )
+            if result.returncode != 0:
+                logger.error(f"Failed to start containers: {result.stderr}")
+                return False
+            logger.info(f"Containers started for customer {customer.id}")
+            return True
+        except subprocess.TimeoutExpired:
+            logger.error(f"Timeout starting containers for customer {customer.id}")
+            return False
+        except Exception as e:
+            logger.error(f"Error starting containers for customer {customer.id}: {e}")
+            return False
+
     def run_collection_cycle(self):
         """Run one collection cycle for all active customers"""
         logger.info("Starting resource collection cycle")
@@ -167,8 +286,11 @@ class ResourceWorker:
                 )
                 usage.save()
 
-                # Check thresholds
+                # Check thresholds and send alerts
                 self.check_thresholds(customer, disk_bytes, bandwidth_bytes)
+
+                # Enforce limits - suspend if exceeded
+                self.enforce_limits(customer, disk_bytes, bandwidth_bytes)
 
                 logger.debug(f"Customer {customer.id}: disk={disk_bytes}, bandwidth={bandwidth_bytes}")
 

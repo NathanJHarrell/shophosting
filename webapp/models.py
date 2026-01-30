@@ -140,7 +140,8 @@ class Customer:
                  db_password=None, admin_user=None, admin_password=None,
                  error_message=None, stripe_customer_id=None, plan_id=None,
                  staging_count=None, password_changed_at=None, timezone=None,
-                 created_at=None, updated_at=None):
+                 suspension_reason=None, suspended_at=None, auto_suspended=False,
+                 reactivated_at=None, created_at=None, updated_at=None):
         self.id = id
         self.email = email
         self.password_hash = password_hash
@@ -162,6 +163,11 @@ class Customer:
         self.staging_count = staging_count or 0
         self.password_changed_at = password_changed_at
         self.timezone = timezone or 'America/New_York'
+        # Suspension tracking fields
+        self.suspension_reason = suspension_reason
+        self.suspended_at = suspended_at
+        self.auto_suspended = auto_suspended or False
+        self.reactivated_at = reactivated_at
         self.created_at = created_at or datetime.now()
         self.updated_at = updated_at or datetime.now()
 
@@ -251,6 +257,124 @@ class Customer:
 
     def get_id(self):
         return str(self.id)
+
+    # =========================================================================
+    # Suspension Methods
+    # =========================================================================
+
+    def suspend(self, reason, auto=False, disk_usage_bytes=None, bandwidth_usage_bytes=None):
+        """
+        Suspend this customer account.
+
+        Args:
+            reason: Reason for suspension (e.g., 'resource_limit_exceeded', 'payment_failed')
+            auto: True if this is an automatic system suspension
+            disk_usage_bytes: Current disk usage at time of suspension
+            bandwidth_usage_bytes: Current bandwidth usage at time of suspension
+        """
+        if self.status == 'suspended':
+            return False  # Already suspended
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            # Update customer status
+            cursor.execute("""
+                UPDATE customers
+                SET status = 'suspended',
+                    suspension_reason = %s,
+                    suspended_at = NOW(),
+                    auto_suspended = %s
+                WHERE id = %s AND status != 'suspended'
+            """, (reason, auto, self.id))
+
+            if cursor.rowcount == 0:
+                return False  # No update made (already suspended or doesn't exist)
+
+            # Log the suspension
+            cursor.execute("""
+                INSERT INTO customer_suspension_log
+                (customer_id, action, reason, auto_action, disk_usage_bytes, bandwidth_usage_bytes)
+                VALUES (%s, 'suspended', %s, %s, %s, %s)
+            """, (self.id, reason, auto, disk_usage_bytes, bandwidth_usage_bytes))
+
+            conn.commit()
+
+            # Update local object
+            self.status = 'suspended'
+            self.suspension_reason = reason
+            self.suspended_at = datetime.now()
+            self.auto_suspended = auto
+
+            return True
+        finally:
+            cursor.close()
+            conn.close()
+
+    def reactivate(self, actor_id=None):
+        """
+        Reactivate this suspended customer account.
+
+        Args:
+            actor_id: ID of admin user performing reactivation (None if automatic)
+        """
+        if self.status != 'suspended':
+            return False  # Not suspended
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            # Update customer status
+            cursor.execute("""
+                UPDATE customers
+                SET status = 'active',
+                    suspension_reason = NULL,
+                    suspended_at = NULL,
+                    auto_suspended = FALSE,
+                    reactivated_at = NOW()
+                WHERE id = %s AND status = 'suspended'
+            """, (self.id,))
+
+            if cursor.rowcount == 0:
+                return False  # No update made
+
+            # Log the reactivation
+            cursor.execute("""
+                INSERT INTO customer_suspension_log
+                (customer_id, action, reason, auto_action, actor_id)
+                VALUES (%s, 'reactivated', 'manual_reactivation', %s, %s)
+            """, (self.id, actor_id is None, actor_id))
+
+            conn.commit()
+
+            # Update local object
+            self.status = 'active'
+            self.suspension_reason = None
+            self.suspended_at = None
+            self.auto_suspended = False
+            self.reactivated_at = datetime.now()
+
+            return True
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_auto_suspended_customers():
+        """Get all customers that were auto-suspended (for potential auto-reactivation)"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("""
+                SELECT * FROM customers
+                WHERE status = 'suspended' AND auto_suspended = TRUE
+                ORDER BY suspended_at
+            """)
+            rows = cursor.fetchall()
+            return [Customer(**row) for row in rows]
+        finally:
+            cursor.close()
+            conn.close()
 
     # =========================================================================
     # Database Operations
