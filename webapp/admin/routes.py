@@ -2929,6 +2929,9 @@ def pricing_plan_edit(plan_id):
 
     if request.method == 'POST':
         try:
+            # Capture old price before updating
+            old_price = float(plan.price_monthly)
+
             # Update basic fields
             plan.name = request.form.get('name', plan.name)
             plan.price_monthly = float(request.form.get('price_monthly', plan.price_monthly))
@@ -2948,8 +2951,26 @@ def pricing_plan_edit(plan_id):
 
             plan.update()
 
-            log_admin_action(admin.id, 'pricing_plan_edit', f"Updated pricing plan: {plan.name} (ID: {plan.id})")
-            flash(f'Pricing plan "{plan.name}" updated successfully.', 'success')
+            # Sync to Stripe if price changed
+            price_changed = old_price != plan.price_monthly
+            if price_changed and plan.stripe_price_id:
+                try:
+                    from stripe_integration.pricing import sync_price_to_stripe
+                    # Stripe prices are immutable - must create new price when amount changes
+                    result = sync_price_to_stripe(plan.id, create_new=True)
+                    if result['success']:
+                        log_admin_action(admin.id, 'pricing_plan_edit', f"Updated pricing plan: {plan.name} (ID: {plan.id}) - synced to Stripe")
+                        flash(f'Pricing plan "{plan.name}" updated and synced to Stripe.', 'success')
+                    else:
+                        log_admin_action(admin.id, 'pricing_plan_edit', f"Updated pricing plan: {plan.name} (ID: {plan.id}) - Stripe sync failed: {result['message']}")
+                        flash(f'Plan updated but Stripe sync failed: {result["message"]}', 'warning')
+                except Exception as e:
+                    log_admin_action(admin.id, 'pricing_plan_edit', f"Updated pricing plan: {plan.name} (ID: {plan.id}) - Stripe sync error: {str(e)}")
+                    flash(f'Plan updated but Stripe sync failed: {str(e)}', 'warning')
+            else:
+                log_admin_action(admin.id, 'pricing_plan_edit', f"Updated pricing plan: {plan.name} (ID: {plan.id})")
+                flash(f'Pricing plan "{plan.name}" updated successfully.', 'success')
+
             return redirect(url_for('admin.pricing_plans'))
 
         except ValueError as e:
