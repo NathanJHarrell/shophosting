@@ -355,6 +355,10 @@ app.register_blueprint(metrics_bp)
 from container_metrics import container_metrics_bp
 app.register_blueprint(container_metrics_bp)
 
+# Register status blueprint for public status page
+from status import status_bp
+app.register_blueprint(status_bp, url_prefix='/status')
+
 # Apply rate limiting to admin login (stricter than customer login)
 # Admin accounts are high-value targets, so we limit more aggressively
 limiter.limit("3 per minute")(app.view_functions['admin.login'])
