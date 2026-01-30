@@ -1,0 +1,32 @@
+# MySQL Primary (Source) Server Configuration
+# Add to /etc/mysql/mysql.conf.d/replication.cnf on primary server
+
+[mysqld]
+# Server identification
+server-id = 1
+
+# Binary logging for replication
+log_bin = /var/log/mysql/mysql-bin
+binlog_format = ROW
+binlog_expire_logs_seconds = 604800  # 7 days
+max_binlog_size = 100M
+
+# Sync binlog to disk for durability
+sync_binlog = 1
+
+# InnoDB settings for durability
+innodb_flush_log_at_trx_commit = 1
+
+# Include all databases except system DBs
+binlog_do_db = shophosting_db
+# Customer databases are included automatically with pattern
+
+# GTID-based replication (recommended)
+gtid_mode = ON
+enforce_gtid_consistency = ON
+
+# Network settings
+bind-address = 0.0.0.0
+
+# Performance tuning for replication
+slave_parallel_workers = 4

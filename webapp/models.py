@@ -9,13 +9,14 @@ from mysql.connector import pooling
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 
-# Database connection pool
-db_pool = None
+# Database connection pools
+db_pool = None       # Primary pool for writes
+db_pool_read = None  # Read replica pool (optional)
 
 
 def init_db_pool():
-    """Initialize database connection pool"""
-    global db_pool
+    """Initialize database connection pool(s)"""
+    global db_pool, db_pool_read
 
     # In testing mode, allow graceful failure if database isn't available
     is_testing = os.getenv('FLASK_ENV') == 'testing'
@@ -31,6 +32,7 @@ def init_db_pool():
             "Please set it in /opt/shophosting/.env"
         )
 
+    # Primary (write) pool configuration
     db_config = {
         'host': os.getenv('DB_HOST', 'localhost'),
         'user': os.getenv('DB_USER', 'shophosting_app'),
@@ -42,6 +44,25 @@ def init_db_pool():
 
     try:
         db_pool = pooling.MySQLConnectionPool(**db_config)
+
+        # Initialize read replica pool if configured
+        replica_host = os.getenv('DB_REPLICA_HOST')
+        if replica_host:
+            replica_config = {
+                'host': replica_host,
+                'user': os.getenv('DB_REPLICA_USER', 'shophosting_read'),
+                'password': os.getenv('DB_REPLICA_PASSWORD', db_password),
+                'database': os.getenv('DB_NAME', 'shophosting_db'),
+                'pool_name': 'shophosting_read_pool',
+                'pool_size': int(os.getenv('DB_REPLICA_POOL_SIZE', '3'))
+            }
+            try:
+                db_pool_read = pooling.MySQLConnectionPool(**replica_config)
+                print(f"INFO: Read replica pool initialized ({replica_host})")
+            except mysql.connector.Error as e:
+                print(f"WARNING: Could not connect to read replica, using primary for reads: {e}")
+                db_pool_read = None
+
         return db_pool
     except mysql.connector.Error as e:
         if is_testing:
@@ -50,10 +71,30 @@ def init_db_pool():
         raise
 
 
-def get_db_connection():
-    """Get a connection from the pool"""
+def get_db_connection(read_only=False):
+    """
+    Get a connection from the appropriate pool.
+
+    Args:
+        read_only: If True and a read replica is configured, use the replica pool.
+                   Otherwise, use the primary pool.
+
+    Returns:
+        MySQL connection from the pool
+    """
+    global db_pool, db_pool_read
+
     if db_pool is None:
         init_db_pool()
+
+    # Use read replica if available and requested
+    if read_only and db_pool_read is not None:
+        try:
+            return db_pool_read.get_connection()
+        except mysql.connector.Error:
+            # Fall back to primary if replica is unavailable
+            pass
+
     return db_pool.get_connection()
 
 
