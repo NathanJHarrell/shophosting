@@ -1143,6 +1143,8 @@ def dashboard_staging():
 @login_required
 def dashboard_domains():
     """Domains management page"""
+    from cloudflare.models import CloudflareConnection, DNSRecordCache
+
     customer = Customer.get_by_id(current_user.id)
     if not customer:
         flash('Customer account not found.', 'error')
@@ -1151,9 +1153,22 @@ def dashboard_domains():
     # Server IP for DNS configuration
     server_ip = os.environ.get('SERVER_IP', '147.135.8.170')
 
+    # Get Cloudflare connection status and DNS records
+    cloudflare_connection = CloudflareConnection.get_by_customer_id(customer.id)
+    cloudflare_connected = cloudflare_connection is not None
+    dns_records = []
+    last_sync_time = None
+
+    if cloudflare_connected and cloudflare_connection.last_sync_at:
+        dns_records = DNSRecordCache.get_by_customer_id(customer.id)
+        last_sync_time = cloudflare_connection.last_sync_at.strftime('%Y-%m-%d %H:%M:%S')
+
     return render_template('dashboard/domains.html',
                           customer=customer,
                           server_ip=server_ip,
+                          cloudflare_connected=cloudflare_connected,
+                          dns_records=dns_records,
+                          last_sync_time=last_sync_time,
                           active_page='domains')
 
 

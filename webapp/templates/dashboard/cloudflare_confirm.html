@@ -1,0 +1,394 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block page_title %}Review DNS Changes{% endblock %}
+
+{% block dashboard_css %}
+.confirm-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    margin-bottom: 24px;
+    overflow: hidden;
+}
+
+.confirm-card-header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.confirm-card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.confirm-card-body {
+    padding: 20px 28px;
+}
+
+.intro-text {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin-bottom: 24px;
+    line-height: 1.6;
+}
+
+.section-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+}
+
+/* DNS Records List */
+.records-list {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    margin-bottom: 24px;
+    overflow: hidden;
+}
+
+.record-item {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    gap: 16px;
+}
+
+.record-item:last-child {
+    border-bottom: none;
+}
+
+.record-checkbox {
+    flex-shrink: 0;
+}
+
+.record-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--accent-blue);
+}
+
+.record-info {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.record-type {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--bg-elevated);
+    color: var(--accent-blue);
+    min-width: 50px;
+    text-align: center;
+}
+
+.record-name {
+    font-family: 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    min-width: 120px;
+}
+
+.record-value {
+    font-family: 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.record-action {
+    flex-shrink: 0;
+}
+
+.action-badge {
+    padding: 4px 10px;
+    border-radius: 100px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.action-badge.replace {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--accent-orange);
+}
+
+.action-badge.keep {
+    background: rgba(107, 114, 128, 0.1);
+    color: var(--text-tertiary);
+}
+
+/* Proposed Changes */
+.proposed-changes {
+    margin-bottom: 24px;
+}
+
+.proposed-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.proposed-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.proposed-list li::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: var(--accent-green);
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.proposed-list code {
+    font-family: 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 0.85rem;
+    background: var(--bg-surface);
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+}
+
+/* Warning Box */
+.warning-box {
+    display: flex;
+    gap: 12px;
+    padding: 16px;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    border-radius: var(--radius-md);
+    margin-bottom: 24px;
+}
+
+.warning-box-icon {
+    flex-shrink: 0;
+    color: var(--accent-orange);
+}
+
+.warning-box-content {
+    font-size: 0.9rem;
+    color: var(--accent-orange);
+    line-height: 1.5;
+}
+
+/* Action Buttons */
+.action-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.btn-cancel {
+    padding: 12px 24px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.btn-cancel:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-accent);
+}
+
+.btn-confirm {
+    padding: 12px 24px;
+    background: var(--gradient-primary);
+    border: none;
+    border-radius: var(--radius-md);
+    color: white;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-confirm:hover {
+    opacity: 0.9;
+}
+
+/* Empty state */
+.no-records {
+    padding: 24px;
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 0.9rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .record-item {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .record-info {
+        flex-wrap: wrap;
+    }
+
+    .record-name {
+        min-width: auto;
+    }
+
+    .record-value {
+        width: 100%;
+        flex: none;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+    }
+
+    .btn-cancel,
+    .btn-confirm {
+        width: 100%;
+        text-align: center;
+    }
+}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="page-header">
+    <h1 class="page-title">Review DNS Changes</h1>
+    <p class="page-subtitle">Review the proposed changes for {{ domain }}</p>
+</div>
+
+<form method="POST" action="{{ url_for('cloudflare_confirm') }}">
+    <input type="hidden" name="zone_id" value="{{ zone.id }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="confirm-card">
+        <div class="confirm-card-header">
+            <h2 class="confirm-card-title">DNS Configuration Review</h2>
+        </div>
+        <div class="confirm-card-body">
+            <p class="intro-text">
+                We found existing DNS records for <strong>{{ domain }}</strong>.
+                Review the changes below before proceeding. Records marked for replacement
+                will be updated to point to your server.
+            </p>
+
+            <!-- Existing Records -->
+            <h3 class="section-title">Existing Records</h3>
+            <div class="records-list">
+                {% if existing_records %}
+                    {% for record in existing_records %}
+                    {% set is_root_a = record.type == 'A' and (record.name == domain or record.name == '@') %}
+                    {% set is_www_cname = record.type == 'CNAME' and (record.name == 'www.' ~ domain or record.name == 'www') %}
+                    {% set is_www_a = record.type == 'A' and (record.name == 'www.' ~ domain or record.name == 'www') %}
+                    {% set should_replace = is_root_a or is_www_cname or is_www_a %}
+                    <div class="record-item">
+                        <div class="record-checkbox">
+                            <input type="checkbox"
+                                   name="replace_records[]"
+                                   value="{{ record.id }}"
+                                   id="record-{{ record.id }}"
+                                   {% if should_replace %}checked{% endif %}
+                                   {% if not should_replace %}disabled{% endif %}>
+                        </div>
+                        <div class="record-info">
+                            <span class="record-type">{{ record.type }}</span>
+                            <span class="record-name">{{ record.name }}</span>
+                            <span class="record-value" title="{{ record.content }}">{{ record.content }}</span>
+                        </div>
+                        <div class="record-action">
+                            {% if should_replace %}
+                            <span class="action-badge replace">Replace</span>
+                            {% else %}
+                            <span class="action-badge keep">Keep</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="no-records">
+                    No existing DNS records found.
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Proposed Changes -->
+            <div class="proposed-changes">
+                <h3 class="section-title">Proposed Changes</h3>
+                <ul class="proposed-list">
+                    <li>
+                        <strong>A record</strong> for <code>{{ domain }}</code> will point to <code>{{ server_ip }}</code> (your server)
+                    </li>
+                    <li>
+                        <strong>CNAME record</strong> for <code>www</code> will point to <code>{{ domain }}</code>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Warning -->
+            <div class="warning-box">
+                <svg class="warning-box-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+                <div class="warning-box-content">
+                    Records marked <strong>REPLACE</strong> will be updated to point to your server.
+                    MX, TXT, and other records will be preserved to maintain email delivery and domain verification.
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <a href="{{ url_for('dashboard_domains') }}" class="btn-cancel">Cancel</a>
+                <button type="submit" class="btn-confirm">Confirm &amp; Connect</button>
+            </div>
+        </div>
+    </div>
+</form>
+{% endblock %}
+
+{% block dashboard_js %}
+// Toggle action badge when checkbox changes
+document.querySelectorAll('input[name="replace_records[]"]').forEach(function(checkbox) {
+    checkbox.addEventListener('change', function() {
+        var recordItem = this.closest('.record-item');
+        var badge = recordItem.querySelector('.action-badge');
+
+        if (this.checked) {
+            badge.className = 'action-badge replace';
+            badge.textContent = 'Replace';
+        } else {
+            badge.className = 'action-badge keep';
+            badge.textContent = 'Keep';
+        }
+    });
+});
+{% endblock %}
