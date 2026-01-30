@@ -1,0 +1,92 @@
+# AlertManager Configuration for ShopHosting.io
+# Configure email and PagerDuty notifications for alerts
+
+global:
+  # SMTP settings for email notifications
+  smtp_smarthost: '${SMTP_HOST:-localhost:587}'
+  smtp_from: '${SMTP_FROM:-alerts@shophosting.io}'
+  smtp_auth_username: '${SMTP_USERNAME:-}'
+  smtp_auth_password: '${SMTP_PASSWORD:-}'
+  smtp_require_tls: true
+
+  # PagerDuty integration
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+  # Default timeout for notifications
+  resolve_timeout: 5m
+
+# Alert routing
+route:
+  # Default receiver
+  receiver: 'email-notifications'
+
+  # Group alerts by these labels
+  group_by: ['alertname', 'severity', 'customer_id']
+
+  # Wait before sending first notification for a new group
+  group_wait: 30s
+
+  # Wait before sending updates for a group
+  group_interval: 5m
+
+  # Wait before resending a notification
+  repeat_interval: 4h
+
+  # Child routes for severity-based routing
+  routes:
+    # Critical alerts go to PagerDuty AND email
+    - match:
+        severity: critical
+      receiver: 'pagerduty-critical'
+      continue: true  # Also send to next matching route
+
+    - match:
+        severity: critical
+      receiver: 'email-notifications'
+
+    # Warning alerts only go to email
+    - match:
+        severity: warning
+      receiver: 'email-notifications'
+
+# Notification receivers
+receivers:
+  - name: 'email-notifications'
+    email_configs:
+      - to: '${ALERT_EMAIL:-ops@shophosting.io}'
+        send_resolved: true
+        headers:
+          Subject: '[ShopHosting {{ .Status | toUpper }}] {{ .GroupLabels.alertname }}'
+        html: |
+          {{ range .Alerts }}
+          <h3>{{ .Labels.alertname }} - {{ .Labels.severity | toUpper }}</h3>
+          <p><strong>Status:</strong> {{ .Status }}</p>
+          <p><strong>Summary:</strong> {{ .Annotations.summary }}</p>
+          <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+          <p><strong>Labels:</strong></p>
+          <ul>
+          {{ range .Labels.SortedPairs }}
+            <li><strong>{{ .Name }}:</strong> {{ .Value }}</li>
+          {{ end }}
+          </ul>
+          <hr>
+          {{ end }}
+
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - routing_key: '${PAGERDUTY_ROUTING_KEY:-}'
+        severity: critical
+        description: '{{ .CommonAnnotations.summary }}'
+        details:
+          alertname: '{{ .GroupLabels.alertname }}'
+          customer_id: '{{ .GroupLabels.customer_id }}'
+          description: '{{ .CommonAnnotations.description }}'
+
+# Inhibition rules - suppress less severe alerts when critical is firing
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    # Apply inhibition only when these labels match
+    equal: ['alertname', 'customer_id']

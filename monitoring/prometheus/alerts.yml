@@ -1,0 +1,189 @@
+# Prometheus Alert Rules for ShopHosting.io
+
+groups:
+  # Customer Health Alerts
+  - name: customer_health
+    interval: 30s
+    rules:
+      - alert: CustomerContainerDown
+        expr: shophosting_customer_container_status == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Customer {{ $labels.customer_id }} container is down"
+          description: "Container {{ $labels.container_name }} for customer {{ $labels.customer_id }} has been down for more than 5 minutes."
+
+      - alert: CustomerHighMemory
+        expr: (container_memory_usage_bytes{shophosting_customer!=""} / container_spec_memory_limit_bytes{shophosting_customer!=""}) * 100 > 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Customer {{ $labels.shophosting_customer }} high memory usage"
+          description: "Customer {{ $labels.shophosting_customer }} is using {{ $value | printf \"%.1f\" }}% of allocated memory for more than 10 minutes."
+
+      - alert: CustomerCriticalMemory
+        expr: (container_memory_usage_bytes{shophosting_customer!=""} / container_spec_memory_limit_bytes{shophosting_customer!=""}) * 100 > 95
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Customer {{ $labels.shophosting_customer }} critical memory usage"
+          description: "Customer {{ $labels.shophosting_customer }} is using {{ $value | printf \"%.1f\" }}% of allocated memory and may be OOM killed."
+
+      - alert: CustomerHighDiskUsage
+        expr: shophosting_customer_disk_usage_percent > 90
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Customer {{ $labels.customer_id }} high disk usage"
+          description: "Customer {{ $labels.customer_id }} is using {{ $value | printf \"%.1f\" }}% of their disk quota."
+
+      - alert: CustomerCriticalDiskUsage
+        expr: shophosting_customer_disk_usage_percent > 95
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Customer {{ $labels.customer_id }} critical disk usage"
+          description: "Customer {{ $labels.customer_id }} is using {{ $value | printf \"%.1f\" }}% of their disk quota and may be auto-suspended."
+
+  # Infrastructure Alerts
+  - name: infrastructure
+    interval: 30s
+    rules:
+      - alert: WebappDown
+        expr: up{job="shophosting-webapp"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ShopHosting webapp is down"
+          description: "The ShopHosting webapp has been unreachable for more than 2 minutes."
+
+      - alert: ProvisioningWorkerDown
+        expr: up{job="provisioning-worker"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Provisioning worker is down"
+          description: "The provisioning worker has been unreachable for more than 5 minutes. New customer setups will fail."
+
+      - alert: ResourceWorkerDown
+        expr: up{job="resource-worker"} == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Resource monitoring worker is down"
+          description: "The resource monitoring worker has been down for more than 10 minutes. Resource tracking may be stale."
+
+      - alert: HighHostCPU
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value | printf \"%.1f\" }}% on {{ $labels.instance }} for more than 15 minutes."
+
+      - alert: HighHostMemory
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is {{ $value | printf \"%.1f\" }}% on {{ $labels.instance }} for more than 10 minutes."
+
+      - alert: HighHostDisk
+        expr: (1 - (node_filesystem_avail_bytes{fstype!="tmpfs",mountpoint="/"} / node_filesystem_size_bytes{fstype!="tmpfs",mountpoint="/"})) * 100 > 85
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk usage on {{ $labels.instance }}"
+          description: "Disk usage is {{ $value | printf \"%.1f\" }}% on {{ $labels.instance }}."
+
+      - alert: CriticalHostDisk
+        expr: (1 - (node_filesystem_avail_bytes{fstype!="tmpfs",mountpoint="/"} / node_filesystem_size_bytes{fstype!="tmpfs",mountpoint="/"})) * 100 > 95
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical disk usage on {{ $labels.instance }}"
+          description: "Disk usage is {{ $value | printf \"%.1f\" }}% on {{ $labels.instance }}. Immediate action required."
+
+  # Database Alerts
+  - name: database
+    interval: 30s
+    rules:
+      - alert: MySQLDown
+        expr: mysql_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MySQL database is down"
+          description: "MySQL has been unreachable for more than 2 minutes."
+
+      - alert: MySQLReplicationLag
+        expr: mysql_slave_status_seconds_behind_master > 60
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MySQL replication lag"
+          description: "MySQL replica is {{ $value | printf \"%.0f\" }} seconds behind master."
+
+      - alert: MySQLReplicationStopped
+        expr: mysql_slave_status_slave_io_running == 0 or mysql_slave_status_slave_sql_running == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MySQL replication has stopped"
+          description: "MySQL replication IO or SQL thread has stopped."
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been unreachable for more than 2 minutes."
+
+      - alert: RedisSentinelMasterDown
+        expr: redis_sentinel_master_status != 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis Sentinel reports master down"
+          description: "Redis Sentinel has detected that the master is down. Failover may be in progress."
+
+  # Backup Alerts
+  - name: backups
+    interval: 5m
+    rules:
+      - alert: BackupFailed
+        expr: shophosting_backup_last_success_timestamp < (time() - 86400)
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "Customer backup is stale"
+          description: "Customer {{ $labels.customer_id }} backup has not succeeded in over 24 hours."
+
+      - alert: BackupWorkerStuck
+        expr: shophosting_backup_jobs_pending > 10
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Backup queue is backing up"
+          description: "There are {{ $value }} pending backup jobs. The backup worker may be stuck."

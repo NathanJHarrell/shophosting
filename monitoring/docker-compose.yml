@@ -57,6 +57,29 @@ services:
     depends_on:
       - loki
 
+  alertmanager:
+    image: prom/alertmanager:v0.26.0
+    container_name: shophosting-alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=https://shophosting.io/alertmanager'
+    ports:
+      - "127.0.0.1:9093:9093"
+    environment:
+      - SMTP_HOST=${SMTP_HOST:-localhost:587}
+      - SMTP_FROM=${SMTP_FROM:-alerts@shophosting.io}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - ALERT_EMAIL=${ALERT_EMAIL:-ops@shophosting.io}
+      - PAGERDUTY_ROUTING_KEY=${PAGERDUTY_ROUTING_KEY:-}
+    networks:
+      - monitoring
+
   grafana:
     image: grafana/grafana:10.2.2
     container_name: shophosting-grafana
@@ -84,6 +107,8 @@ services:
       - monitoring
     depends_on:
       - prometheus
+      - loki
+      - alertmanager
 
 networks:
   monitoring:
@@ -93,3 +118,4 @@ volumes:
   prometheus_data:
   grafana_data:
   loki_data:
+  alertmanager_data:

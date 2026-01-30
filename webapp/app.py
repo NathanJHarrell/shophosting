@@ -404,6 +404,11 @@ app.register_blueprint(status_bp, url_prefix='/status')
 from cloudflare import cloudflare_bp
 app.register_blueprint(cloudflare_bp)
 
+# Exempt metrics endpoints from rate limiting (Prometheus scrapes frequently)
+limiter.exempt(app.view_functions['metrics.prometheus_metrics'])
+limiter.exempt(app.view_functions['metrics.health_check'])
+limiter.exempt(app.view_functions['container_metrics.container_metrics'])
+
 # Apply rate limiting to admin login (stricter than customer login)
 # Admin accounts are high-value targets, so we limit more aggressively
 limiter.limit("3 per minute")(app.view_functions['admin.login'])
