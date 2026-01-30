@@ -96,9 +96,11 @@
 
                 <!-- Backup Server -->
                 <div class="status-item" id="backup-server-status">
-                    <span class="status-item-name">Backup Server</span>
-                    <span class="status-item-status {{ statuses.backup_server.display.color }}">
+                    <span class="status-item-name">
                         <span class="status-icon {{ statuses.backup_server.display.color }}"></span>
+                        Backup Server
+                    </span>
+                    <span class="status-item-status {{ statuses.backup_server.display.color }}">
                         {{ statuses.backup_server.display.text }}
                     </span>
                 </div>
@@ -106,9 +108,11 @@
                 <!-- Services -->
                 {% for service_key, service in statuses.services.items() %}
                 <div class="status-item" data-service-key="{{ service_key }}">
-                    <span class="status-item-name">{{ service.name }}</span>
-                    <span class="status-item-status {{ service.display.color }}">
+                    <span class="status-item-name">
                         <span class="status-icon {{ service.display.color }}"></span>
+                        {{ service.name }}
+                    </span>
+                    <span class="status-item-status {{ service.display.color }}">
                         {{ service.display.text }}
                     </span>
                 </div>
@@ -221,18 +225,17 @@
     function updateStatusItem(element, status) {
         var display = getStatusDisplay(status);
         var statusEl = element.querySelector('.status-item-status');
-        var iconEl = statusEl.querySelector('.status-icon');
+        var nameEl = element.querySelector('.status-item-name');
+        var iconEl = nameEl.querySelector('.status-icon');
 
-        // Remove old color classes and set new ones
+        // Update status text color
         statusEl.className = 'status-item-status ' + display.color;
-        iconEl.className = 'status-icon ' + display.color;
+        statusEl.textContent = display.text;
 
-        // Clear and rebuild content safely using DOM methods
-        while (statusEl.firstChild) {
-            statusEl.removeChild(statusEl.firstChild);
+        // Update icon color in the name
+        if (iconEl) {
+            iconEl.className = 'status-icon ' + display.color;
         }
-        statusEl.appendChild(iconEl);
-        statusEl.appendChild(document.createTextNode(' ' + display.text));
     }
 
     function updateBanner(status) {

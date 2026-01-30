@@ -355,9 +355,9 @@ app.register_blueprint(metrics_bp)
 from container_metrics import container_metrics_bp
 app.register_blueprint(container_metrics_bp)
 
-# Register Cloudflare DNS management blueprint
-from cloudflare import cloudflare_bp
-app.register_blueprint(cloudflare_bp)
+# Register status blueprint for public status page
+from status import status_bp
+app.register_blueprint(status_bp, url_prefix='/status')
 
 # Apply rate limiting to admin login (stricter than customer login)
 # Admin accounts are high-value targets, so we limit more aggressively
@@ -518,6 +518,12 @@ def contact_submit():
 
     flash('Thanks for reaching out! We\'ll get back to you within one business day.', 'success')
     return redirect(url_for('contact'))
+
+
+@app.route('/api/health')
+def api_health():
+    """Health check endpoint for status page monitoring"""
+    return jsonify({'status': 'ok', 'service': 'shophosting-api'})
 
 
 @app.route('/api/schedule-consultation', methods=['POST'])
