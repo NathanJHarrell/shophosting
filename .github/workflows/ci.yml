@@ -64,16 +64,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r webapp/requirements.txt
 
-      - name: Run tests (unit tests only - no database)
+      - name: Run tests
         env:
           FLASK_ENV: testing
           SECRET_KEY: test-secret-key-for-ci-only
+          DB_HOST: 127.0.0.1
+          DB_USER: test_user
+          DB_PASSWORD: Test_P@ssw0rd!2026
+          DB_NAME: shophosting_test
+          REDIS_URL: redis://localhost:6379/1
           STRIPE_SECRET_KEY: sk_test_placeholder
           STRIPE_WEBHOOK_SECRET: whsec_test_placeholder
         run: |
           cd webapp
-          # Run only Cloudflare tests (don't require database)
-          python -m pytest tests/test_cloudflare_api.py tests/test_cloudflare_models.py -v --tb=short
+          python -m pytest tests/ -v --tb=short
 
   security:
     name: Security Scan
