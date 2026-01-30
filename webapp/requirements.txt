@@ -31,7 +31,7 @@ stripe==7.0.0
 
 # Docker & HTTP
 docker==7.0.0
-requests==2.31.0
+requests==2.32.4
 
 # Environment
 python-dotenv==1.0.0
