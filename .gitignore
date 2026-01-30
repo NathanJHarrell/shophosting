@@ -58,5 +58,5 @@ quick_provision.py
 docker/wordpress/.env
 .system-restic-password
 
-# OpenProject environment (contains secrets)
-openproject/.env
+# OpenProject (local development, contains data and secrets)
+openproject/
