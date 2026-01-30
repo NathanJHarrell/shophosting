@@ -355,6 +355,10 @@ app.register_blueprint(metrics_bp)
 from container_metrics import container_metrics_bp
 app.register_blueprint(container_metrics_bp)
 
+# Register Cloudflare DNS management blueprint
+from cloudflare import cloudflare_bp
+app.register_blueprint(cloudflare_bp)
+
 # Apply rate limiting to admin login (stricter than customer login)
 # Admin accounts are high-value targets, so we limit more aggressively
 limiter.limit("3 per minute")(app.view_functions['admin.login'])
@@ -1133,6 +1137,8 @@ def dashboard_staging():
 @login_required
 def dashboard_domains():
     """Domains management page"""
+    from cloudflare.models import CloudflareConnection, DNSRecordCache
+
     customer = Customer.get_by_id(current_user.id)
     if not customer:
         flash('Customer account not found.', 'error')
@@ -1141,9 +1147,22 @@ def dashboard_domains():
     # Server IP for DNS configuration
     server_ip = os.environ.get('SERVER_IP', '147.135.8.170')
 
+    # Get Cloudflare connection status and DNS records
+    cloudflare_connection = CloudflareConnection.get_by_customer_id(customer.id)
+    cloudflare_connected = cloudflare_connection is not None
+    dns_records = []
+    last_sync_time = None
+
+    if cloudflare_connected and cloudflare_connection.last_sync_at:
+        dns_records = DNSRecordCache.get_by_customer_id(customer.id)
+        last_sync_time = cloudflare_connection.last_sync_at.strftime('%Y-%m-%d %H:%M:%S')
+
     return render_template('dashboard/domains.html',
                           customer=customer,
                           server_ip=server_ip,
+                          cloudflare_connected=cloudflare_connected,
+                          dns_records=dns_records,
+                          last_sync_time=last_sync_time,
                           active_page='domains')
 
 
