@@ -12,27 +12,27 @@ class TestCloudflareConnectRoutes:
     """Test Cloudflare connection routes"""
 
     def test_connect_requires_login(self, client):
-        """Test /cloudflare/connect requires authentication"""
-        response = client.get('/cloudflare/connect', follow_redirects=False)
+        """Test /dashboard/cloudflare/connect requires authentication"""
+        response = client.get('/dashboard/cloudflare/connect', follow_redirects=False)
         assert response.status_code == 302
         # Should redirect to login
         assert 'login' in response.location.lower()
 
     def test_connect_submit_requires_login(self, client):
-        """Test POST /cloudflare/connect requires authentication"""
-        response = client.post('/cloudflare/connect',
+        """Test POST /dashboard/cloudflare/connect requires authentication"""
+        response = client.post('/dashboard/cloudflare/connect',
                                data={'api_token': 'test'},
                                follow_redirects=False)
         assert response.status_code == 302
 
     def test_confirm_requires_login(self, client):
-        """Test /cloudflare/confirm requires authentication"""
-        response = client.get('/cloudflare/confirm', follow_redirects=False)
+        """Test /dashboard/cloudflare/confirm requires authentication"""
+        response = client.get('/dashboard/cloudflare/confirm', follow_redirects=False)
         assert response.status_code == 302
 
     def test_disconnect_requires_login(self, client):
-        """Test POST /cloudflare/disconnect requires authentication"""
-        response = client.post('/cloudflare/disconnect', follow_redirects=False)
+        """Test POST /dashboard/cloudflare/disconnect requires authentication"""
+        response = client.post('/dashboard/cloudflare/disconnect', follow_redirects=False)
         assert response.status_code == 302
 
 
@@ -40,30 +40,30 @@ class TestCloudflareAPIRoutes:
     """Test Cloudflare API endpoints"""
 
     def test_api_records_requires_login(self, client):
-        """Test /cloudflare/api/records requires authentication"""
-        response = client.get('/cloudflare/api/records')
+        """Test /dashboard/cloudflare/api/records requires authentication"""
+        response = client.get('/dashboard/cloudflare/api/records')
         assert response.status_code == 302
 
     def test_api_create_record_requires_login(self, client):
-        """Test POST /cloudflare/api/records requires authentication"""
-        response = client.post('/cloudflare/api/records',
+        """Test POST /dashboard/cloudflare/api/records requires authentication"""
+        response = client.post('/dashboard/cloudflare/api/records',
                                json={'type': 'A', 'name': 'test', 'content': '1.2.3.4'})
         assert response.status_code == 302
 
     def test_api_update_record_requires_login(self, client):
-        """Test PUT /cloudflare/api/records/<id> requires authentication"""
-        response = client.put('/cloudflare/api/records/rec123',
+        """Test PUT /dashboard/cloudflare/api/records/<id> requires authentication"""
+        response = client.put('/dashboard/cloudflare/api/records/rec123',
                               json={'type': 'A', 'name': 'test', 'content': '1.2.3.4'})
         assert response.status_code == 302
 
     def test_api_delete_record_requires_login(self, client):
-        """Test DELETE /cloudflare/api/records/<id> requires authentication"""
-        response = client.delete('/cloudflare/api/records/rec123')
+        """Test DELETE /dashboard/cloudflare/api/records/<id> requires authentication"""
+        response = client.delete('/dashboard/cloudflare/api/records/rec123')
         assert response.status_code == 302
 
     def test_api_sync_requires_login(self, client):
-        """Test POST /cloudflare/api/sync requires authentication"""
-        response = client.post('/cloudflare/api/sync')
+        """Test POST /dashboard/cloudflare/api/sync requires authentication"""
+        response = client.post('/dashboard/cloudflare/api/sync')
         assert response.status_code == 302
 
 
@@ -169,7 +169,7 @@ class TestCloudflareAPIHelpers:
 
 
 class TestAPIRecordsEndpoint:
-    """Test /cloudflare/api/records endpoint behavior"""
+    """Test /dashboard/cloudflare/api/records endpoint behavior"""
 
     @pytest.fixture(autouse=True)
     def setup_secret_key(self):
@@ -262,28 +262,28 @@ class TestURLRouteStructure:
         cloudflare_routes = [r for r in rules if r.startswith('/cloudflare')]
 
         # Should have connection routes
-        assert '/cloudflare/connect' in cloudflare_routes
-        assert '/cloudflare/confirm' in cloudflare_routes
-        assert '/cloudflare/disconnect' in cloudflare_routes
+        assert '/dashboard/cloudflare/connect' in cloudflare_routes
+        assert '/dashboard/cloudflare/confirm' in cloudflare_routes
+        assert '/dashboard/cloudflare/disconnect' in cloudflare_routes
 
         # Should have API routes
-        assert '/cloudflare/api/records' in cloudflare_routes
-        assert '/cloudflare/api/sync' in cloudflare_routes
+        assert '/dashboard/cloudflare/api/records' in cloudflare_routes
+        assert '/dashboard/cloudflare/api/sync' in cloudflare_routes
 
     def test_api_routes_accept_correct_methods(self, app):
         """Test API routes accept correct HTTP methods"""
         rules = {rule.rule: rule.methods for rule in app.url_map.iter_rules()}
 
         # GET and POST for records list/create
-        records_methods = rules.get('/cloudflare/api/records', set())
+        records_methods = rules.get('/dashboard/cloudflare/api/records', set())
         assert 'GET' in records_methods
         assert 'POST' in records_methods
 
         # POST only for sync
-        sync_methods = rules.get('/cloudflare/api/sync', set())
+        sync_methods = rules.get('/dashboard/cloudflare/api/sync', set())
         assert 'POST' in sync_methods
         assert 'GET' not in sync_methods
 
         # POST only for disconnect
-        disconnect_methods = rules.get('/cloudflare/disconnect', set())
+        disconnect_methods = rules.get('/dashboard/cloudflare/disconnect', set())
         assert 'POST' in disconnect_methods

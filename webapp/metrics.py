@@ -10,7 +10,7 @@ from models import (
     get_db_connection
 )
 
-metrics_bp = Blueprint('metrics', __name__)
+metrics_bp = Blueprint('metrics', __name__, url_prefix='/metrics')
 
 
 def generate_metrics():
