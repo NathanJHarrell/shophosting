@@ -516,6 +516,12 @@ def contact_submit():
     return redirect(url_for('contact'))
 
 
+@app.route('/api/health')
+def api_health():
+    """Health check endpoint for status page monitoring"""
+    return jsonify({'status': 'ok', 'service': 'shophosting-api'})
+
+
 @app.route('/api/schedule-consultation', methods=['POST'])
 @limiter.limit("5 per hour", error_message="Too many consultation requests. Please try again later.")
 def schedule_consultation():
