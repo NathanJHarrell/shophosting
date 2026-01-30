@@ -1,0 +1,31 @@
+services:
+  openproject:
+    image: openproject/openproject:15
+    container_name: openproject
+    restart: unless-stopped
+    ports:
+      - "6789:80"
+    environment:
+      - OPENPROJECT_HOST__NAME=${OPENPROJECT_HOST__NAME}
+      - OPENPROJECT_SECRET_KEY_BASE=${SECRET_KEY_BASE}
+      - OPENPROJECT_HTTPS=${OPENPROJECT_HTTPS}
+      - OPENPROJECT_DEFAULT__LANGUAGE=${OPENPROJECT_DEFAULT__LANGUAGE}
+      - OPENPROJECT_EMAIL__DELIVERY__METHOD=smtp
+      - OPENPROJECT_SMTP__ADDRESS=${SMTP_ADDRESS}
+      - OPENPROJECT_SMTP__PORT=${SMTP_PORT}
+      - OPENPROJECT_SMTP__DOMAIN=${SMTP_DOMAIN}
+      - OPENPROJECT_MAIL__FROM=${MAIL_FROM}
+    volumes:
+      - ./data/pgdata:/var/openproject/pgdata
+      - ./data/assets:/var/openproject/assets
+    networks:
+      - openproject-network
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+
+networks:
+  openproject-network:
+    driver: bridge

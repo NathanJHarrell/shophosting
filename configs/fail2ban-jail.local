@@ -1,0 +1,43 @@
+# fail2ban configuration for shophosting
+# Copy to /etc/fail2ban/jail.local
+
+[DEFAULT]
+# Ban for 1 hour (3600 seconds)
+bantime = 3600
+
+# Detection window: 10 minutes
+findtime = 600
+
+# Max retries before ban
+maxretry = 5
+
+# Ignore localhost
+ignoreip = 127.0.0.1/8 ::1
+
+# Use iptables for banning
+banaction = iptables-multiport
+
+# Email notifications (optional - uncomment and configure)
+# destemail = admin@shophosting.io
+# sender = fail2ban@shophosting.io
+# action = %(action_mwl)s
+
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+bantime = 3600
+findtime = 600
+
+# Stricter rules for repeat offenders
+[sshd-aggressive]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 1
+bantime = 86400
+findtime = 86400
+# This jail catches IPs that were already banned once (recidive behavior)
