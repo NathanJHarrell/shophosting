@@ -36,6 +36,9 @@ requests==2.32.4
 # Environment
 python-dotenv==1.0.0
 
+# Secrets Management
+hvac==2.1.0
+
 # Production Server
 gunicorn==23.0.0
 
