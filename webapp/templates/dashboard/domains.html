@@ -336,6 +336,367 @@
     display: none;
 }
 
+/* Cloudflare Integration Styles */
+.cloudflare-section {
+    margin-bottom: 24px;
+}
+
+.cloudflare-connect-card {
+    background: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-surface) 100%);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    text-align: center;
+}
+
+.cloudflare-logo {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 20px;
+    padding: 12px;
+    background: #F6821F;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.cloudflare-logo svg {
+    width: 40px;
+    height: 40px;
+    fill: white;
+}
+
+.cloudflare-connect-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.cloudflare-connect-desc {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.connect-cloudflare-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 28px;
+    background: #F6821F;
+    border: none;
+    border-radius: var(--radius-md);
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+}
+
+.connect-cloudflare-btn:hover {
+    background: #e5760d;
+    transform: translateY(-1px);
+}
+
+.cloudflare-signup-link {
+    margin-top: 16px;
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+}
+
+.cloudflare-signup-link a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+.cloudflare-signup-link a:hover {
+    text-decoration: underline;
+}
+
+/* Connection Status */
+.connection-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    background: var(--success-muted);
+    border: 1px solid var(--success);
+    border-radius: var(--radius-md);
+    margin-bottom: 20px;
+}
+
+.connection-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.connection-icon {
+    width: 36px;
+    height: 36px;
+    background: var(--success);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.connection-text {
+    font-size: 0.9rem;
+    color: var(--success);
+    font-weight: 500;
+}
+
+.connection-text span {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 400;
+    margin-top: 2px;
+}
+
+.disconnect-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.disconnect-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+/* DNS Management */
+.dns-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.dns-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.add-record-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    background: var(--gradient-primary);
+    border: none;
+    border-radius: var(--radius-md);
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.add-record-btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.sync-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 18px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.sync-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+}
+
+.sync-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.sync-btn svg.spinning {
+    animation: spin 1s linear infinite;
+}
+
+/* DNS Records Table */
+.dns-table-container {
+    overflow-x: auto;
+}
+
+.dns-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.dns-table th,
+.dns-table td {
+    padding: 14px 16px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.dns-table th {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+    background: var(--bg-surface);
+}
+
+.dns-table td {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.dns-table tbody tr:hover {
+    background: var(--bg-surface);
+}
+
+.dns-type-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    background: var(--accent-blue);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+}
+
+.dns-type-badge.mx {
+    background: #8b5cf6;
+}
+
+.dns-type-badge.cname {
+    background: #10b981;
+}
+
+.dns-type-badge.txt {
+    background: #f59e0b;
+}
+
+.dns-type-badge.aaaa {
+    background: #6366f1;
+}
+
+.dns-name-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+}
+
+.dns-content-cell {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.proxied-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.proxied-badge.on {
+    background: var(--warning-muted);
+    color: #f59e0b;
+}
+
+.proxied-badge.off {
+    background: var(--bg-surface);
+    color: var(--text-tertiary);
+}
+
+.record-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.record-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.record-action-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border-color: var(--border-default);
+}
+
+.record-action-btn.delete:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+.empty-records {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-secondary);
+}
+
+.empty-records svg {
+    margin-bottom: 12px;
+    color: var(--text-muted);
+}
+
+/* Manual DNS Fallback Section */
+.manual-dns-section {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.manual-dns-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
 /* Modals */
 .modal-overlay {
     display: none;
@@ -674,47 +1035,232 @@
         <h2 class="domain-card-title">DNS Configuration</h2>
     </div>
     <div class="domain-card-body">
-        <div class="info-box">
-            <svg class="info-box-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="16" x2="12" y2="12"></line>
-                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        {% if cloudflare_connected %}
+        <!-- Connected to Cloudflare - Show DNS Management UI -->
+        <div class="connection-status">
+            <div class="connection-info">
+                <div class="connection-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <div class="connection-text">
+                    Connected to Cloudflare
+                    {% if last_sync_time %}
+                    <span>Last synced: {{ last_sync_time }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <a href="{{ url_for('cloudflare.disconnect') }}" class="disconnect-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+                Disconnect
+            </a>
+        </div>
+
+        <div class="dns-header">
+            <h3 style="font-size: 1rem; font-weight: 600; color: var(--text-primary); margin: 0;">DNS Records</h3>
+            <div class="dns-actions">
+                <button class="sync-btn" id="sync-dns-btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 4v6h-6"></path>
+                        <path d="M1 20v-6h6"></path>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                    Sync
+                </button>
+                <button class="add-record-btn" id="add-record-btn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Add Record
+                </button>
+            </div>
+        </div>
+
+        {% if dns_records %}
+        <div class="dns-table-container">
+            <table class="dns-table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Name</th>
+                        <th>Content</th>
+                        <th>Proxied</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in dns_records %}
+                    <tr>
+                        <td>
+                            <span class="dns-type-badge {{ record.record_type|lower }}">{{ record.record_type }}</span>
+                        </td>
+                        <td class="dns-name-cell">{{ record.name }}</td>
+                        <td class="dns-content-cell" title="{{ record.content }}">{{ record.content }}</td>
+                        <td>
+                            {% if record.proxied %}
+                            <span class="proxied-badge on">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"></circle></svg>
+                                On
+                            </span>
+                            {% else %}
+                            <span class="proxied-badge off">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle></svg>
+                                Off
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="record-actions">
+                                <button class="record-action-btn edit-record-btn"
+                                        data-record-id="{{ record.cloudflare_record_id }}"
+                                        data-record-type="{{ record.record_type }}"
+                                        data-record-name="{{ record.name }}"
+                                        data-record-content="{{ record.content }}"
+                                        data-record-proxied="{{ 'true' if record.proxied else 'false' }}"
+                                        data-record-ttl="{{ record.ttl }}"
+                                        data-record-priority="{{ record.priority or '' }}"
+                                        title="Edit record">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                    </svg>
+                                </button>
+                                <button class="record-action-btn delete delete-record-btn"
+                                        data-record-id="{{ record.cloudflare_record_id }}"
+                                        data-record-type="{{ record.record_type }}"
+                                        data-record-name="{{ record.name }}"
+                                        title="Delete record">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-records">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                <polyline points="7.5 4.21 12 6.81 16.5 4.21"></polyline>
+                <polyline points="7.5 19.79 7.5 14.6 3 12"></polyline>
+                <polyline points="21 12 16.5 14.6 16.5 19.79"></polyline>
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                <line x1="12" y1="22.08" x2="12" y2="12"></line>
             </svg>
-            <div class="info-box-content">
-                <strong>DNS Setup Required</strong>
-                Point your domain to our servers by adding these DNS records at your domain registrar (GoDaddy, Namecheap, Cloudflare, etc.)
+            <p>No DNS records found. Click "Sync" to fetch records from Cloudflare, or add a new record.</p>
+        </div>
+        {% endif %}
+
+        <!-- Manual DNS Fallback Section -->
+        <div class="manual-dns-section">
+            <div class="manual-dns-title">Required DNS Records</div>
+            <div class="info-box" style="margin-bottom: 12px;">
+                <svg class="info-box-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                <div class="info-box-content">
+                    Ensure these records exist to point your domain to our servers:
+                </div>
+            </div>
+            <div class="dns-record">
+                <div class="dns-info">
+                    <span class="dns-type">A Record</span>
+                    <span class="dns-name">{{ customer.domain }}</span>
+                    <span class="dns-value">Points to: {{ server_ip }}</span>
+                </div>
+                <button class="copy-btn" data-copy="{{ server_ip }}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <span class="copy-text">Copy IP</span>
+                </button>
             </div>
         </div>
 
-        <div class="dns-record">
-            <div class="dns-info">
-                <span class="dns-type">A Record</span>
-                <span class="dns-name">{{ customer.domain }}</span>
-                <span class="dns-value">Points to: {{ server_ip }}</span>
-            </div>
-            <button class="copy-btn" data-copy="{{ server_ip }}">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        {% else %}
+        <!-- Not Connected - Show Connect Button -->
+        <div class="cloudflare-connect-card">
+            <div class="cloudflare-logo">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M16.5088 16.8447c.1475-.5068.0908-.9707-.1553-1.3154-.2246-.3164-.6045-.502-1.0615-.502H6.5717c-.0625 0-.1182-.0283-.1553-.0732-.0342-.042-.0478-.0986-.0361-.1582.0439-.1885.2129-.3311.4082-.3311h8.7471c.8789 0 1.5313-.4727 1.8516-1.2754.1494-.3574.1562-.7227.0303-1.0703-.0332-.0869-.0879-.1797-.1182-.2686L16.1875 8.2l-.0078-.0225c-.0322-.086-.0986-.2031-.125-.2813-.3369-.752-.9297-1.2236-1.7051-1.2236H5.3164c-.0361 0-.0693.0088-.1006.0195C6.1543 5.1606 8.1299 4.084 10.3438 4.084c3.0947 0 5.6836 2.1602 6.3926 5.0547.3457-.1201.7129-.1973 1.1006-.1973 1.7608 0 3.1875 1.4287 3.1875 3.1895 0 1.7578-1.4287 3.1846-3.1875 3.1846-.7227 0-1.3809-.2422-1.918-.6484.0195.1416.0332.2842.0332.4277 0 .7666-.2676 1.4922-.7549 2.0938-.0156.0186-.0332.0361-.0527.0527z" />
                 </svg>
-                <span class="copy-text">Copy IP</span>
-            </button>
+            </div>
+            <h3 class="cloudflare-connect-title">Connect Cloudflare</h3>
+            <p class="cloudflare-connect-desc">
+                Manage your DNS records directly from this dashboard. Connect your Cloudflare account to enable automatic DNS management, DDoS protection, and more.
+            </p>
+            <a href="{{ url_for('cloudflare.connect') }}" class="connect-cloudflare-btn">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                </svg>
+                Connect Cloudflare
+            </a>
+            <p class="cloudflare-signup-link">
+                Don't have a Cloudflare account? <a href="https://dash.cloudflare.com/sign-up" target="_blank" rel="noopener">Sign up for free</a>
+            </p>
         </div>
 
-        <div class="dns-record">
-            <div class="dns-info">
-                <span class="dns-type">A Record (www)</span>
-                <span class="dns-name">www.{{ customer.domain }}</span>
-                <span class="dns-value">Points to: {{ server_ip }}</span>
-            </div>
-            <button class="copy-btn" data-copy="{{ server_ip }}">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        <!-- Manual DNS Configuration for Non-Connected Users -->
+        <div class="manual-dns-section">
+            <div class="manual-dns-title">Manual DNS Setup</div>
+            <div class="info-box" style="margin-bottom: 12px;">
+                <svg class="info-box-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
                 </svg>
-                <span class="copy-text">Copy IP</span>
-            </button>
+                <div class="info-box-content">
+                    <strong>DNS Setup Required</strong>
+                    Point your domain to our servers by adding these DNS records at your domain registrar (GoDaddy, Namecheap, Cloudflare, etc.)
+                </div>
+            </div>
+
+            <div class="dns-record">
+                <div class="dns-info">
+                    <span class="dns-type">A Record</span>
+                    <span class="dns-name">{{ customer.domain }}</span>
+                    <span class="dns-value">Points to: {{ server_ip }}</span>
+                </div>
+                <button class="copy-btn" data-copy="{{ server_ip }}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <span class="copy-text">Copy IP</span>
+                </button>
+            </div>
+
+            <div class="dns-record">
+                <div class="dns-info">
+                    <span class="dns-type">A Record (www)</span>
+                    <span class="dns-name">www.{{ customer.domain }}</span>
+                    <span class="dns-value">Points to: {{ server_ip }}</span>
+                </div>
+                <button class="copy-btn" data-copy="{{ server_ip }}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <span class="copy-text">Copy IP</span>
+                </button>
+            </div>
         </div>
+        {% endif %}
     </div>
 </div>
 
@@ -1330,4 +1876,78 @@ window.openDnsModal = openDnsModal;
 window.closeDnsModal = closeDnsModal;
 window.openDeleteModal = openDeleteModal;
 window.closeDeleteModal = closeDeleteModal;
+
+// ===========================================
+// Cloudflare DNS Management
+// ===========================================
+
+{% if cloudflare_connected %}
+// Add Record Button
+var addRecordBtn = document.getElementById('add-record-btn');
+if (addRecordBtn) {
+    addRecordBtn.addEventListener('click', function() {
+        openDnsModal('add');
+    });
+}
+
+// Sync DNS Records Button
+var syncBtn = document.getElementById('sync-dns-btn');
+if (syncBtn) {
+    syncBtn.addEventListener('click', async function() {
+        var btnIcon = syncBtn.querySelector('svg');
+        syncBtn.disabled = true;
+        btnIcon.classList.add('spinning');
+
+        try {
+            var response = await fetch('/dashboard/cloudflare/api/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin'
+            });
+
+            var data = await response.json();
+
+            if (data.success || response.ok) {
+                // Reload the page to show updated records
+                location.reload();
+            } else {
+                alert(data.error || data.message || 'Failed to sync DNS records');
+                syncBtn.disabled = false;
+                btnIcon.classList.remove('spinning');
+            }
+        } catch (err) {
+            console.error('Error syncing DNS records:', err);
+            alert('An error occurred while syncing. Please try again.');
+            syncBtn.disabled = false;
+            btnIcon.classList.remove('spinning');
+        }
+    });
+}
+
+// Edit Record Buttons
+document.querySelectorAll('.edit-record-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var recordData = {
+            id: btn.dataset.recordId,
+            type: btn.dataset.recordType,
+            name: btn.dataset.recordName,
+            content: btn.dataset.recordContent,
+            proxied: btn.dataset.recordProxied === 'true',
+            ttl: parseInt(btn.dataset.recordTtl) || 1,
+            priority: btn.dataset.recordPriority ? parseInt(btn.dataset.recordPriority) : null
+        };
+        openDnsModal('edit', recordData);
+    });
+});
+
+// Delete Record Buttons
+document.querySelectorAll('.delete-record-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        var recordId = btn.dataset.recordId;
+        var recordType = btn.dataset.recordType;
+        var recordName = btn.dataset.recordName;
+        openDeleteModal(recordId, recordType, recordName);
+    });
+});
+{% endif %}
 {% endblock %}
