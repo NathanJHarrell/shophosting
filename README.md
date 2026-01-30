@@ -560,6 +560,52 @@ sudo systemctl disable --now shophosting-backup.timer shophosting-dir-backup.tim
 
 Backrest will now manage all backup scheduling and retention.
 
+## Status Page
+
+Public status page available at `status.shophosting.io` showing real-time system health.
+
+### Features
+
+- **Per-server status** - Individual status for each web server and backup server
+- **Service monitoring** - API and dashboard health checks
+- **Incident management** - Create, update, and resolve incidents from admin panel
+- **Scheduled maintenance** - Announce planned maintenance windows
+- **Auto-detection** - Automatic incident creation when servers go unhealthy
+- **Manual overrides** - Override status for any service from admin panel
+
+### Monitored Systems
+
+| System | Check Method |
+|--------|--------------|
+| Web Servers | Heartbeat + HTTP health check |
+| Backup Server (15.204.249.219) | TCP port 22 |
+| API | HTTP GET /api/health |
+| Customer Dashboard | HTTP GET /dashboard |
+
+### Admin Management
+
+Access status management at `/admin/status` to:
+- Create and update incidents
+- Schedule maintenance windows
+- Set manual status overrides
+
+### Nginx Setup
+
+Copy `webapp/nginx-status.conf` to `/etc/nginx/sites-available/status.shophosting.io` and enable:
+
+```bash
+sudo cp webapp/nginx-status.conf /etc/nginx/sites-available/status.shophosting.io
+sudo ln -s /etc/nginx/sites-available/status.shophosting.io /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### DNS Setup
+
+Add DNS record:
+```
+status.shophosting.io  A  147.135.8.170
+```
+
 ## Architecture
 
 ```
@@ -626,7 +672,8 @@ Backrest will now manage all backup scheduling and retention.
 │   ├── 002_add_admin_users.sql
 │   ├── 003_add_ticketing_system.sql
 │   ├── 005_add_admin_features.sql   # Admin user management features
-│   └── 006_add_staging_environments.sql  # Staging environments
+│   ├── 006_add_staging_environments.sql  # Staging environments
+│   └── 013_add_status_page_tables.sql    # Status page incidents and maintenance
 ├── scripts/                # Utility scripts
 │   ├── backup.sh           # Daily backup script
 │   ├── restore.sh          # Restore tool

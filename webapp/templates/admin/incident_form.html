@@ -1,0 +1,100 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Report Incident{% endblock %}
+{% block page_title %}Report Incident{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 600px;">
+    <div class="card-header">
+        <h3 class="card-title">Report New Incident</h3>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('admin.create_incident') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="form-group">
+                <label for="title">Incident Title</label>
+                <input type="text" id="title" name="title" class="form-control" required
+                       placeholder="e.g., API Response Delays">
+                <small class="text-muted">A brief, descriptive title for the incident</small>
+            </div>
+
+            <div class="form-group">
+                <label for="server_id">Affected System</label>
+                <select id="server_id" name="server_id" class="form-control">
+                    <option value="">All Systems</option>
+                    {% for server in servers %}
+                    <option value="{{ server.id }}">{{ server.name }}</option>
+                    {% endfor %}
+                </select>
+                <small class="text-muted">Select which server is affected, or leave as "All Systems" for platform-wide issues</small>
+            </div>
+
+            <div class="form-group">
+                <label for="severity">Severity</label>
+                <select id="severity" name="severity" class="form-control" required>
+                    <option value="minor">Minor - Performance degradation, minor feature impact</option>
+                    <option value="major">Major - Significant impact, some features unavailable</option>
+                    <option value="critical">Critical - Complete outage, all services affected</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="status">Initial Status</label>
+                <select id="status" name="status" class="form-control" required>
+                    <option value="investigating" selected>Investigating - We are looking into the issue</option>
+                    <option value="identified">Identified - Root cause has been found</option>
+                    <option value="monitoring">Monitoring - Fix deployed, monitoring results</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="message">Initial Message</label>
+                <textarea id="message" name="message" class="form-control" rows="4" required
+                          placeholder="Describe the issue and current status..."></textarea>
+                <small class="text-muted">This message will be displayed on the public status page</small>
+            </div>
+
+            <div style="display: flex; gap: 12px; margin-top: 24px;">
+                <button type="submit" class="btn btn-primary">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    Report Incident
+                </button>
+                <a href="{{ url_for('admin.status_management') }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Severity Guide -->
+<div class="card" style="max-width: 600px; margin-top: 24px;">
+    <div class="card-header">
+        <h3 class="card-title">Severity Guide</h3>
+    </div>
+    <div class="card-body">
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+                <span class="badge" style="background: var(--warning-muted); color: var(--warning); min-width: 70px;">Minor</span>
+                <div>
+                    <strong>Performance Degradation</strong>
+                    <p class="text-muted" style="margin: 4px 0 0 0; font-size: 0.9rem;">Slower response times, intermittent issues, or minor feature unavailability. Core functionality remains operational.</p>
+                </div>
+            </div>
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+                <span class="badge" style="background: rgba(249, 115, 22, 0.15); color: #f97316; min-width: 70px;">Major</span>
+                <div>
+                    <strong>Significant Impact</strong>
+                    <p class="text-muted" style="margin: 4px 0 0 0; font-size: 0.9rem;">Important features unavailable, significant degradation affecting many users. Some core functionality may be impacted.</p>
+                </div>
+            </div>
+            <div style="display: flex; gap: 12px; align-items: flex-start;">
+                <span class="badge" style="background: var(--error-muted); color: var(--error); min-width: 70px;">Critical</span>
+                <div>
+                    <strong>Complete Outage</strong>
+                    <p class="text-muted" style="margin: 4px 0 0 0; font-size: 0.9rem;">Service is completely unavailable. All users are affected and cannot use the platform.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

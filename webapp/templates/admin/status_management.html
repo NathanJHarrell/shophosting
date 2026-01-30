@@ -1,0 +1,433 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Status Page Management{% endblock %}
+{% block page_title %}Status Page Management{% endblock %}
+
+{% block extra_css %}
+<style>
+    .header-actions {
+        display: flex;
+        gap: 12px;
+    }
+    .badge-minor {
+        background: var(--warning-muted);
+        color: var(--warning);
+    }
+    .badge-major {
+        background: rgba(249, 115, 22, 0.15);
+        color: #f97316;
+    }
+    .badge-critical {
+        background: var(--error-muted);
+        color: var(--error);
+    }
+    .badge-investigating {
+        background: var(--error-muted);
+        color: var(--error);
+    }
+    .badge-identified {
+        background: rgba(249, 115, 22, 0.15);
+        color: #f97316;
+    }
+    .badge-monitoring {
+        background: var(--info-muted);
+        color: var(--accent-blue);
+    }
+    .badge-resolved {
+        background: var(--success-muted);
+        color: var(--success);
+    }
+    .inline-form {
+        display: flex;
+        gap: 12px;
+        align-items: flex-end;
+        flex-wrap: wrap;
+    }
+    .inline-form .form-group {
+        margin-bottom: 0;
+    }
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(6, 6, 10, 0.94);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+    .modal-overlay.active {
+        display: flex;
+    }
+    .modal-content {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        width: 100%;
+        max-width: 500px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    .modal-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .modal-header h3 {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+    .modal-close {
+        background: none;
+        border: none;
+        color: var(--text-tertiary);
+        cursor: pointer;
+        padding: 4px;
+        font-size: 1.5rem;
+        line-height: 1;
+    }
+    .modal-close:hover {
+        color: var(--text-primary);
+    }
+    .modal-body {
+        padding: 24px;
+    }
+    .modal-footer {
+        padding: 16px 24px;
+        border-top: 1px solid var(--border-subtle);
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 40px;
+        color: var(--text-tertiary);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header with Actions -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <div>
+        <p class="text-muted">Manage incidents, maintenance windows, and status overrides for the public status page.</p>
+    </div>
+    <div class="header-actions">
+        <a href="{{ url_for('admin.create_incident') }}" class="btn btn-danger">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            Report Incident
+        </a>
+        <a href="{{ url_for('admin.schedule_maintenance') }}" class="btn btn-secondary">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            Schedule Maintenance
+        </a>
+    </div>
+</div>
+
+<!-- Active Incidents -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Active Incidents</h3>
+        <span class="badge badge-error">{{ active_incidents|length if active_incidents else 0 }} active</span>
+    </div>
+    <div class="card-body">
+        {% if active_incidents %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Severity</th>
+                        <th>Status</th>
+                        <th>Started</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for incident in active_incidents %}
+                    <tr>
+                        <td>
+                            <strong>{{ incident.title }}</strong>
+                            {% if incident.server %}
+                            <div class="text-muted" style="font-size: 0.85rem; margin-top: 4px;">{{ incident.server.name }}</div>
+                            {% else %}
+                            <div class="text-muted" style="font-size: 0.85rem; margin-top: 4px;">All Systems</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if incident.severity == 'minor' %}
+                            <span class="badge badge-minor">Minor</span>
+                            {% elif incident.severity == 'major' %}
+                            <span class="badge badge-major">Major</span>
+                            {% elif incident.severity == 'critical' %}
+                            <span class="badge badge-critical">Critical</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if incident.status == 'investigating' %}
+                            <span class="badge badge-investigating">Investigating</span>
+                            {% elif incident.status == 'identified' %}
+                            <span class="badge badge-identified">Identified</span>
+                            {% elif incident.status == 'monitoring' %}
+                            <span class="badge badge-monitoring">Monitoring</span>
+                            {% elif incident.status == 'resolved' %}
+                            <span class="badge badge-resolved">Resolved</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ incident.started_at.strftime('%Y-%m-%d %H:%M') if incident.started_at else '-' }}</td>
+                        <td>
+                            <button type="button" class="btn btn-secondary btn-sm" data-update-incident="{{ incident.id }}" data-incident-title="{{ incident.title }}" data-incident-status="{{ incident.status }}">
+                                Update
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No active incidents. All systems operational.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Scheduled Maintenance -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Scheduled Maintenance</h3>
+        <span class="badge badge-info">{{ scheduled_maintenance|length if scheduled_maintenance else 0 }} scheduled</span>
+    </div>
+    <div class="card-body">
+        {% if scheduled_maintenance %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Server</th>
+                        <th>Scheduled Start</th>
+                        <th>Scheduled End</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for maintenance in scheduled_maintenance %}
+                    <tr>
+                        <td><strong>{{ maintenance.title }}</strong></td>
+                        <td>
+                            {% if maintenance.server %}
+                            {{ maintenance.server.name }}
+                            {% else %}
+                            All Systems
+                            {% endif %}
+                        </td>
+                        <td>{{ maintenance.scheduled_start.strftime('%Y-%m-%d %H:%M') if maintenance.scheduled_start else '-' }}</td>
+                        <td>{{ maintenance.scheduled_end.strftime('%Y-%m-%d %H:%M') if maintenance.scheduled_end else '-' }}</td>
+                        <td>
+                            {% if maintenance.status == 'scheduled' %}
+                            <span class="badge badge-pending">Scheduled</span>
+                            {% elif maintenance.status == 'in_progress' %}
+                            <span class="badge badge-info">In Progress</span>
+                            {% elif maintenance.status == 'completed' %}
+                            <span class="badge badge-success">Completed</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form action="{{ url_for('admin.cancel_maintenance', maintenance_id=maintenance.id) }}" method="POST" style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-danger btn-sm">Cancel</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No scheduled maintenance windows.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Status Overrides -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Status Overrides</h3>
+    </div>
+    <div class="card-body">
+        <form action="{{ url_for('admin.add_status_override') }}" method="POST" class="inline-form" style="margin-bottom: 24px;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="form-group">
+                <label for="override_server">Server</label>
+                <select id="override_server" name="server_id" class="form-control" style="min-width: 200px;">
+                    <option value="">All Systems</option>
+                    {% for server in servers %}
+                    <option value="{{ server.id }}">{{ server.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="override_status">Status</label>
+                <select id="override_status" name="status" class="form-control" required>
+                    <option value="operational">Operational</option>
+                    <option value="degraded">Degraded Performance</option>
+                    <option value="partial_outage">Partial Outage</option>
+                    <option value="major_outage">Major Outage</option>
+                    <option value="maintenance">Under Maintenance</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="override_reason">Reason</label>
+                <input type="text" id="override_reason" name="reason" class="form-control" placeholder="Optional reason" style="min-width: 250px;">
+            </div>
+            <button type="submit" class="btn btn-primary">Add Override</button>
+        </form>
+
+        {% if status_overrides %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Server</th>
+                        <th>Status</th>
+                        <th>Reason</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for override in status_overrides %}
+                    <tr>
+                        <td>
+                            {% if override.server %}
+                            {{ override.server.name }}
+                            {% else %}
+                            All Systems
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if override.status == 'operational' %}
+                            <span class="badge badge-success">Operational</span>
+                            {% elif override.status == 'degraded' %}
+                            <span class="badge badge-warning">Degraded</span>
+                            {% elif override.status == 'partial_outage' %}
+                            <span class="badge badge-major">Partial Outage</span>
+                            {% elif override.status == 'major_outage' %}
+                            <span class="badge badge-critical">Major Outage</span>
+                            {% elif override.status == 'maintenance' %}
+                            <span class="badge badge-info">Maintenance</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ override.reason or '-' }}</td>
+                        <td>{{ override.created_at.strftime('%Y-%m-%d %H:%M') if override.created_at else '-' }}</td>
+                        <td>
+                            <form action="{{ url_for('admin.remove_status_override', override_id=override.id) }}" method="POST" style="display: inline;">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <p>No active status overrides. Status is determined automatically from health checks.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Update Incident Modal -->
+<div id="updateIncidentModal" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modalIncidentTitle">Update Incident</h3>
+            <button type="button" class="modal-close" id="closeModal">&times;</button>
+        </div>
+        <form id="updateIncidentForm" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="modal_status">Status</label>
+                    <select id="modal_status" name="status" class="form-control" required>
+                        <option value="investigating">Investigating</option>
+                        <option value="identified">Identified</option>
+                        <option value="monitoring">Monitoring</option>
+                        <option value="resolved">Resolved</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="modal_message">Update Message</label>
+                    <textarea id="modal_message" name="message" class="form-control" rows="4" placeholder="Provide details about the current status..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" id="cancelModal">Cancel</button>
+                <button type="submit" class="btn btn-primary">Post Update</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script nonce="{{ csp_nonce() }}">
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('updateIncidentModal');
+    const form = document.getElementById('updateIncidentForm');
+    const modalTitle = document.getElementById('modalIncidentTitle');
+    const statusSelect = document.getElementById('modal_status');
+    const closeBtn = document.getElementById('closeModal');
+    const cancelBtn = document.getElementById('cancelModal');
+
+    // Open modal when Update button is clicked
+    document.querySelectorAll('[data-update-incident]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const incidentId = this.getAttribute('data-update-incident');
+            const incidentTitle = this.getAttribute('data-incident-title');
+            const incidentStatus = this.getAttribute('data-incident-status');
+
+            modalTitle.textContent = 'Update: ' + incidentTitle;
+            statusSelect.value = incidentStatus;
+            form.action = '{{ url_for("admin.update_incident", incident_id=0) }}'.replace('0', incidentId);
+            modal.classList.add('active');
+        });
+    });
+
+    // Close modal
+    function closeModal() {
+        modal.classList.remove('active');
+    }
+
+    closeBtn.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+
+    // Close on overlay click
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.classList.contains('active')) {
+            closeModal();
+        }
+    });
+});
+</script>
+{% endblock %}

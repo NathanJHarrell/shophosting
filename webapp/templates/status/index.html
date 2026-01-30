@@ -1,0 +1,320 @@
+{% extends "status/base_status.html" %}
+
+{% block title %}System Status - ShopHosting.io{% endblock %}
+
+{% block content %}
+<header>
+    <div class="container">
+        <a href="https://shophosting.io" class="logo">ShopHosting.io</a>
+        <p class="tagline">System Status</p>
+    </div>
+</header>
+
+<main>
+    <div class="container">
+        <!-- Overall Status Banner -->
+        <div class="status-banner {{ statuses.overall_display.color }}">
+            <h1>{{ get_overall_message(statuses.overall) }}</h1>
+            <p>Last updated: <span id="last-updated">{{ statuses.last_updated }}</span></p>
+        </div>
+
+        <!-- Active Incidents Section -->
+        {% if active_incidents %}
+        <section class="section">
+            <div class="section-header">
+                <h2 class="section-title">Active Incidents</h2>
+            </div>
+            {% for incident in active_incidents %}
+            <div class="incident-card">
+                <div class="incident-header">
+                    <div>
+                        <h3 class="incident-title">{{ incident.title }}</h3>
+                        <p class="incident-meta">Started {{ incident.started_at.strftime('%b %d, %Y at %I:%M %p') if incident.started_at else 'Unknown' }}</p>
+                    </div>
+                    <span class="incident-severity {{ incident.severity }}">{{ incident.severity }}</span>
+                </div>
+                {% if incident.updates %}
+                <div class="timeline">
+                    {% for update in incident.updates %}
+                    <div class="timeline-item {{ update.status }}">
+                        <div class="timeline-status">{{ update.status }}</div>
+                        <div class="timeline-message">{{ update.message }}</div>
+                        <div class="timeline-time">{{ update.created_at.strftime('%b %d, %I:%M %p') if update.created_at else '' }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        <!-- Current Status Section -->
+        <section class="section">
+            <div class="section-header">
+                <h2 class="section-title">Current Status</h2>
+            </div>
+            <div class="status-card" id="status-card">
+                <!-- Web Servers Group -->
+                {% if statuses.servers %}
+                <div class="status-group" id="servers-group">
+                    <div class="status-group-header" data-toggle="servers-group">
+                        <div class="status-group-title">
+                            {% set worst_server_status = namespace(status='operational') %}
+                            {% for server_id, server in statuses.servers.items() %}
+                                {% if server.status != 'operational' %}
+                                    {% set worst_server_status.status = server.status %}
+                                {% endif %}
+                            {% endfor %}
+                            <span class="status-icon {{ get_status_display(worst_server_status.status).color }}"></span>
+                            Web Servers
+                        </div>
+                        <div class="status-group-right">
+                            <span class="status-item-status {{ get_status_display(worst_server_status.status).color }}">
+                                {{ get_status_display(worst_server_status.status).text }}
+                            </span>
+                            <span class="status-group-toggle">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="status-group-content">
+                        {% for server_id, server in statuses.servers.items() %}
+                        <div class="status-item" data-server-id="{{ server_id }}">
+                            <span class="status-item-name">{{ server.name }}</span>
+                            <span class="status-item-status {{ server.display.color }}">
+                                <span class="status-icon {{ server.display.color }}"></span>
+                                {{ server.display.text }}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Backup Server -->
+                <div class="status-item" id="backup-server-status">
+                    <span class="status-item-name">Backup Server</span>
+                    <span class="status-item-status {{ statuses.backup_server.display.color }}">
+                        <span class="status-icon {{ statuses.backup_server.display.color }}"></span>
+                        {{ statuses.backup_server.display.text }}
+                    </span>
+                </div>
+
+                <!-- Services -->
+                {% for service_key, service in statuses.services.items() %}
+                <div class="status-item" data-service-key="{{ service_key }}">
+                    <span class="status-item-name">{{ service.name }}</span>
+                    <span class="status-item-status {{ service.display.color }}">
+                        <span class="status-icon {{ service.display.color }}"></span>
+                        {{ service.display.text }}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <!-- Scheduled Maintenance Section -->
+        {% if upcoming_maintenance %}
+        <section class="section">
+            <div class="section-header">
+                <h2 class="section-title">Scheduled Maintenance</h2>
+            </div>
+            {% for maintenance in upcoming_maintenance %}
+            <div class="maintenance-card">
+                <div class="maintenance-header">
+                    <svg class="maintenance-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                    </svg>
+                    <span class="maintenance-title">{{ maintenance.title }}</span>
+                </div>
+                <div class="maintenance-time">
+                    {{ maintenance.scheduled_start.strftime('%b %d, %Y at %I:%M %p') if maintenance.scheduled_start else 'TBD' }}
+                    -
+                    {{ maintenance.scheduled_end.strftime('%I:%M %p') if maintenance.scheduled_end else 'TBD' }}
+                </div>
+                {% if maintenance.description %}
+                <div class="maintenance-description">{{ maintenance.description }}</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </section>
+        {% endif %}
+
+        <!-- Past Incidents Section -->
+        {% if recent_incidents %}
+        {% set resolved_incidents = recent_incidents | selectattr('status', 'equalto', 'resolved') | list %}
+        {% if resolved_incidents %}
+        <section class="section">
+            <div class="section-header">
+                <h2 class="section-title">Past Incidents</h2>
+                <span class="section-subtitle">Last 7 days</span>
+            </div>
+            <div class="status-card">
+                {% for incident in resolved_incidents[:5] %}
+                <div class="past-incident">
+                    <div class="past-incident-header">
+                        <span class="past-incident-title">{{ incident.title }}</span>
+                        <span class="past-incident-date">{{ incident.started_at.strftime('%b %d, %Y') if incident.started_at else '' }}</span>
+                    </div>
+                    <div class="past-incident-status">Resolved</div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+        {% endif %}
+
+        <p class="last-updated">
+            This page auto-refreshes every 60 seconds
+        </p>
+    </div>
+</main>
+
+<footer>
+    <div class="container">
+        <p><a href="https://shophosting.io">Back to ShopHosting.io</a></p>
+    </div>
+</footer>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    // Toggle collapsible groups
+    document.querySelectorAll('.status-group-header').forEach(function(header) {
+        header.addEventListener('click', function() {
+            var group = this.closest('.status-group');
+            group.classList.toggle('expanded');
+        });
+    });
+
+    // Status display mapping
+    var STATUS_DISPLAY = {
+        'operational': { text: 'Operational', color: 'green' },
+        'degraded': { text: 'Degraded Performance', color: 'yellow' },
+        'partial_outage': { text: 'Partial Outage', color: 'orange' },
+        'major_outage': { text: 'Major Outage', color: 'red' },
+        'maintenance': { text: 'Under Maintenance', color: 'blue' },
+        'unknown': { text: 'Unknown', color: 'gray' }
+    };
+
+    var OVERALL_MESSAGES = {
+        'operational': 'All systems operational',
+        'degraded': 'Some systems experiencing degraded performance',
+        'partial_outage': 'Partial system outage',
+        'major_outage': 'Major system outage',
+        'maintenance': 'Scheduled maintenance in progress',
+        'unknown': 'Unable to determine system status'
+    };
+
+    function getStatusDisplay(status) {
+        return STATUS_DISPLAY[status] || STATUS_DISPLAY['unknown'];
+    }
+
+    function getOverallMessage(status) {
+        return OVERALL_MESSAGES[status] || OVERALL_MESSAGES['unknown'];
+    }
+
+    function updateStatusItem(element, status) {
+        var display = getStatusDisplay(status);
+        var statusEl = element.querySelector('.status-item-status');
+        var iconEl = statusEl.querySelector('.status-icon');
+
+        // Remove old color classes and set new ones
+        statusEl.className = 'status-item-status ' + display.color;
+        iconEl.className = 'status-icon ' + display.color;
+
+        // Clear and rebuild content safely using DOM methods
+        while (statusEl.firstChild) {
+            statusEl.removeChild(statusEl.firstChild);
+        }
+        statusEl.appendChild(iconEl);
+        statusEl.appendChild(document.createTextNode(' ' + display.text));
+    }
+
+    function updateBanner(status) {
+        var banner = document.querySelector('.status-banner');
+        var display = getStatusDisplay(status);
+        var message = getOverallMessage(status);
+
+        // Remove old color classes
+        banner.className = 'status-banner ' + display.color;
+        banner.querySelector('h1').textContent = message;
+    }
+
+    function refreshStatus() {
+        fetch('/status/api/status')
+            .then(function(response) {
+                if (!response.ok) throw new Error('Network response was not ok');
+                return response.json();
+            })
+            .then(function(data) {
+                // Update overall banner
+                updateBanner(data.overall);
+
+                // Update last updated time
+                document.getElementById('last-updated').textContent = data.last_updated;
+
+                // Update servers
+                if (data.servers) {
+                    var worstServerStatus = 'operational';
+                    for (var serverId in data.servers) {
+                        var server = data.servers[serverId];
+                        var serverEl = document.querySelector('[data-server-id="' + serverId + '"]');
+                        if (serverEl) {
+                            updateStatusItem(serverEl, server.status);
+                        }
+                        if (server.status !== 'operational') {
+                            worstServerStatus = server.status;
+                        }
+                    }
+
+                    // Update servers group header
+                    var serversGroup = document.getElementById('servers-group');
+                    if (serversGroup) {
+                        var groupDisplay = getStatusDisplay(worstServerStatus);
+                        var groupIcon = serversGroup.querySelector('.status-group-title .status-icon');
+                        var groupStatus = serversGroup.querySelector('.status-group-right .status-item-status');
+
+                        if (groupIcon) {
+                            groupIcon.className = 'status-icon ' + groupDisplay.color;
+                        }
+                        if (groupStatus) {
+                            groupStatus.className = 'status-item-status ' + groupDisplay.color;
+                            groupStatus.textContent = groupDisplay.text;
+                        }
+                    }
+                }
+
+                // Update backup server
+                if (data.backup_server) {
+                    var backupEl = document.getElementById('backup-server-status');
+                    if (backupEl) {
+                        updateStatusItem(backupEl, data.backup_server.status);
+                    }
+                }
+
+                // Update services
+                if (data.services) {
+                    for (var serviceKey in data.services) {
+                        var service = data.services[serviceKey];
+                        var serviceEl = document.querySelector('[data-service-key="' + serviceKey + '"]');
+                        if (serviceEl) {
+                            updateStatusItem(serviceEl, service.status);
+                        }
+                    }
+                }
+            })
+            .catch(function(error) {
+                console.error('Error fetching status:', error);
+            });
+    }
+
+    // Auto-refresh every 60 seconds
+    setInterval(refreshStatus, 60000);
+})();
+</script>
+{% endblock %}

@@ -27,6 +27,7 @@ from models import Ticket, TicketMessage, TicketAttachment, TicketCategory, Cons
 from models import Server, ServerSelector
 from models import MonitoringCheck, CustomerMonitoringStatus, MonitoringAlert
 from models import ResourceUsage, ResourceAlert
+from status.models import StatusIncident, StatusIncidentUpdate, StatusMaintenance, StatusOverride
 
 logger = logging.getLogger(__name__)
 
@@ -3433,3 +3434,113 @@ def api_monitoring_status():
         'statuses': statuses,
         'unacknowledged_count': MonitoringAlert.get_unacknowledged_count()
     })
+
+
+# =============================================================================
+# Status Page Management
+# =============================================================================
+
+@admin_bp.route('/status')
+@admin_required
+def status_management():
+    """Status page management dashboard"""
+    active_incidents = StatusIncident.get_active()
+    recent_incidents = StatusIncident.get_recent(days=30)
+    upcoming_maintenance = StatusMaintenance.get_upcoming(days=30)
+    overrides = StatusOverride.get_active()
+
+    return render_template('admin/status_management.html',
+                          active_incidents=active_incidents,
+                          recent_incidents=recent_incidents,
+                          upcoming_maintenance=upcoming_maintenance,
+                          overrides=overrides)
+
+@admin_bp.route('/status/incident/create', methods=['GET', 'POST'])
+@admin_required
+def create_incident():
+    """Create a new incident"""
+    if request.method == 'POST':
+        incident = StatusIncident(
+            server_id=request.form.get('server_id') or None,
+            title=request.form['title'],
+            status=request.form.get('status', 'investigating'),
+            severity=request.form.get('severity', 'minor'),
+            is_auto_detected=False
+        )
+        incident.save()
+        message = request.form.get('message', 'We are investigating this issue.')
+        incident.add_update(message, incident.status, session.get('admin_id'))
+        flash('Incident created successfully', 'success')
+        return redirect(url_for('admin.status_management'))
+
+    servers = Server.get_all()
+    return render_template('admin/incident_form.html', servers=servers, incident=None)
+
+@admin_bp.route('/status/incident/<int:incident_id>/update', methods=['POST'])
+@admin_required
+def update_incident(incident_id):
+    """Add update to an incident"""
+    incident = StatusIncident.get_by_id(incident_id)
+    if not incident:
+        flash('Incident not found', 'error')
+        return redirect(url_for('admin.status_management'))
+
+    message = request.form['message']
+    new_status = request.form.get('status')
+
+    if new_status == 'resolved':
+        incident.resolve()
+    elif new_status:
+        incident.status = new_status
+        incident.save()
+
+    incident.add_update(message, new_status or incident.status, session.get('admin_id'))
+    flash('Incident updated', 'success')
+    return redirect(url_for('admin.status_management'))
+
+@admin_bp.route('/status/maintenance/create', methods=['GET', 'POST'])
+@admin_required
+def create_maintenance():
+    """Create scheduled maintenance"""
+    if request.method == 'POST':
+        maintenance = StatusMaintenance(
+            server_id=request.form.get('server_id') or None,
+            title=request.form['title'],
+            description=request.form.get('description'),
+            scheduled_start=request.form['scheduled_start'],
+            scheduled_end=request.form['scheduled_end'],
+            created_by=session.get('admin_id')
+        )
+        maintenance.save()
+        flash('Maintenance window scheduled', 'success')
+        return redirect(url_for('admin.status_management'))
+
+    servers = Server.get_all()
+    return render_template('admin/maintenance_form.html', servers=servers, maintenance=None)
+
+@admin_bp.route('/status/override', methods=['POST'])
+@admin_required
+def set_status_override():
+    """Set a manual status override"""
+    service_name = request.form['service_name']
+    display_status = request.form['display_status']
+    message = request.form.get('message')
+    expires_hours = request.form.get('expires_hours')
+
+    StatusOverride.set_override(
+        service_name=service_name,
+        display_status=display_status,
+        message=message,
+        created_by=session.get('admin_id'),
+        expires_hours=int(expires_hours) if expires_hours else None
+    )
+    flash(f'Status override set for {service_name}', 'success')
+    return redirect(url_for('admin.status_management'))
+
+@admin_bp.route('/status/override/<service_name>/clear', methods=['POST'])
+@admin_required
+def clear_status_override(service_name):
+    """Clear a status override"""
+    StatusOverride.clear_override(service_name)
+    flash(f'Status override cleared for {service_name}', 'success')
+    return redirect(url_for('admin.status_management'))

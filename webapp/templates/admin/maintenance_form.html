@@ -1,0 +1,114 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Schedule Maintenance{% endblock %}
+{% block page_title %}Schedule Maintenance{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 600px;">
+    <div class="card-header">
+        <h3 class="card-title">Schedule Maintenance Window</h3>
+    </div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('admin.schedule_maintenance') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="form-group">
+                <label for="title">Maintenance Title</label>
+                <input type="text" id="title" name="title" class="form-control" required
+                       placeholder="e.g., Database Upgrade">
+                <small class="text-muted">A brief, descriptive title for the maintenance window</small>
+            </div>
+
+            <div class="form-group">
+                <label for="server_id">Affected System</label>
+                <select id="server_id" name="server_id" class="form-control">
+                    <option value="">All Systems</option>
+                    {% for server in servers %}
+                    <option value="{{ server.id }}">{{ server.name }}</option>
+                    {% endfor %}
+                </select>
+                <small class="text-muted">Select which server will be affected, or leave as "All Systems" for platform-wide maintenance</small>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div class="form-group">
+                    <label for="scheduled_start">Scheduled Start</label>
+                    <input type="datetime-local" id="scheduled_start" name="scheduled_start" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="scheduled_end">Scheduled End</label>
+                    <input type="datetime-local" id="scheduled_end" name="scheduled_end" class="form-control" required>
+                </div>
+            </div>
+            <small class="text-muted" style="display: block; margin-top: -12px; margin-bottom: 16px;">All times are in your local timezone</small>
+
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" class="form-control" rows="4" required
+                          placeholder="Describe what will be done during this maintenance window and expected impact..."></textarea>
+                <small class="text-muted">This will be displayed on the public status page to inform users about the scheduled work</small>
+            </div>
+
+            <div style="display: flex; gap: 12px; margin-top: 24px;">
+                <button type="submit" class="btn btn-primary">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    Schedule Maintenance
+                </button>
+                <a href="{{ url_for('admin.status_management') }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Best Practices -->
+<div class="card" style="max-width: 600px; margin-top: 24px;">
+    <div class="card-header">
+        <h3 class="card-title">Maintenance Best Practices</h3>
+    </div>
+    <div class="card-body">
+        <ul style="color: var(--text-secondary); line-height: 1.8; padding-left: 20px;">
+            <li>Schedule maintenance during off-peak hours when possible (typically late night/early morning UTC)</li>
+            <li>Allow a buffer time beyond the expected duration</li>
+            <li>Notify users at least 24 hours in advance for planned maintenance</li>
+            <li>Be specific about the expected impact (e.g., "shops will be briefly inaccessible")</li>
+            <li>Update the status page if maintenance extends beyond the scheduled window</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script nonce="{{ csp_nonce() }}">
+document.addEventListener('DOMContentLoaded', function() {
+    // Set minimum date to now
+    const now = new Date();
+    const timezoneOffset = now.getTimezoneOffset() * 60000;
+    const localISOTime = new Date(now - timezoneOffset).toISOString().slice(0, 16);
+
+    const startInput = document.getElementById('scheduled_start');
+    const endInput = document.getElementById('scheduled_end');
+
+    startInput.min = localISOTime;
+
+    // When start changes, update end minimum
+    startInput.addEventListener('change', function() {
+        endInput.min = this.value;
+        if (endInput.value && endInput.value < this.value) {
+            endInput.value = this.value;
+        }
+    });
+
+    // Default to 1 hour from now for start, 2 hours for end
+    const oneHourLater = new Date(now.getTime() + 3600000 - timezoneOffset).toISOString().slice(0, 16);
+    const twoHoursLater = new Date(now.getTime() + 7200000 - timezoneOffset).toISOString().slice(0, 16);
+
+    if (!startInput.value) {
+        startInput.value = oneHourLater;
+    }
+    if (!endInput.value) {
+        endInput.value = twoHoursLater;
+        endInput.min = startInput.value;
+    }
+});
+</script>
+{% endblock %}
