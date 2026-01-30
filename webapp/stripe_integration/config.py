@@ -19,8 +19,6 @@ _stripe_config = {
 
 def init_stripe():
     """Initialize Stripe with API keys from environment"""
-    global _stripe_config
-
     _stripe_config['secret_key'] = os.getenv('STRIPE_SECRET_KEY')
     _stripe_config['publishable_key'] = os.getenv('STRIPE_PUBLISHABLE_KEY')
     _stripe_config['webhook_secret'] = os.getenv('STRIPE_WEBHOOK_SECRET')

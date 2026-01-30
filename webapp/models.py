@@ -40,7 +40,6 @@ def init_db_pool():
 
 def get_db_connection():
     """Get a connection from the pool"""
-    global db_pool
     if db_pool is None:
         init_db_pool()
     return db_pool.get_connection()
