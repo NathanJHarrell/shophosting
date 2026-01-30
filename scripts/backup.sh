@@ -81,6 +81,16 @@ else
     log "OpenProject backup script not found, skipping..."
 fi
 
+# Step 2.6: Dump Wiki.js database (if running)
+if docker ps --format '{{.Names}}' | grep -q "shophosting-wikijs-db"; then
+    log "Dumping Wiki.js database..."
+    docker exec shophosting-wikijs-db pg_dump -U wikijs wikijs > "$DB_DUMP_DIR/wikijs.sql" \
+        || log "Warning: Wiki.js backup failed"
+    log "Wiki.js database dump complete: $(du -h "$DB_DUMP_DIR/wikijs.sql" | cut -f1)"
+else
+    log "Wiki.js container not running, skipping database dump..."
+fi
+
 # Step 3: Dump all customer databases
 log "Dumping customer databases..."
 for db in $(mysql -h "${DB_HOST:-localhost}" -u "${DB_USER:-shophosting_app}" -p"${DB_PASSWORD}" -N -e "SHOW DATABASES LIKE 'customer_%'"); do
@@ -105,6 +115,7 @@ restic backup \
     /etc/letsencrypt \
     /opt/shophosting/.env \
     /opt/shophosting/openproject/data \
+    /opt/shophosting/wikijs/.env \
     2>&1 | tee -a "$BACKUP_LOG" \
     || error_exit "Restic backup failed"
 
