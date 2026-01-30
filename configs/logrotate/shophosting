@@ -1,0 +1,34 @@
+# ShopHosting.io Log Rotation Configuration
+# Install with: sudo cp /opt/shophosting/configs/logrotate/shophosting /etc/logrotate.d/
+
+/opt/shophosting/logs/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 agileweb agileweb
+    sharedscripts
+    postrotate
+        # Signal gunicorn to reopen log files
+        systemctl kill -s USR1 'shophosting-webapp@*.service' 2>/dev/null || true
+        # Signal workers to reopen log files
+        systemctl kill -s USR1 'shophosting-*-worker.service' 2>/dev/null || true
+    endscript
+}
+
+/opt/shophosting/logs/webapp-*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 agileweb agileweb
+    sharedscripts
+    postrotate
+        # Signal gunicorn instances to reopen log files
+        systemctl kill -s USR1 'shophosting-webapp@*.service' 2>/dev/null || true
+    endscript
+}
