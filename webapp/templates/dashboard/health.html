@@ -1,0 +1,359 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block page_title %}Site Health{% endblock %}
+
+{% block dashboard_css %}
+/* Site Health Styles */
+.health-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    margin-bottom: 24px;
+    overflow: hidden;
+}
+
+.health-card-header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.health-card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.health-status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.status-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.status-badge.running {
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--success);
+}
+
+.status-badge.stopped {
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--error);
+}
+
+.status-badge.unknown {
+    background: rgba(156, 163, 175, 0.15);
+    color: var(--text-secondary);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.uptime-text {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.restart-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.restart-btn:hover:not(:disabled) {
+    background: var(--bg-elevated);
+    border-color: var(--border-accent);
+}
+
+.restart-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.health-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.metric-panel {
+    background: var(--bg-surface);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.metric-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    padding: 8px 12px 0;
+}
+
+.metric-panel iframe {
+    display: block;
+    background: transparent;
+}
+
+@media (max-width: 768px) {
+    .health-metrics {
+        grid-template-columns: 1fr;
+    }
+}
+
+.logs-section {
+    padding: 0;
+}
+
+.logs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 28px;
+    cursor: pointer;
+}
+
+.logs-header:hover {
+    background: var(--bg-surface);
+}
+
+.logs-title {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.logs-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.logs-content.expanded {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.logs-list {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    padding: 16px 28px;
+    background: var(--bg-deep);
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.log-line {
+    padding: 2px 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+@media (max-width: 640px) {
+    .health-status-row {
+        flex-direction: column;
+        gap: 16px;
+        align-items: flex-start;
+    }
+}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="page-header">
+    <h1 class="page-title">Site Health</h1>
+    <p class="page-subtitle">Monitor your store's server status and performance.</p>
+</div>
+
+<div class="health-card">
+    <div class="health-card-header">
+        <h2 class="health-card-title">Container Status</h2>
+    </div>
+
+    <div class="health-status-row">
+        <div class="status-info">
+            <span id="container-status" class="status-badge unknown">
+                <span class="status-dot"></span>
+                <span class="status-text">Checking...</span>
+            </span>
+            <span id="container-uptime" class="uptime-text"></span>
+        </div>
+        <button id="restart-btn" class="restart-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6"></path>
+                <path d="M1 20v-6h6"></path>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Restart Store
+        </button>
+    </div>
+
+    <div class="health-metrics">
+        <div class="metric-panel">
+            <div class="metric-label">CPU</div>
+            <iframe src="https://shophosting.io/grafana/d-solo/customer-metrics/customer-metrics?orgId=1&var-customer_id={{ customer.id }}&panelId=5&theme=dark"
+                    width="100%" height="80" frameborder="0"></iframe>
+        </div>
+        <div class="metric-panel">
+            <div class="metric-label">Memory</div>
+            <iframe src="https://shophosting.io/grafana/d-solo/customer-metrics/customer-metrics?orgId=1&var-customer_id={{ customer.id }}&panelId=6&theme=dark"
+                    width="100%" height="80" frameborder="0"></iframe>
+        </div>
+        <div class="metric-panel">
+            <div class="metric-label">Network</div>
+            <iframe src="https://shophosting.io/grafana/d-solo/customer-metrics/customer-metrics?orgId=1&var-customer_id={{ customer.id }}&panelId=7&theme=dark"
+                    width="100%" height="80" frameborder="0"></iframe>
+        </div>
+    </div>
+
+    <div class="logs-section">
+        <div id="logs-header" class="logs-header">
+            <span class="logs-title">Recent Logs</span>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button id="refresh-logs-btn" class="restart-btn" style="padding: 6px 12px; font-size: 0.85rem;">Refresh</button>
+                <svg id="logs-toggle" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition: transform 0.2s;">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </div>
+        </div>
+        <div id="logs-content" class="logs-content">
+            <div id="logs-list" class="logs-list">Click to load logs...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block dashboard_js %}
+<script nonce="{{ csp_nonce() }}">
+    let restartCooldown = false;
+    let logsExpanded = false;
+
+    async function fetchContainerStatus() {
+        try {
+            const response = await fetch('/api/container/status', { credentials: 'same-origin' });
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) return;
+
+            const data = await response.json();
+            const statusEl = document.getElementById('container-status');
+            const uptimeEl = document.getElementById('container-uptime');
+            const statusText = statusEl.querySelector('.status-text');
+
+            statusEl.className = 'status-badge ' + (data.running ? 'running' :
+                data.status === 'exited' ? 'stopped' : 'unknown');
+            statusText.textContent = data.running ? 'Running' :
+                data.status === 'exited' ? 'Stopped' : 'Unknown';
+            uptimeEl.textContent = data.uptime ? 'Uptime: ' + data.uptime : '';
+        } catch (error) {
+            console.error('Failed to fetch status:', error);
+        }
+    }
+
+    async function restartContainer() {
+        if (restartCooldown) {
+            alert('Please wait 5 minutes between restarts.');
+            return;
+        }
+        if (!confirm('Restart your store? It will be unavailable for ~30 seconds.')) return;
+
+        const btn = document.getElementById('restart-btn');
+        btn.disabled = true;
+
+        try {
+            const response = await fetch('/api/container/restart', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                alert(data.message);
+                restartCooldown = true;
+                setTimeout(() => { restartCooldown = false; btn.disabled = false; }, 300000);
+                setTimeout(fetchContainerStatus, 5000);
+            } else {
+                alert('Restart failed: ' + data.message);
+                btn.disabled = false;
+            }
+        } catch (error) {
+            alert('Failed to restart: ' + error.message);
+            btn.disabled = false;
+        }
+    }
+
+    function toggleLogs() {
+        logsExpanded = !logsExpanded;
+        document.getElementById('logs-content').classList.toggle('expanded', logsExpanded);
+        document.getElementById('logs-toggle').style.transform = logsExpanded ? 'rotate(180deg)' : '';
+        if (logsExpanded) refreshLogs();
+    }
+
+    async function refreshLogs() {
+        const logsEl = document.getElementById('logs-list');
+        logsEl.textContent = 'Loading logs...';
+
+        try {
+            const response = await fetch('/api/container/logs?lines=50', { credentials: 'same-origin' });
+            const data = await response.json();
+            logsEl.textContent = '';
+
+            if (data.logs && data.logs.length > 0) {
+                data.logs.forEach(line => {
+                    const lineDiv = document.createElement('div');
+                    lineDiv.className = 'log-line';
+                    lineDiv.textContent = line;
+                    logsEl.appendChild(lineDiv);
+                });
+            } else {
+                logsEl.textContent = 'No recent logs.';
+            }
+        } catch (error) {
+            logsEl.textContent = 'Failed to load logs.';
+        }
+    }
+
+    document.getElementById('restart-btn').addEventListener('click', restartContainer);
+    document.getElementById('logs-header').addEventListener('click', toggleLogs);
+    document.getElementById('refresh-logs-btn').addEventListener('click', function(e) {
+        e.stopPropagation();
+        refreshLogs();
+    });
+
+    fetchContainerStatus();
+    setInterval(fetchContainerStatus, 10000);
+</script>
+{% endblock %}

@@ -1,0 +1,605 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block page_title %}Staging{% endblock %}
+
+{% block dashboard_css %}
+.staging-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.staging-header .page-header {
+    margin-bottom: 0;
+}
+
+.usage-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    background: var(--bg-elevated);
+    padding: 8px 16px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+}
+
+.usage-count {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.staging-info {
+    background: var(--info-muted);
+    border: 1px solid rgba(0, 136, 255, 0.2);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    margin-bottom: 24px;
+    color: var(--accent-blue);
+    font-size: 0.9rem;
+}
+
+.staging-info strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.staging-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    margin-bottom: 16px;
+    overflow: hidden;
+    transition: all 0.2s ease;
+}
+
+.staging-card:hover {
+    border-color: var(--border-default);
+    box-shadow: var(--shadow-md);
+}
+
+.staging-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.staging-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.staging-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.staging-status.active {
+    background: var(--success-muted);
+    color: var(--success);
+}
+
+.staging-status.creating {
+    background: var(--warning-muted);
+    color: var(--warning);
+}
+
+.staging-status.syncing {
+    background: var(--info-muted);
+    color: var(--accent-blue);
+}
+
+.staging-status.failed {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.staging-card-body {
+    padding: 20px 24px;
+}
+
+.staging-detail {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.staging-detail:last-child {
+    border-bottom: none;
+}
+
+.staging-detail-label {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.staging-detail-value {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.staging-detail-value a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+.staging-detail-value a:hover {
+    text-decoration: underline;
+}
+
+.staging-card-actions {
+    display: flex;
+    gap: 12px;
+    padding: 16px 24px;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border-subtle);
+    flex-wrap: wrap;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: var(--radius-md);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    border: none;
+}
+
+.btn-primary {
+    background: var(--gradient-primary);
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-glow);
+}
+
+.btn-secondary {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-surface);
+    border-color: var(--border-accent);
+}
+
+.btn-danger {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.btn-danger:hover {
+    background: rgba(239, 68, 68, 0.2);
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 40px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+}
+
+.empty-state-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 20px;
+    color: var(--text-tertiary);
+}
+
+.empty-state-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.empty-state-text {
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+}
+
+.create-form {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin-bottom: 24px;
+}
+
+.create-form-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.form-input {
+    width: 100%;
+    padding: 10px 14px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+.form-input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(0, 136, 255, 0.1);
+}
+
+.form-hint {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+}
+
+.push-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.push-dropdown-content {
+    display: none;
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    min-width: 220px;
+    z-index: 100;
+    margin-bottom: 8px;
+}
+
+.push-dropdown:hover .push-dropdown-content {
+    display: block;
+}
+
+.push-option {
+    display: block;
+    width: 100%;
+    padding: 12px 16px;
+    border: none;
+    background: none;
+    text-align: left;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.push-option:hover {
+    background: var(--bg-surface);
+}
+
+.push-option small {
+    display: block;
+    color: var(--text-tertiary);
+    font-size: 0.8rem;
+    margin-top: 2px;
+}
+
+.warning-text {
+    color: var(--warning);
+    font-size: 0.85rem;
+    margin-top: 8px;
+}
+
+@media (max-width: 768px) {
+    .staging-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .staging-card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .staging-detail {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+
+    .staging-card-actions {
+        flex-direction: column;
+    }
+
+    .staging-card-actions .btn,
+    .staging-card-actions form {
+        width: 100%;
+    }
+
+    .staging-card-actions .btn {
+        justify-content: center;
+    }
+
+    .push-dropdown {
+        width: 100%;
+    }
+
+    .push-dropdown .btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .push-dropdown-content {
+        width: 100%;
+        left: 0;
+        right: 0;
+    }
+}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="staging-header">
+    <div class="page-header">
+        <h1 class="page-title">Staging Environments</h1>
+        <p class="page-subtitle">Test changes safely before pushing to production.</p>
+    </div>
+    <div class="usage-indicator">
+        <span class="usage-count">{{ staging_envs|length }}/{{ max_staging }}</span> staging environments used
+    </div>
+</div>
+
+<div class="staging-info">
+    <strong>How Staging Works</strong>
+    Staging environments are isolated copies of your production site. Make changes, test new plugins or themes,
+    and when you're ready, push your changes to production with a single click.
+</div>
+
+{% if can_create %}
+<div class="create-form">
+    <div class="create-form-title">Create New Staging Environment</div>
+    <form method="POST" action="{{ url_for('staging_create') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+            <label class="form-label" for="staging_name">Staging Name (optional)</label>
+            <input type="text" id="staging_name" name="staging_name" class="form-input"
+                   placeholder="e.g., Feature Test, Theme Update">
+            <p class="form-hint">Give your staging environment a descriptive name to help identify it later.</p>
+        </div>
+        <button type="submit" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Create Staging Environment
+        </button>
+    </form>
+</div>
+{% endif %}
+
+{% if staging_envs %}
+    {% for staging in staging_envs %}
+    <div class="staging-card">
+        <div class="staging-card-header">
+            <span class="staging-name">{{ staging.name }}</span>
+            <span class="staging-status {{ staging.status }}">
+                {% if staging.status == 'active' %}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+                {% elif staging.status == 'creating' %}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+                {% elif staging.status == 'syncing' %}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
+                {% else %}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+                {% endif %}
+                {{ staging.status|capitalize }}
+            </span>
+        </div>
+        <div class="staging-card-body">
+            <div class="staging-detail">
+                <span class="staging-detail-label">Staging URL</span>
+                <span class="staging-detail-value">
+                    <a href="https://{{ staging.staging_domain }}" target="_blank">
+                        {{ staging.staging_domain }}
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle;">
+                            <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/>
+                        </svg>
+                    </a>
+                </span>
+            </div>
+            <div class="staging-detail">
+                <span class="staging-detail-label">Created</span>
+                <span class="staging-detail-value">{{ staging.created_at.strftime('%b %d, %Y at %I:%M %p') }}</span>
+            </div>
+            <div class="staging-detail">
+                <span class="staging-detail-label">Last Push to Production</span>
+                <span class="staging-detail-value">
+                    {% if staging.last_push_date %}
+                        {{ staging.last_push_date.strftime('%b %d, %Y at %I:%M %p') }}
+                    {% else %}
+                        Never
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+        <div class="staging-card-actions">
+            {% if staging.status == 'active' %}
+            <div class="push-dropdown">
+                <button class="btn btn-primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 19V5M5 12l7-7 7 7"/>
+                    </svg>
+                    Push to Production
+                </button>
+                <div class="push-dropdown-content">
+                    <form method="POST" action="{{ url_for('staging_push', staging_id=staging.id) }}" class="push-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="sync_type" value="files">
+                        <button type="submit" class="push-option">
+                            Files Only
+                            <small>Push theme, plugins, and uploads</small>
+                        </button>
+                    </form>
+                    <form method="POST" action="{{ url_for('staging_push', staging_id=staging.id) }}" class="push-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="sync_type" value="db">
+                        <button type="submit" class="push-option">
+                            Database Only
+                            <small>Push content and settings</small>
+                        </button>
+                    </form>
+                    <form method="POST" action="{{ url_for('staging_push', staging_id=staging.id) }}" class="push-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="sync_type" value="all">
+                        <button type="submit" class="push-option">
+                            Everything
+                            <small>Push both files and database</small>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% elif staging.status == 'creating' %}
+            <button class="btn btn-secondary" disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin">
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                </svg>
+                Creating...
+            </button>
+            {% elif staging.status == 'syncing' %}
+            <button class="btn btn-secondary" disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin">
+                    <path d="M23 4v6h-6M1 20v-6h6M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/>
+                </svg>
+                Syncing...
+            </button>
+            {% endif %}
+
+            <a href="{{ url_for('staging_detail', staging_id=staging.id) }}" class="btn btn-secondary">
+                View Details
+            </a>
+
+            <form method="POST" action="{{ url_for('staging_delete', staging_id=staging.id) }}"
+                  onsubmit="return confirm('Are you sure you want to delete this staging environment? This cannot be undone.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-danger btn-sm" {% if staging.status == 'creating' or staging.status == 'syncing' %}disabled{% endif %}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    </svg>
+                    Delete
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <div class="empty-state">
+        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+        </svg>
+        <h3 class="empty-state-title">No Staging Environments</h3>
+        <p class="empty-state-text">Create your first staging environment to safely test changes before going live.</p>
+        {% if can_create %}
+        <form method="POST" action="{{ url_for('staging_create') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 5v14M5 12h14"/>
+                </svg>
+                Create First Staging Environment
+            </button>
+        </form>
+        {% else %}
+        <p class="warning-text">
+            {% if customer.status != 'active' %}
+            Your production site must be active before creating staging environments.
+            {% else %}
+            Staging environments are not available at this time. Please contact support if you need assistance.
+            {% endif %}
+        </p>
+        {% endif %}
+    </div>
+{% endif %}
+{% endblock %}
+
+{% block dashboard_js %}
+// Auto-refresh page if there are staging environments in 'creating' or 'syncing' status
+{% if staging_envs|selectattr('status', 'equalto', 'creating')|list or staging_envs|selectattr('status', 'equalto', 'syncing')|list %}
+setTimeout(() => {
+    location.reload();
+}, 10000);
+{% endif %}
+
+// Add spinning animation for loading icons
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    .spin {
+        animation: spin 1s linear infinite;
+    }
+`;
+document.head.appendChild(style);
+
+// Confirmation for push operations
+document.querySelectorAll('.push-form').forEach(form => {
+    form.addEventListener('submit', (e) => {
+        const syncType = form.querySelector('input[name="sync_type"]').value;
+        let message = 'Are you sure you want to push ';
+        if (syncType === 'files') {
+            message += 'files to production? This will overwrite your production theme, plugins, and uploads.';
+        } else if (syncType === 'db') {
+            message += 'the database to production? This will overwrite your production content and settings.';
+        } else {
+            message += 'everything to production? This will overwrite all production files and database content.';
+        }
+        if (!confirm(message)) {
+            e.preventDefault();
+        }
+    });
+});
+{% endblock %}

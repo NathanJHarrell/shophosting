@@ -13,6 +13,12 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
+  # cAdvisor container metrics
+  - job_name: 'cadvisor'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['cadvisor:8080']
+
   # ShopHosting webapp metrics (via public HTTPS endpoint)
   - job_name: 'shophosting'
     scrape_interval: 30s
@@ -21,7 +27,12 @@ scrape_configs:
       - targets: ['shophosting.io']
     metrics_path: /metrics
 
-  # Node exporter (optional - install separately for host metrics)
-  # - job_name: 'node'
-  #   static_configs:
-  #     - targets: ['host.docker.internal:9100']
+  # Container metrics with customer labels
+  - job_name: 'container-metrics'
+    scrape_interval: 15s
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    static_configs:
+      - targets: ['shophosting.io']
+    metrics_path: /metrics/containers

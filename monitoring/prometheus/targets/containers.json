@@ -1,0 +1,73 @@
+[
+  {
+    "targets": ["cadvisor:8080"],
+    "labels": {
+      "container_id": "6d6f17d0ec4e",
+      "container_name": "customer-9-staging-1-phpmyadmin",
+      "customer_id": "9"
+    }
+  }
+,
+  {
+    "targets": ["cadvisor:8080"],
+    "labels": {
+      "container_id": "07e92c40ca93",
+      "container_name": "customer-9-staging-1-web",
+      "customer_id": "9"
+    }
+  }
+,
+  {
+    "targets": ["cadvisor:8080"],
+    "labels": {
+      "container_id": "94b0e4a3c823",
+      "container_name": "customer-9-staging-1-redis",
+      "customer_id": "9"
+    }
+  }
+,
+  {
+    "targets": ["cadvisor:8080"],
+    "labels": {
+      "container_id": "efd953d8b4dc",
+      "container_name": "customer-9-staging-1-db",
+      "customer_id": "9"
+    }
+  }
+,
+  {
+    "targets": ["cadvisor:8080"],
+    "labels": {
+      "container_id": "18b1cff5a1e1",
+      "container_name": "customer-9-phpmyadmin",
+      "customer_id": "9"
+    }
+  }
+,
+  {
+    "targets": ["cadvisor:8080"],
+    "labels": {
+      "container_id": "16c9153da72b",
+      "container_name": "customer-9-web",
+      "customer_id": "9"
+    }
+  }
+,
+  {
+    "targets": ["cadvisor:8080"],
+    "labels": {
+      "container_id": "416dbec6cb96",
+      "container_name": "customer-9-redis",
+      "customer_id": "9"
+    }
+  }
+,
+  {
+    "targets": ["cadvisor:8080"],
+    "labels": {
+      "container_id": "f27d4a16be84",
+      "container_name": "customer-9-db",
+      "customer_id": "9"
+    }
+  }
+]

@@ -1,0 +1,2166 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block page_title %}Settings{% endblock %}
+
+{% block dashboard_css %}
+.settings-section {
+    margin-bottom: 32px;
+}
+
+.settings-section-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+}
+
+.settings-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: 16px;
+}
+
+.settings-card-header {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.settings-card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.settings-card-title svg {
+    width: 20px;
+    height: 20px;
+    color: var(--text-tertiary);
+}
+
+.settings-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.settings-item:last-child {
+    border-bottom: none;
+}
+
+.settings-info h3 {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.settings-info p {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+}
+
+.settings-value {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-family: 'Monaco', 'Consolas', monospace;
+}
+
+.btn-sm {
+    padding: 8px 16px;
+    font-size: 0.8rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.btn-sm:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-accent);
+}
+
+.btn-sm.btn-danger {
+    color: var(--accent-red);
+    border-color: rgba(239, 68, 68, 0.3);
+}
+
+.btn-sm.btn-danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.btn-sm.btn-success {
+    color: var(--accent-green);
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.btn-sm.btn-success:hover {
+    background: rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.5);
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 100px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-badge.enabled {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--accent-green);
+}
+
+.status-badge.disabled {
+    background: rgba(107, 114, 128, 0.1);
+    color: var(--text-tertiary);
+}
+
+.backup-codes-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.backup-codes-count.low {
+    color: var(--accent-orange);
+}
+
+.backup-codes-count.critical {
+    color: var(--accent-red);
+}
+
+/* Login History Table */
+.login-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.login-table th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.login-table td {
+    padding: 12px 16px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.login-table tr:last-child td {
+    border-bottom: none;
+}
+
+.login-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.login-status .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.login-status.success .dot {
+    background: var(--accent-green);
+}
+
+.login-status.failed .dot {
+    background: var(--accent-red);
+}
+
+.device-info {
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.current-session {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.7rem;
+    color: var(--accent-cyan);
+    background: rgba(6, 182, 212, 0.1);
+    padding: 2px 8px;
+    border-radius: 100px;
+    margin-left: 8px;
+}
+
+/* Modals */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.modal-overlay.open {
+    display: flex;
+}
+
+.modal {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-xl);
+    width: 100%;
+    max-width: 440px;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: modalIn 0.2s ease;
+}
+
+@keyframes modalIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.modal-header {
+    padding: 24px 24px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.modal-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+}
+
+.modal-close:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.modal-footer {
+    padding: 0 24px 24px;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group:last-child {
+    margin-bottom: 0;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.form-control {
+    width: 100%;
+    padding: 12px 14px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(0, 136, 255, 0.12);
+}
+
+.form-hint {
+    margin-top: 6px;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.btn-primary {
+    background: var(--gradient-primary);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+    opacity: 0.9;
+}
+
+.btn-secondary {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+    background: var(--bg-hover);
+}
+
+/* 2FA Setup */
+.qr-container {
+    text-align: center;
+    padding: 20px;
+    background: white;
+    border-radius: var(--radius-lg);
+    margin: 16px 0;
+}
+
+.qr-container img {
+    max-width: 200px;
+}
+
+.secret-key {
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 0.9rem;
+    background: var(--bg-surface);
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    text-align: center;
+    letter-spacing: 2px;
+    margin: 16px 0;
+    word-break: break-all;
+}
+
+.backup-codes-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin: 16px 0;
+}
+
+.backup-code {
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 0.9rem;
+    background: var(--bg-surface);
+    padding: 10px;
+    border-radius: var(--radius-sm);
+    text-align: center;
+    letter-spacing: 1px;
+}
+
+.setup-step {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.step-number {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--gradient-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.step-content h4 {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.step-content p {
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+}
+
+.verify-code-input {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin: 20px 0;
+}
+
+.verify-code-input input {
+    width: 44px;
+    height: 52px;
+    text-align: center;
+    font-size: 1.25rem;
+    font-weight: 600;
+    font-family: 'Monaco', 'Consolas', monospace;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+}
+
+.verify-code-input input:focus {
+    outline: none;
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(0, 136, 255, 0.12);
+}
+
+.alert {
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    margin-bottom: 16px;
+}
+
+.alert-error {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: var(--accent-red);
+}
+
+.alert-success {
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    color: var(--accent-green);
+}
+
+.alert-warning {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: var(--accent-orange);
+}
+
+.spinner {
+    display: none;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 8px;
+}
+
+.btn.loading .spinner {
+    display: inline-block;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Toggle Switch */
+.toggle {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 26px;
+}
+
+.toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    transition: 0.3s;
+    border-radius: 26px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 20px;
+    width: 20px;
+    left: 2px;
+    bottom: 2px;
+    background: var(--text-tertiary);
+    transition: 0.3s;
+    border-radius: 50%;
+}
+
+.toggle input:checked + .toggle-slider {
+    background: var(--accent-green);
+    border-color: var(--accent-green);
+}
+
+.toggle input:checked + .toggle-slider:before {
+    background: white;
+    transform: translateX(22px);
+}
+
+/* Hidden templates */
+.hidden-templates {
+    display: none;
+}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="page-header">
+    <h1 class="page-title">Settings</h1>
+    <p class="page-subtitle">Manage your account and security preferences</p>
+</div>
+
+<!-- Hidden templates for safe DOM cloning -->
+<div class="hidden-templates">
+    <div id="alert-template" class="alert"></div>
+    <div id="backup-code-template" class="backup-code"></div>
+    <p id="qr-loading-template" style="color: var(--text-muted);"></p>
+    <img id="qr-image-template" alt="QR Code">
+</div>
+
+<!-- Account Information -->
+<div class="settings-section">
+    <h2 class="settings-section-title">Account</h2>
+
+    <div class="settings-card">
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Email Address</h3>
+                <p>Your login email for this account</p>
+            </div>
+            <span class="settings-value">{{ customer.email }}</span>
+        </div>
+
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Company Name</h3>
+                <p>Associated business name</p>
+            </div>
+            <span class="settings-value">{{ customer.company_name or 'Not set' }}</span>
+        </div>
+
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Member Since</h3>
+                <p>Account creation date</p>
+            </div>
+            <span class="settings-value">{{ customer.created_at.strftime('%B %d, %Y') if customer.created_at else 'Unknown' }}</span>
+        </div>
+    </div>
+</div>
+
+<!-- Security -->
+<div class="settings-section">
+    <h2 class="settings-section-title">Security</h2>
+
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <span class="settings-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                Password
+            </span>
+        </div>
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Password</h3>
+                <p>Last changed: {{ customer.password_changed_at.strftime('%B %d, %Y') if customer.password_changed_at else 'Never' }}</p>
+            </div>
+            <button class="btn-sm" data-action="open-modal" data-modal="password-modal">Change Password</button>
+        </div>
+    </div>
+
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <span class="settings-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                Two-Factor Authentication
+            </span>
+            {% if tfa_settings and tfa_settings.is_enabled %}
+            <span class="status-badge enabled">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Enabled
+            </span>
+            {% else %}
+            <span class="status-badge disabled">Disabled</span>
+            {% endif %}
+        </div>
+
+        {% if tfa_settings and tfa_settings.is_enabled %}
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Authenticator App</h3>
+                <p>Use an app like Google Authenticator or Authy</p>
+            </div>
+            <button class="btn-sm btn-danger" data-action="open-modal" data-modal="disable-2fa-modal">Disable 2FA</button>
+        </div>
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Backup Codes</h3>
+                <p>Use these if you lose access to your authenticator</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 16px;">
+                <span class="backup-codes-count {% if tfa_settings.backup_codes_remaining <= 2 %}critical{% elif tfa_settings.backup_codes_remaining <= 5 %}low{% endif %}">
+                    {{ tfa_settings.backup_codes_remaining }} remaining
+                </span>
+                <button class="btn-sm" data-action="open-modal" data-modal="regenerate-codes-modal">Regenerate</button>
+            </div>
+        </div>
+        {% else %}
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Enable Two-Factor Authentication</h3>
+                <p>Add an extra layer of security to your account</p>
+            </div>
+            <button class="btn-sm btn-success" data-action="start-2fa-setup">Enable 2FA</button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Sessions & Activity -->
+<div class="settings-section">
+    <h2 class="settings-section-title">Sessions & Activity</h2>
+
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <span class="settings-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                    <line x1="8" y1="21" x2="16" y2="21"/>
+                    <line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+                Active Sessions
+            </span>
+            <button class="btn-sm btn-danger" data-action="open-modal" data-modal="logout-all-modal">Logout All Sessions</button>
+        </div>
+
+        {% if active_sessions %}
+        <table class="login-table">
+            <thead>
+                <tr>
+                    <th>Device / Browser</th>
+                    <th>IP Address</th>
+                    <th>Last Active</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in active_sessions[:5] %}
+                <tr>
+                    <td>
+                        <span class="device-info" title="{{ session.user_agent }}">{{ session.user_agent[:50] }}{% if session.user_agent|length > 50 %}...{% endif %}</span>
+                        {% if session.is_current %}<span class="current-session">This device</span>{% endif %}
+                    </td>
+                    <td>{{ session.ip_address or 'Unknown' }}</td>
+                    <td>{{ session.created_at.strftime('%b %d, %Y %H:%M') if session.created_at else 'Unknown' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="settings-item">
+            <p style="color: var(--text-tertiary); font-size: 0.85rem;">No active sessions found</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <span class="settings-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                Recent Login Activity
+            </span>
+        </div>
+
+        {% if login_history %}
+        <table class="login-table">
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>IP Address</th>
+                    <th>Date & Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for login in login_history %}
+                <tr>
+                    <td>
+                        <span class="login-status {% if login.success %}success{% else %}failed{% endif %}">
+                            <span class="dot"></span>
+                            {% if login.success %}Successful{% else %}Failed{% if login.failure_reason %} ({{ login.failure_reason }}){% endif %}{% endif %}
+                        </span>
+                    </td>
+                    <td>{{ login.ip_address or 'Unknown' }}</td>
+                    <td>{{ login.created_at.strftime('%b %d, %Y %H:%M') if login.created_at else 'Unknown' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="settings-item">
+            <p style="color: var(--text-tertiary); font-size: 0.85rem;">No login history available</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Preferences -->
+<div class="settings-section">
+    <h2 class="settings-section-title">Preferences</h2>
+
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <span class="settings-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="2" y1="12" x2="22" y2="12"/>
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+                Timezone
+            </span>
+        </div>
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Display Timezone</h3>
+                <p>Times will be shown in this timezone</p>
+            </div>
+            <select id="timezone-select" class="form-control" style="width: auto; min-width: 200px;">
+                {% for tz in common_timezones %}
+                <option value="{{ tz }}" {% if customer.timezone == tz %}selected{% endif %}>{{ tz }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <span class="settings-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                    <polyline points="22,6 12,13 2,6"/>
+                </svg>
+                Email Notifications
+            </span>
+        </div>
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Security Alerts</h3>
+                <p>Password changes, 2FA updates, suspicious activity</p>
+            </div>
+            <label class="toggle">
+                <input type="checkbox" id="notif-security" {% if notification_settings.email_security_alerts %}checked{% endif %}>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Login Notifications</h3>
+                <p>New device logins and session activity</p>
+            </div>
+            <label class="toggle">
+                <input type="checkbox" id="notif-login" {% if notification_settings.email_login_alerts %}checked{% endif %}>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Billing Alerts</h3>
+                <p>Payment confirmations, invoice reminders</p>
+            </div>
+            <label class="toggle">
+                <input type="checkbox" id="notif-billing" {% if notification_settings.email_billing_alerts %}checked{% endif %}>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Maintenance Notifications</h3>
+                <p>Scheduled maintenance, downtime alerts</p>
+            </div>
+            <label class="toggle">
+                <input type="checkbox" id="notif-maintenance" {% if notification_settings.email_maintenance_alerts %}checked{% endif %}>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Marketing & Updates</h3>
+                <p>Product updates, tips, and promotions</p>
+            </div>
+            <label class="toggle">
+                <input type="checkbox" id="notif-marketing" {% if notification_settings.email_marketing %}checked{% endif %}>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+    </div>
+</div>
+
+<!-- Developer -->
+<div class="settings-section">
+    <h2 class="settings-section-title">Developer</h2>
+
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <span class="settings-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/>
+                </svg>
+                API Keys
+            </span>
+            <button class="btn-sm btn-success" data-action="open-modal" data-modal="create-api-key-modal">Create Key</button>
+        </div>
+
+        {% if api_keys %}
+        <table class="login-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Key</th>
+                    <th>Last Used</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for key in api_keys %}
+                <tr>
+                    <td>{{ key.name }}</td>
+                    <td><code style="font-size: 0.8rem;">shk_{{ key.key_prefix }}_...</code></td>
+                    <td>{{ key.last_used_at.strftime('%b %d, %Y') if key.last_used_at else 'Never' }}</td>
+                    <td>
+                        <button class="btn-sm btn-danger" data-action="revoke-api-key" data-key-id="{{ key.id }}">Revoke</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="settings-item">
+            <p style="color: var(--text-tertiary); font-size: 0.85rem;">No API keys created yet</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <span class="settings-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                </svg>
+                Webhooks
+            </span>
+            <button class="btn-sm btn-success" data-action="open-modal" data-modal="create-webhook-modal">Add Webhook</button>
+        </div>
+
+        {% if webhooks %}
+        <table class="login-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>URL</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for webhook in webhooks %}
+                <tr>
+                    <td>{{ webhook.name }}</td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">{{ webhook.url }}</td>
+                    <td>
+                        {% if webhook.failure_count >= 5 %}
+                        <span class="status-badge" style="background: rgba(239, 68, 68, 0.1); color: var(--accent-red);">Failing</span>
+                        {% elif webhook.is_active %}
+                        <span class="status-badge enabled">Active</span>
+                        {% else %}
+                        <span class="status-badge disabled">Disabled</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn-sm btn-danger" data-action="delete-webhook" data-webhook-id="{{ webhook.id }}">Delete</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="settings-item">
+            <p style="color: var(--text-tertiary); font-size: 0.85rem;">No webhooks configured</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Data & Privacy -->
+<div class="settings-section">
+    <h2 class="settings-section-title">Data & Privacy</h2>
+
+    <div class="settings-card">
+        <div class="settings-card-header">
+            <span class="settings-card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Export Your Data
+            </span>
+        </div>
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Download Your Data</h3>
+                <p>Get a copy of all your data (GDPR compliant)</p>
+            </div>
+            <button class="btn-sm" data-action="request-data-export">Request Export</button>
+        </div>
+    </div>
+
+    <div class="settings-card" style="border-color: rgba(239, 68, 68, 0.3);">
+        <div class="settings-card-header">
+            <span class="settings-card-title" style="color: var(--accent-red);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    <line x1="10" y1="11" x2="10" y2="17"/>
+                    <line x1="14" y1="11" x2="14" y2="17"/>
+                </svg>
+                Delete Account
+            </span>
+        </div>
+        {% if deletion_request %}
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3 style="color: var(--accent-red);">Deletion Scheduled</h3>
+                <p>Your account will be deleted on {{ deletion_request.scheduled_at.strftime('%B %d, %Y') }}</p>
+            </div>
+            <button class="btn-sm" data-action="cancel-deletion">Cancel Deletion</button>
+        </div>
+        {% else %}
+        <div class="settings-item">
+            <div class="settings-info">
+                <h3>Permanently Delete Account</h3>
+                <p>This will delete all your data after a 14-day grace period</p>
+            </div>
+            <button class="btn-sm btn-danger" data-action="open-modal" data-modal="delete-account-modal">Delete Account</button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Password Change Modal -->
+<div class="modal-overlay" id="password-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Change Password</h2>
+            <button class="modal-close" data-action="close-modal" data-modal="password-modal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <form id="password-form" data-action="change-password">
+            <div class="modal-body">
+                <div id="password-alert"></div>
+                <div class="form-group">
+                    <label for="current-password">Current Password</label>
+                    <input type="password" id="current-password" class="form-control" required autocomplete="current-password">
+                </div>
+                <div class="form-group">
+                    <label for="new-password">New Password</label>
+                    <input type="password" id="new-password" class="form-control" required minlength="8" autocomplete="new-password">
+                    <p class="form-hint">Must be at least 8 characters</p>
+                </div>
+                <div class="form-group">
+                    <label for="confirm-password">Confirm New Password</label>
+                    <input type="password" id="confirm-password" class="form-control" required autocomplete="new-password">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="password-modal">Cancel</button>
+                <button type="submit" class="btn-primary" id="password-submit">
+                    <span class="spinner"></span>
+                    Update Password
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 2FA Setup Modal -->
+<div class="modal-overlay" id="setup-2fa-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Set Up Two-Factor Authentication</h2>
+            <button class="modal-close" data-action="close-modal" data-modal="setup-2fa-modal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="setup-2fa-alert"></div>
+
+            <div id="setup-step-1">
+                <div class="setup-step">
+                    <span class="step-number">1</span>
+                    <div class="step-content">
+                        <h4>Scan QR Code</h4>
+                        <p>Use Google Authenticator, Authy, or another TOTP app</p>
+                    </div>
+                </div>
+
+                <div class="qr-container" id="qr-container">
+                    <p style="color: var(--text-muted);">Loading...</p>
+                </div>
+
+                <div class="setup-step">
+                    <span class="step-number">2</span>
+                    <div class="step-content">
+                        <h4>Or enter code manually</h4>
+                        <p>If you can't scan the QR code</p>
+                    </div>
+                </div>
+
+                <div class="secret-key" id="secret-key">Loading...</div>
+
+                <div class="setup-step">
+                    <span class="step-number">3</span>
+                    <div class="step-content">
+                        <h4>Enter verification code</h4>
+                        <p>Enter the 6-digit code from your app</p>
+                    </div>
+                </div>
+
+                <div class="verify-code-input">
+                    <input type="text" maxlength="1" data-2fa-index="0" inputmode="numeric">
+                    <input type="text" maxlength="1" data-2fa-index="1" inputmode="numeric">
+                    <input type="text" maxlength="1" data-2fa-index="2" inputmode="numeric">
+                    <input type="text" maxlength="1" data-2fa-index="3" inputmode="numeric">
+                    <input type="text" maxlength="1" data-2fa-index="4" inputmode="numeric">
+                    <input type="text" maxlength="1" data-2fa-index="5" inputmode="numeric">
+                </div>
+            </div>
+
+            <div id="setup-step-2" style="display: none;">
+                <div class="alert alert-success">
+                    Two-factor authentication has been enabled!
+                </div>
+
+                <h4 style="margin-bottom: 12px;">Save Your Backup Codes</h4>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 16px;">
+                    Store these codes in a safe place. Each code can only be used once.
+                </p>
+
+                <div class="backup-codes-grid" id="backup-codes-display"></div>
+
+                <div class="alert alert-warning" style="margin-top: 16px;">
+                    These codes will only be shown once. Make sure to save them!
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-secondary" data-action="close-modal" data-modal="setup-2fa-modal" id="setup-cancel-btn">Cancel</button>
+            <button type="button" class="btn-primary" data-action="verify-2fa" id="setup-verify-btn">
+                <span class="spinner"></span>
+                Verify & Enable
+            </button>
+            <button type="button" class="btn-primary" data-action="close-modal-reload" data-modal="setup-2fa-modal" id="setup-done-btn" style="display: none;">
+                Done
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Disable 2FA Modal -->
+<div class="modal-overlay" id="disable-2fa-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Disable Two-Factor Authentication</h2>
+            <button class="modal-close" data-action="close-modal" data-modal="disable-2fa-modal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <form id="disable-2fa-form" data-action="disable-2fa">
+            <div class="modal-body">
+                <div id="disable-2fa-alert"></div>
+                <div class="alert alert-warning">
+                    Warning: Disabling 2FA will make your account less secure.
+                </div>
+                <div class="form-group">
+                    <label for="disable-2fa-password">Enter your password to confirm</label>
+                    <input type="password" id="disable-2fa-password" class="form-control" required autocomplete="current-password">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="disable-2fa-modal">Cancel</button>
+                <button type="submit" class="btn-primary" style="background: var(--accent-red);">
+                    <span class="spinner"></span>
+                    Disable 2FA
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Regenerate Backup Codes Modal -->
+<div class="modal-overlay" id="regenerate-codes-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Regenerate Backup Codes</h2>
+            <button class="modal-close" data-action="close-modal" data-modal="regenerate-codes-modal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="regenerate-codes-alert"></div>
+
+            <div id="regenerate-step-1">
+                <div class="alert alert-warning">
+                    This will invalidate all your existing backup codes.
+                </div>
+                <div class="form-group">
+                    <label for="regenerate-password">Enter your password to confirm</label>
+                    <input type="password" id="regenerate-password" class="form-control" required autocomplete="current-password">
+                </div>
+            </div>
+
+            <div id="regenerate-step-2" style="display: none;">
+                <div class="alert alert-success">
+                    New backup codes have been generated!
+                </div>
+                <div class="backup-codes-grid" id="new-backup-codes"></div>
+                <div class="alert alert-warning" style="margin-top: 16px;">
+                    Save these codes now. They will only be shown once.
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-secondary" data-action="close-modal" data-modal="regenerate-codes-modal" id="regen-cancel-btn">Cancel</button>
+            <button type="button" class="btn-primary" data-action="regenerate-backup-codes" id="regen-confirm-btn">
+                <span class="spinner"></span>
+                Regenerate Codes
+            </button>
+            <button type="button" class="btn-primary" data-action="close-modal-reload" data-modal="regenerate-codes-modal" id="regen-done-btn" style="display: none;">
+                Done
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Logout All Sessions Modal -->
+<div class="modal-overlay" id="logout-all-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Logout All Sessions</h2>
+            <button class="modal-close" data-action="close-modal" data-modal="logout-all-modal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <form id="logout-all-form" data-action="logout-all">
+            <div class="modal-body">
+                <div id="logout-all-alert"></div>
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px;">
+                    This will log out all devices except your current session. Other sessions will need to log in again.
+                </p>
+                <div class="form-group">
+                    <label for="logout-all-password">Enter your password to confirm</label>
+                    <input type="password" id="logout-all-password" class="form-control" required autocomplete="current-password">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="logout-all-modal">Cancel</button>
+                <button type="submit" class="btn-primary">
+                    <span class="spinner"></span>
+                    Logout All Sessions
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Create API Key Modal -->
+<div class="modal-overlay" id="create-api-key-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Create API Key</h2>
+            <button class="modal-close" data-action="close-modal" data-modal="create-api-key-modal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="api-key-alert"></div>
+
+            <div id="api-key-step-1">
+                <div class="form-group">
+                    <label for="api-key-name">Key Name</label>
+                    <input type="text" id="api-key-name" class="form-control" required placeholder="e.g., Production Server">
+                    <p class="form-hint">A descriptive name to identify this key</p>
+                </div>
+                <div class="form-group">
+                    <label>Permissions</label>
+                    <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
+                        <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; cursor: pointer;">
+                            <input type="checkbox" id="scope-sites-read" checked>
+                            <span>Read sites</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; cursor: pointer;">
+                            <input type="checkbox" id="scope-sites-write">
+                            <span>Modify sites</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; cursor: pointer;">
+                            <input type="checkbox" id="scope-billing-read">
+                            <span>Read billing</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div id="api-key-step-2" style="display: none;">
+                <div class="alert alert-success">
+                    API key created successfully!
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
+                    Copy your API key now. You won't be able to see it again.
+                </p>
+                <div class="secret-key" id="new-api-key" style="cursor: pointer;" title="Click to copy"></div>
+                <p class="form-hint" style="text-align: center;">Click to copy</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-secondary" data-action="close-modal" data-modal="create-api-key-modal" id="api-key-cancel-btn">Cancel</button>
+            <button type="button" class="btn-primary" data-action="create-api-key" id="api-key-create-btn">
+                <span class="spinner"></span>
+                Create Key
+            </button>
+            <button type="button" class="btn-primary" data-action="close-modal-reload" data-modal="create-api-key-modal" id="api-key-done-btn" style="display: none;">
+                Done
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Create Webhook Modal -->
+<div class="modal-overlay" id="create-webhook-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Add Webhook</h2>
+            <button class="modal-close" data-action="close-modal" data-modal="create-webhook-modal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="webhook-alert"></div>
+
+            <div id="webhook-step-1">
+                <div class="form-group">
+                    <label for="webhook-name">Webhook Name</label>
+                    <input type="text" id="webhook-name" class="form-control" required placeholder="e.g., Slack Notifications">
+                </div>
+                <div class="form-group">
+                    <label for="webhook-url">Endpoint URL</label>
+                    <input type="url" id="webhook-url" class="form-control" required placeholder="https://example.com/webhook">
+                    <p class="form-hint">HTTPS URLs only</p>
+                </div>
+                <div class="form-group">
+                    <label>Events to Subscribe</label>
+                    <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 8px;">
+                        <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; cursor: pointer;">
+                            <input type="checkbox" id="event-site-created" checked>
+                            <span>Site created</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; cursor: pointer;">
+                            <input type="checkbox" id="event-site-updated" checked>
+                            <span>Site updated</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; cursor: pointer;">
+                            <input type="checkbox" id="event-site-deleted">
+                            <span>Site deleted</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 10px; font-weight: normal; cursor: pointer;">
+                            <input type="checkbox" id="event-invoice-paid">
+                            <span>Invoice paid</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div id="webhook-step-2" style="display: none;">
+                <div class="alert alert-success">
+                    Webhook created successfully!
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">
+                    Your webhook signing secret (used to verify requests):
+                </p>
+                <div class="secret-key" id="webhook-secret" style="cursor: pointer;" title="Click to copy"></div>
+                <p class="form-hint" style="text-align: center;">Click to copy</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-secondary" data-action="close-modal" data-modal="create-webhook-modal" id="webhook-cancel-btn">Cancel</button>
+            <button type="button" class="btn-primary" data-action="create-webhook" id="webhook-create-btn">
+                <span class="spinner"></span>
+                Create Webhook
+            </button>
+            <button type="button" class="btn-primary" data-action="close-modal-reload" data-modal="create-webhook-modal" id="webhook-done-btn" style="display: none;">
+                Done
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Account Modal -->
+<div class="modal-overlay" id="delete-account-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 style="color: var(--accent-red);">Delete Account</h2>
+            <button class="modal-close" data-action="close-modal" data-modal="delete-account-modal">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <form id="delete-account-form" data-action="delete-account">
+            <div class="modal-body">
+                <div id="delete-account-alert"></div>
+                <div class="alert alert-warning">
+                    <strong>Warning:</strong> This action cannot be undone after the 14-day grace period.
+                </div>
+                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px;">
+                    Your account will be scheduled for deletion. You have 14 days to cancel this request before all data is permanently deleted.
+                </p>
+                <div class="form-group">
+                    <label for="delete-reason">Reason for leaving (optional)</label>
+                    <textarea id="delete-reason" class="form-control" rows="3" placeholder="Help us improve by sharing your feedback..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="delete-confirm-password">Enter your password to confirm</label>
+                    <input type="password" id="delete-confirm-password" class="form-control" required autocomplete="current-password">
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: flex-start; gap: 10px; font-weight: normal; cursor: pointer;">
+                        <input type="checkbox" id="delete-confirm-checkbox" required style="margin-top: 3px;">
+                        <span style="font-size: 0.85rem; color: var(--text-secondary);">I understand that after 14 days, all my data including sites, files, and account information will be permanently deleted.</span>
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-secondary" data-action="close-modal" data-modal="delete-account-modal">Cancel</button>
+                <button type="submit" class="btn-primary" style="background: var(--accent-red);">
+                    <span class="spinner"></span>
+                    Schedule Deletion
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block dashboard_js %}
+// Modal functions
+function openModal(id) {
+    document.getElementById(id).classList.add('open');
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+}
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+            overlay.classList.remove('open');
+        }
+    });
+});
+
+// Helper functions
+function showAlert(containerId, message, type) {
+    var container = document.getElementById(containerId);
+    // Clear existing content
+    while (container.firstChild) {
+        container.removeChild(container.firstChild);
+    }
+    // Create alert using template
+    var alertEl = document.getElementById('alert-template').cloneNode(true);
+    alertEl.id = '';
+    alertEl.className = 'alert alert-' + type;
+    alertEl.textContent = message;
+    container.appendChild(alertEl);
+}
+
+function clearAlert(containerId) {
+    var container = document.getElementById(containerId);
+    while (container.firstChild) {
+        container.removeChild(container.firstChild);
+    }
+}
+
+function setLoading(btn, loading) {
+    if (loading) {
+        btn.classList.add('loading');
+        btn.disabled = true;
+    } else {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+    }
+}
+
+function displayBackupCodes(containerId, codes) {
+    var container = document.getElementById(containerId);
+    // Clear existing content
+    while (container.firstChild) {
+        container.removeChild(container.firstChild);
+    }
+    // Add each code
+    codes.forEach(function(code) {
+        var codeEl = document.getElementById('backup-code-template').cloneNode(true);
+        codeEl.id = '';
+        codeEl.textContent = code;
+        container.appendChild(codeEl);
+    });
+}
+
+// Password change
+async function changePassword(e) {
+    e.preventDefault();
+    var btn = document.getElementById('password-submit');
+    setLoading(btn, true);
+    clearAlert('password-alert');
+
+    var currentPassword = document.getElementById('current-password').value;
+    var newPassword = document.getElementById('new-password').value;
+    var confirmPassword = document.getElementById('confirm-password').value;
+
+    if (newPassword !== confirmPassword) {
+        showAlert('password-alert', 'New passwords do not match', 'error');
+        setLoading(btn, false);
+        return;
+    }
+
+    try {
+        var response = await fetch('/api/settings/password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                current_password: currentPassword,
+                new_password: newPassword
+            })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            showAlert('password-alert', 'Password updated successfully!', 'success');
+            document.getElementById('password-form').reset();
+            setTimeout(function() {
+                closeModal('password-modal');
+                location.reload();
+            }, 1500);
+        } else {
+            showAlert('password-alert', data.error || 'Failed to update password', 'error');
+        }
+    } catch (err) {
+        showAlert('password-alert', 'An error occurred. Please try again.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// 2FA Setup
+async function startTwoFactorSetup() {
+    openModal('setup-2fa-modal');
+    clearAlert('setup-2fa-alert');
+
+    document.getElementById('setup-step-1').style.display = 'block';
+    document.getElementById('setup-step-2').style.display = 'none';
+    document.getElementById('setup-verify-btn').style.display = 'inline-flex';
+    document.getElementById('setup-done-btn').style.display = 'none';
+    document.getElementById('setup-cancel-btn').style.display = 'inline-flex';
+
+    // Clear code inputs
+    document.querySelectorAll('[data-2fa-index]').forEach(function(i) { i.value = ''; });
+
+    try {
+        var response = await fetch('/api/settings/2fa/setup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            var qrContainer = document.getElementById('qr-container');
+            // Clear container
+            while (qrContainer.firstChild) {
+                qrContainer.removeChild(qrContainer.firstChild);
+            }
+
+            if (data.qr_code) {
+                var img = document.getElementById('qr-image-template').cloneNode(true);
+                img.id = '';
+                img.src = data.qr_code;
+                qrContainer.appendChild(img);
+            } else {
+                var p = document.getElementById('qr-loading-template').cloneNode(true);
+                p.id = '';
+                p.textContent = 'QR code unavailable. Use manual entry.';
+                qrContainer.appendChild(p);
+            }
+            document.getElementById('secret-key').textContent = data.secret;
+        } else {
+            showAlert('setup-2fa-alert', data.error || 'Failed to start 2FA setup', 'error');
+        }
+    } catch (err) {
+        showAlert('setup-2fa-alert', 'An error occurred. Please try again.', 'error');
+    }
+}
+
+// Setup code input handling
+function setup2FAInputs() {
+    var inputs = document.querySelectorAll('[data-2fa-index]');
+    inputs.forEach(function(input, idx) {
+        input.addEventListener('input', function(e) {
+            if (e.target.value.length === 1 && idx < 5) {
+                inputs[idx + 1].focus();
+            }
+            // Auto-submit when all filled
+            var code = Array.from(inputs).map(function(i) { return i.value; }).join('');
+            if (code.length === 6) {
+                verify2FACode();
+            }
+        });
+
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Backspace' && !e.target.value && idx > 0) {
+                inputs[idx - 1].focus();
+            }
+        });
+
+        input.addEventListener('paste', function(e) {
+            e.preventDefault();
+            var paste = (e.clipboardData || window.clipboardData).getData('text');
+            var chars = paste.replace(/\D/g, '').split('').slice(0, 6);
+            chars.forEach(function(char, i) {
+                if (inputs[i]) inputs[i].value = char;
+            });
+            if (chars.length === 6) verify2FACode();
+        });
+    });
+}
+setup2FAInputs();
+
+async function verify2FACode() {
+    var btn = document.getElementById('setup-verify-btn');
+    setLoading(btn, true);
+    clearAlert('setup-2fa-alert');
+
+    var code = Array.from(document.querySelectorAll('[data-2fa-index]')).map(function(i) { return i.value; }).join('');
+
+    if (code.length !== 6) {
+        showAlert('setup-2fa-alert', 'Please enter a 6-digit code', 'error');
+        setLoading(btn, false);
+        return;
+    }
+
+    try {
+        var response = await fetch('/api/settings/2fa/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: code })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            // Show backup codes
+            document.getElementById('setup-step-1').style.display = 'none';
+            document.getElementById('setup-step-2').style.display = 'block';
+            document.getElementById('setup-verify-btn').style.display = 'none';
+            document.getElementById('setup-done-btn').style.display = 'inline-flex';
+            document.getElementById('setup-cancel-btn').style.display = 'none';
+
+            displayBackupCodes('backup-codes-display', data.backup_codes);
+        } else {
+            showAlert('setup-2fa-alert', data.error || 'Invalid code', 'error');
+            document.querySelectorAll('[data-2fa-index]').forEach(function(i) { i.value = ''; });
+            document.querySelector('[data-2fa-index="0"]').focus();
+        }
+    } catch (err) {
+        showAlert('setup-2fa-alert', 'An error occurred. Please try again.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// Disable 2FA
+async function disable2FA(e) {
+    e.preventDefault();
+    var btn = e.target.querySelector('button[type="submit"]');
+    setLoading(btn, true);
+    clearAlert('disable-2fa-alert');
+
+    var password = document.getElementById('disable-2fa-password').value;
+
+    try {
+        var response = await fetch('/api/settings/2fa/disable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: password })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            showAlert('disable-2fa-alert', '2FA has been disabled', 'success');
+            setTimeout(function() {
+                closeModal('disable-2fa-modal');
+                location.reload();
+            }, 1500);
+        } else {
+            showAlert('disable-2fa-alert', data.error || 'Failed to disable 2FA', 'error');
+        }
+    } catch (err) {
+        showAlert('disable-2fa-alert', 'An error occurred. Please try again.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// Regenerate backup codes
+async function regenerateBackupCodes() {
+    var btn = document.getElementById('regen-confirm-btn');
+    setLoading(btn, true);
+    clearAlert('regenerate-codes-alert');
+
+    var password = document.getElementById('regenerate-password').value;
+
+    try {
+        var response = await fetch('/api/settings/2fa/backup-codes/regenerate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: password })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            document.getElementById('regenerate-step-1').style.display = 'none';
+            document.getElementById('regenerate-step-2').style.display = 'block';
+            document.getElementById('regen-confirm-btn').style.display = 'none';
+            document.getElementById('regen-done-btn').style.display = 'inline-flex';
+            document.getElementById('regen-cancel-btn').style.display = 'none';
+
+            displayBackupCodes('new-backup-codes', data.backup_codes);
+        } else {
+            showAlert('regenerate-codes-alert', data.error || 'Failed to regenerate codes', 'error');
+        }
+    } catch (err) {
+        showAlert('regenerate-codes-alert', 'An error occurred. Please try again.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// Logout all sessions
+async function logoutAllSessions(e) {
+    e.preventDefault();
+    var btn = e.target.querySelector('button[type="submit"]');
+    setLoading(btn, true);
+    clearAlert('logout-all-alert');
+
+    var password = document.getElementById('logout-all-password').value;
+
+    try {
+        var response = await fetch('/api/settings/sessions/logout-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: password })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            showAlert('logout-all-alert', data.message, 'success');
+            setTimeout(function() {
+                closeModal('logout-all-modal');
+                location.reload();
+            }, 1500);
+        } else {
+            showAlert('logout-all-alert', data.error || 'Failed to logout sessions', 'error');
+        }
+    } catch (err) {
+        showAlert('logout-all-alert', 'An error occurred. Please try again.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// Event delegation for all data-action elements
+document.addEventListener('click', function(e) {
+    var target = e.target.closest('[data-action]');
+    if (!target) return;
+
+    var action = target.getAttribute('data-action');
+    var modal = target.getAttribute('data-modal');
+
+    switch (action) {
+        case 'open-modal':
+            if (modal === 'create-api-key-modal') resetApiKeyModal();
+            if (modal === 'create-webhook-modal') resetWebhookModal();
+            openModal(modal);
+            break;
+        case 'close-modal':
+            closeModal(modal);
+            break;
+        case 'close-modal-reload':
+            closeModal(modal);
+            location.reload();
+            break;
+        case 'start-2fa-setup':
+            startTwoFactorSetup();
+            break;
+        case 'verify-2fa':
+            verify2FACode();
+            break;
+        case 'regenerate-backup-codes':
+            regenerateBackupCodes();
+            break;
+        case 'create-api-key':
+            createApiKey();
+            break;
+        case 'revoke-api-key':
+            revokeApiKey(target.getAttribute('data-key-id'));
+            break;
+        case 'create-webhook':
+            createWebhook();
+            break;
+        case 'delete-webhook':
+            deleteWebhook(target.getAttribute('data-webhook-id'));
+            break;
+        case 'request-data-export':
+            requestDataExport(target);
+            break;
+        case 'cancel-deletion':
+            cancelDeletion(target);
+            break;
+    }
+});
+
+// Form submit handlers
+document.getElementById('password-form').addEventListener('submit', changePassword);
+document.getElementById('disable-2fa-form').addEventListener('submit', disable2FA);
+document.getElementById('logout-all-form').addEventListener('submit', logoutAllSessions);
+document.getElementById('delete-account-form').addEventListener('submit', deleteAccount);
+
+// Timezone change handler
+document.getElementById('timezone-select').addEventListener('change', async function(e) {
+    var timezone = e.target.value;
+    try {
+        var response = await fetch('/api/settings/profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ timezone: timezone })
+        });
+        var data = await response.json();
+        if (!data.success) {
+            alert('Failed to update timezone: ' + (data.error || 'Unknown error'));
+        }
+    } catch (err) {
+        alert('An error occurred while updating timezone');
+    }
+});
+
+// Notification toggle handlers
+document.querySelectorAll('[id^="notif-"]').forEach(function(toggle) {
+    toggle.addEventListener('change', async function(e) {
+        var settingName = e.target.id.replace('notif-', '');
+        var settingMap = {
+            'security': 'email_security_alerts',
+            'login': 'email_login_alerts',
+            'billing': 'email_billing_alerts',
+            'maintenance': 'email_maintenance_alerts',
+            'marketing': 'email_marketing'
+        };
+        var settings = {};
+        settings[settingMap[settingName]] = e.target.checked;
+
+        try {
+            var response = await fetch('/api/settings/notifications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings)
+            });
+            var data = await response.json();
+            if (!data.success) {
+                e.target.checked = !e.target.checked; // Revert
+                alert('Failed to update notification setting');
+            }
+        } catch (err) {
+            e.target.checked = !e.target.checked; // Revert
+            alert('An error occurred');
+        }
+    });
+});
+
+// Create API Key
+async function createApiKey() {
+    var btn = document.getElementById('api-key-create-btn');
+    setLoading(btn, true);
+    clearAlert('api-key-alert');
+
+    var name = document.getElementById('api-key-name').value;
+    if (!name.trim()) {
+        showAlert('api-key-alert', 'Please enter a key name', 'error');
+        setLoading(btn, false);
+        return;
+    }
+
+    var scopes = [];
+    if (document.getElementById('scope-sites-read').checked) scopes.push('sites:read');
+    if (document.getElementById('scope-sites-write').checked) scopes.push('sites:write');
+    if (document.getElementById('scope-billing-read').checked) scopes.push('billing:read');
+
+    try {
+        var response = await fetch('/api/settings/api-keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, scopes: scopes })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            document.getElementById('api-key-step-1').style.display = 'none';
+            document.getElementById('api-key-step-2').style.display = 'block';
+            document.getElementById('api-key-create-btn').style.display = 'none';
+            document.getElementById('api-key-done-btn').style.display = 'inline-flex';
+            document.getElementById('api-key-cancel-btn').style.display = 'none';
+            document.getElementById('new-api-key').textContent = data.key.key;
+        } else {
+            showAlert('api-key-alert', data.error || 'Failed to create API key', 'error');
+        }
+    } catch (err) {
+        showAlert('api-key-alert', 'An error occurred. Please try again.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// Revoke API Key
+async function revokeApiKey(keyId) {
+    if (!confirm('Are you sure you want to revoke this API key? This cannot be undone.')) return;
+
+    try {
+        var response = await fetch('/api/settings/api-keys/' + keyId, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Failed to revoke API key');
+        }
+    } catch (err) {
+        alert('An error occurred');
+    }
+}
+
+// Create Webhook
+async function createWebhook() {
+    var btn = document.getElementById('webhook-create-btn');
+    setLoading(btn, true);
+    clearAlert('webhook-alert');
+
+    var name = document.getElementById('webhook-name').value;
+    var url = document.getElementById('webhook-url').value;
+
+    if (!name.trim() || !url.trim()) {
+        showAlert('webhook-alert', 'Please fill in all fields', 'error');
+        setLoading(btn, false);
+        return;
+    }
+
+    var events = [];
+    if (document.getElementById('event-site-created').checked) events.push('site.created');
+    if (document.getElementById('event-site-updated').checked) events.push('site.updated');
+    if (document.getElementById('event-site-deleted').checked) events.push('site.deleted');
+    if (document.getElementById('event-invoice-paid').checked) events.push('invoice.paid');
+
+    if (events.length === 0) {
+        showAlert('webhook-alert', 'Please select at least one event', 'error');
+        setLoading(btn, false);
+        return;
+    }
+
+    try {
+        var response = await fetch('/api/settings/webhooks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, url: url, events: events })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            document.getElementById('webhook-step-1').style.display = 'none';
+            document.getElementById('webhook-step-2').style.display = 'block';
+            document.getElementById('webhook-create-btn').style.display = 'none';
+            document.getElementById('webhook-done-btn').style.display = 'inline-flex';
+            document.getElementById('webhook-cancel-btn').style.display = 'none';
+            document.getElementById('webhook-secret').textContent = data.webhook.secret;
+        } else {
+            showAlert('webhook-alert', data.error || 'Failed to create webhook', 'error');
+        }
+    } catch (err) {
+        showAlert('webhook-alert', 'An error occurred. Please try again.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// Delete Webhook
+async function deleteWebhook(webhookId) {
+    if (!confirm('Are you sure you want to delete this webhook?')) return;
+
+    try {
+        var response = await fetch('/api/settings/webhooks/' + webhookId, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.error || 'Failed to delete webhook');
+        }
+    } catch (err) {
+        alert('An error occurred');
+    }
+}
+
+// Request Data Export
+async function requestDataExport(btn) {
+    if (!confirm('This will generate an export of all your data. Continue?')) return;
+
+    var originalText = btn.textContent;
+    btn.textContent = 'Requesting...';
+    btn.disabled = true;
+
+    try {
+        var response = await fetch('/api/settings/data-export', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            alert('Data export requested! You will receive an email when it\'s ready.');
+            location.reload();
+        } else {
+            alert(data.error || 'Failed to request data export');
+        }
+    } catch (err) {
+        alert('An error occurred');
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
+}
+
+// Cancel Account Deletion
+async function cancelDeletion(btn) {
+    var originalText = btn.textContent;
+    btn.textContent = 'Cancelling...';
+    btn.disabled = true;
+
+    try {
+        var response = await fetch('/api/settings/account/delete/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            alert('Account deletion has been cancelled.');
+            location.reload();
+        } else {
+            alert(data.error || 'Failed to cancel deletion');
+        }
+    } catch (err) {
+        alert('An error occurred');
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
+}
+
+// Delete Account
+async function deleteAccount(e) {
+    e.preventDefault();
+    var btn = e.target.querySelector('button[type="submit"]');
+    setLoading(btn, true);
+    clearAlert('delete-account-alert');
+
+    var password = document.getElementById('delete-confirm-password').value;
+    var reason = document.getElementById('delete-reason').value;
+    var confirmed = document.getElementById('delete-confirm-checkbox').checked;
+
+    if (!confirmed) {
+        showAlert('delete-account-alert', 'Please confirm you understand the consequences', 'error');
+        setLoading(btn, false);
+        return;
+    }
+
+    try {
+        var response = await fetch('/api/settings/account/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: password, reason: reason })
+        });
+
+        var data = await response.json();
+
+        if (data.success) {
+            showAlert('delete-account-alert', 'Account scheduled for deletion. You can cancel within 14 days.', 'success');
+            setTimeout(function() {
+                closeModal('delete-account-modal');
+                location.reload();
+            }, 2000);
+        } else {
+            showAlert('delete-account-alert', data.error || 'Failed to schedule deletion', 'error');
+        }
+    } catch (err) {
+        showAlert('delete-account-alert', 'An error occurred. Please try again.', 'error');
+    } finally {
+        setLoading(btn, false);
+    }
+}
+
+// Copy to clipboard helper
+function copyToClipboard(text, element) {
+    navigator.clipboard.writeText(text).then(function() {
+        var originalText = element.textContent;
+        element.textContent = 'Copied!';
+        setTimeout(function() {
+            element.textContent = originalText;
+        }, 1500);
+    }).catch(function() {
+        alert('Failed to copy. Please copy manually.');
+    });
+}
+
+// Add click-to-copy for secret keys
+document.addEventListener('click', function(e) {
+    if (e.target.id === 'new-api-key' || e.target.id === 'webhook-secret') {
+        copyToClipboard(e.target.textContent, e.target);
+    }
+});
+
+// Reset modal state when opening
+function resetApiKeyModal() {
+    document.getElementById('api-key-step-1').style.display = 'block';
+    document.getElementById('api-key-step-2').style.display = 'none';
+    document.getElementById('api-key-create-btn').style.display = 'inline-flex';
+    document.getElementById('api-key-done-btn').style.display = 'none';
+    document.getElementById('api-key-cancel-btn').style.display = 'inline-flex';
+    document.getElementById('api-key-name').value = '';
+    clearAlert('api-key-alert');
+}
+
+function resetWebhookModal() {
+    document.getElementById('webhook-step-1').style.display = 'block';
+    document.getElementById('webhook-step-2').style.display = 'none';
+    document.getElementById('webhook-create-btn').style.display = 'inline-flex';
+    document.getElementById('webhook-done-btn').style.display = 'none';
+    document.getElementById('webhook-cancel-btn').style.display = 'inline-flex';
+    document.getElementById('webhook-name').value = '';
+    document.getElementById('webhook-url').value = '';
+    clearAlert('webhook-alert');
+}
+{% endblock %}

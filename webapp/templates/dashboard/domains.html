@@ -1,0 +1,651 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block page_title %}Domains{% endblock %}
+
+{% block dashboard_css %}
+.domain-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    margin-bottom: 24px;
+    overflow: hidden;
+}
+
+.domain-card-header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.domain-card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.domain-card-body {
+    padding: 20px 28px;
+}
+
+/* Primary Domain Section */
+.primary-domain {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.domain-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.domain-icon {
+    width: 48px;
+    height: 48px;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+}
+
+.domain-details h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.domain-details span {
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+}
+
+.domain-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.domain-badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.domain-badge.active {
+    background: var(--success-muted);
+    color: var(--success);
+}
+
+.domain-badge.pending {
+    background: var(--warning-muted);
+    color: var(--warning);
+}
+
+.visit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.visit-btn:hover {
+    background: var(--bg-elevated);
+    border-color: var(--border-accent);
+}
+
+/* DNS Configuration Section */
+.dns-record {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    background: var(--bg-surface);
+    border-radius: var(--radius-md);
+    margin-bottom: 12px;
+}
+
+.dns-record:last-child {
+    margin-bottom: 0;
+}
+
+.dns-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.dns-type {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--accent-blue);
+    letter-spacing: 0.05em;
+}
+
+.dns-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.dns-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.copy-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.copy-btn:hover {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border-color: var(--border-default);
+}
+
+.copy-btn.copied {
+    background: var(--success-muted);
+    color: var(--success);
+    border-color: var(--success);
+}
+
+/* Health Check Section */
+.health-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.health-item {
+    background: var(--bg-surface);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    text-align: center;
+}
+
+.health-icon {
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 12px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.health-icon.checking {
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+}
+
+.health-icon.success {
+    background: var(--success-muted);
+    color: var(--success);
+}
+
+.health-icon.warning {
+    background: var(--warning-muted);
+    color: var(--warning);
+}
+
+.health-icon.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.health-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.health-status {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.health-detail {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+}
+
+/* Info Box */
+.info-box {
+    display: flex;
+    gap: 12px;
+    padding: 16px;
+    background: var(--info-muted);
+    border: 1px solid rgba(0, 136, 255, 0.2);
+    border-radius: var(--radius-md);
+    margin-bottom: 20px;
+}
+
+.info-box-icon {
+    flex-shrink: 0;
+    color: var(--accent-blue);
+}
+
+.info-box-content {
+    font-size: 0.9rem;
+    color: var(--accent-blue);
+}
+
+.info-box-content strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+/* Refresh Button */
+.refresh-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+    background: var(--bg-elevated);
+    color: var(--text-primary);
+}
+
+.refresh-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.refresh-btn svg.spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* SSL Info */
+.ssl-details {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.ssl-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 0.875rem;
+}
+
+.ssl-label {
+    color: var(--text-secondary);
+}
+
+.ssl-value {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.ssl-value.warning {
+    color: var(--warning);
+}
+
+.ssl-value.success {
+    color: var(--success);
+}
+
+/* Hidden SVG templates */
+.svg-templates {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .health-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .primary-domain {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .domain-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .dns-record {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .copy-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+{% endblock %}
+
+{% block dashboard_content %}
+<!-- Hidden SVG templates for JavaScript to clone (avoids innerHTML with dynamic content) -->
+<div class="svg-templates">
+    <svg id="icon-success" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    <svg id="icon-warning" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+    <svg id="icon-error" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+    <svg id="icon-spinner" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinning"><path d="M21 12a9 9 0 1 1-9-9"></path></svg>
+    <svg id="icon-copy" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+    <svg id="icon-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+</div>
+
+<div class="page-header">
+    <h1 class="page-title">Domains</h1>
+    <p class="page-subtitle">Manage your store's domain settings and DNS configuration.</p>
+</div>
+
+<!-- Primary Domain Card -->
+<div class="domain-card">
+    <div class="domain-card-header">
+        <h2 class="domain-card-title">Primary Domain</h2>
+    </div>
+    <div class="primary-domain">
+        <div class="domain-info">
+            <div class="domain-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                </svg>
+            </div>
+            <div class="domain-details">
+                <h3>{{ customer.domain }}</h3>
+                <span>Primary domain for your store</span>
+            </div>
+        </div>
+        <div class="domain-actions">
+            <span class="domain-badge active">Active</span>
+            <a href="https://{{ customer.domain }}" target="_blank" class="visit-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+                Visit Site
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- DNS Configuration Card -->
+<div class="domain-card">
+    <div class="domain-card-header">
+        <h2 class="domain-card-title">DNS Configuration</h2>
+    </div>
+    <div class="domain-card-body">
+        <div class="info-box">
+            <svg class="info-box-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <div class="info-box-content">
+                <strong>DNS Setup Required</strong>
+                Point your domain to our servers by adding these DNS records at your domain registrar (GoDaddy, Namecheap, Cloudflare, etc.)
+            </div>
+        </div>
+
+        <div class="dns-record">
+            <div class="dns-info">
+                <span class="dns-type">A Record</span>
+                <span class="dns-name">{{ customer.domain }}</span>
+                <span class="dns-value">Points to: {{ server_ip }}</span>
+            </div>
+            <button class="copy-btn" data-copy="{{ server_ip }}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span class="copy-text">Copy IP</span>
+            </button>
+        </div>
+
+        <div class="dns-record">
+            <div class="dns-info">
+                <span class="dns-type">A Record (www)</span>
+                <span class="dns-name">www.{{ customer.domain }}</span>
+                <span class="dns-value">Points to: {{ server_ip }}</span>
+            </div>
+            <button class="copy-btn" data-copy="{{ server_ip }}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span class="copy-text">Copy IP</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Domain Health Card -->
+<div class="domain-card">
+    <div class="domain-card-header">
+        <h2 class="domain-card-title">Domain Health</h2>
+        <button id="refresh-health" class="refresh-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6"></path>
+                <path d="M1 20v-6h6"></path>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+            Refresh
+        </button>
+    </div>
+    <div class="domain-card-body">
+        <div class="health-grid">
+            <div class="health-item" id="dns-health">
+                <div class="health-icon checking">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinning"><path d="M21 12a9 9 0 1 1-9-9"></path></svg>
+                </div>
+                <div class="health-label">DNS Resolution</div>
+                <div class="health-status">Checking...</div>
+                <div class="health-detail" id="dns-detail"></div>
+            </div>
+
+            <div class="health-item" id="ssl-health">
+                <div class="health-icon checking">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinning"><path d="M21 12a9 9 0 1 1-9-9"></path></svg>
+                </div>
+                <div class="health-label">SSL Certificate</div>
+                <div class="health-status">Checking...</div>
+                <div class="health-detail" id="ssl-detail"></div>
+            </div>
+
+            <div class="health-item" id="http-health">
+                <div class="health-icon checking">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinning"><path d="M21 12a9 9 0 1 1-9-9"></path></svg>
+                </div>
+                <div class="health-label">HTTPS Connectivity</div>
+                <div class="health-status">Checking...</div>
+                <div class="health-detail" id="http-detail"></div>
+            </div>
+        </div>
+
+        <div class="ssl-details" id="ssl-details" style="display: none;">
+            <div class="ssl-row">
+                <span class="ssl-label">Certificate Issuer</span>
+                <span class="ssl-value" id="ssl-issuer">-</span>
+            </div>
+            <div class="ssl-row">
+                <span class="ssl-label">Expiry Date</span>
+                <span class="ssl-value" id="ssl-expiry">-</span>
+            </div>
+            <div class="ssl-row">
+                <span class="ssl-label">Days Remaining</span>
+                <span class="ssl-value" id="ssl-days">-</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block dashboard_js %}
+// Copy to clipboard functionality
+document.querySelectorAll('.copy-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const text = btn.dataset.copy;
+        const textEl = btn.querySelector('.copy-text');
+        const originalText = textEl.textContent;
+
+        try {
+            await navigator.clipboard.writeText(text);
+            btn.classList.add('copied');
+            textEl.textContent = 'Copied!';
+            setTimeout(() => {
+                btn.classList.remove('copied');
+                textEl.textContent = originalText;
+            }, 2000);
+        } catch (err) {
+            console.error('Copy failed:', err);
+        }
+    });
+});
+
+// Health check icon helper - clones SVG from templates
+function setHealthIcon(iconContainer, type) {
+    const templateId = 'icon-' + type;
+    const template = document.getElementById(templateId);
+    if (template) {
+        iconContainer.textContent = '';
+        iconContainer.appendChild(template.cloneNode(true));
+    }
+}
+
+function updateHealthItem(id, status, statusText, detail) {
+    const item = document.getElementById(id);
+    const icon = item.querySelector('.health-icon');
+    const statusEl = item.querySelector('.health-status');
+    const detailEl = document.getElementById(id.replace('-health', '-detail'));
+
+    icon.className = 'health-icon ' + status;
+
+    // Set appropriate icon
+    if (status === 'success') {
+        setHealthIcon(icon, 'success');
+    } else if (status === 'warning') {
+        setHealthIcon(icon, 'warning');
+    } else if (status === 'error') {
+        setHealthIcon(icon, 'error');
+    } else {
+        setHealthIcon(icon, 'spinner');
+    }
+
+    statusEl.textContent = statusText;
+    if (detailEl && detail !== undefined) {
+        detailEl.textContent = detail;
+    }
+}
+
+async function checkDomainHealth() {
+    const refreshBtn = document.getElementById('refresh-health');
+    const btnIcon = refreshBtn.querySelector('svg');
+
+    refreshBtn.disabled = true;
+    btnIcon.classList.add('spinning');
+
+    // Reset to checking state
+    updateHealthItem('dns-health', 'checking', 'Checking...', '');
+    updateHealthItem('ssl-health', 'checking', 'Checking...', '');
+    updateHealthItem('http-health', 'checking', 'Checking...', '');
+    document.getElementById('ssl-details').style.display = 'none';
+
+    try {
+        const response = await fetch('/api/domain/health', { credentials: 'same-origin' });
+        const data = await response.json();
+
+        // Update DNS status
+        if (data.dns.status === 'ok') {
+            updateHealthItem('dns-health', 'success', 'Properly configured', 'Resolves to ' + data.dns.resolved_ip);
+        } else if (data.dns.status === 'misconfigured') {
+            updateHealthItem('dns-health', 'warning', 'Misconfigured', 'Points to ' + data.dns.resolved_ip + ' instead of our server');
+        } else if (data.dns.status === 'not_found') {
+            updateHealthItem('dns-health', 'error', 'Not found', 'Domain does not resolve');
+        } else {
+            updateHealthItem('dns-health', 'error', 'Error', data.dns.error || 'Check failed');
+        }
+
+        // Update SSL status
+        if (data.ssl.status === 'valid') {
+            updateHealthItem('ssl-health', 'success', 'Valid certificate', 'Issued by ' + data.ssl.issuer);
+            document.getElementById('ssl-details').style.display = 'block';
+            document.getElementById('ssl-issuer').textContent = data.ssl.issuer || '-';
+            document.getElementById('ssl-expiry').textContent = data.ssl.expiry || '-';
+            const daysEl = document.getElementById('ssl-days');
+            daysEl.textContent = data.ssl.days_remaining !== null ? data.ssl.days_remaining + ' days' : '-';
+            daysEl.className = 'ssl-value ' + (data.ssl.days_remaining < 30 ? 'warning' : 'success');
+        } else if (data.ssl.status === 'invalid') {
+            updateHealthItem('ssl-health', 'error', 'Invalid certificate', data.ssl.error || 'Verification failed');
+        } else if (data.ssl.status === 'no_https') {
+            updateHealthItem('ssl-health', 'error', 'No HTTPS', 'Port 443 not accessible');
+        } else {
+            updateHealthItem('ssl-health', 'warning', 'Unknown', data.ssl.error || 'Could not check');
+        }
+
+        // Update HTTP status
+        if (data.http.status === 'ok') {
+            updateHealthItem('http-health', 'success', 'Connected', 'HTTP ' + (data.http.status_code || 200));
+        } else {
+            updateHealthItem('http-health', 'error', 'Not reachable', data.http.error || 'Connection failed');
+        }
+
+    } catch (error) {
+        updateHealthItem('dns-health', 'error', 'Error', 'Failed to check');
+        updateHealthItem('ssl-health', 'error', 'Error', 'Failed to check');
+        updateHealthItem('http-health', 'error', 'Error', 'Failed to check');
+    }
+
+    refreshBtn.disabled = false;
+    btnIcon.classList.remove('spinning');
+}
+
+document.getElementById('refresh-health').addEventListener('click', checkDomainHealth);
+
+// Check health on page load
+checkDomainHealth();
+{% endblock %}

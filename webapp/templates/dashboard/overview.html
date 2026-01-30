@@ -1,0 +1,527 @@
+{% extends "dashboard/base_dashboard.html" %}
+
+{% block page_title %}Overview{% endblock %}
+
+{% block dashboard_css %}
+/* Quick Actions */
+.quick-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 32px;
+}
+
+.quick-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.quick-action-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-accent);
+    box-shadow: var(--shadow-glow);
+}
+
+.quick-action-btn svg {
+    width: 18px;
+    height: 18px;
+    opacity: 0.8;
+}
+
+.quick-action-btn.primary {
+    background: var(--gradient-primary);
+    border: none;
+    color: white;
+}
+
+.quick-action-btn.primary:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+/* Stat Cards Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+.stat-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: var(--gradient-border);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+}
+
+.stat-card:hover::before {
+    opacity: 1;
+}
+
+.stat-card:hover {
+    box-shadow: var(--shadow-glow);
+}
+
+.stat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.stat-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.stat-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+.stat-icon.status {
+    background: var(--success-muted);
+    color: var(--success);
+}
+
+.stat-icon.status.stopped {
+    background: var(--error-muted);
+    color: var(--error);
+}
+
+.stat-icon.disk {
+    background: var(--warning-muted);
+    color: var(--warning);
+}
+
+.stat-icon.bandwidth {
+    background: var(--info-muted);
+    color: var(--info);
+}
+
+.stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.stat-value.running {
+    color: var(--success);
+}
+
+.stat-value.stopped {
+    color: var(--error);
+}
+
+.stat-subtext {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+}
+
+/* Progress bar for stats */
+.stat-progress {
+    height: 6px;
+    background: var(--bg-hover);
+    border-radius: 3px;
+    margin-top: 12px;
+    overflow: hidden;
+}
+
+.stat-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+}
+
+.stat-progress-fill.healthy {
+    background: var(--success);
+}
+
+.stat-progress-fill.warning {
+    background: var(--warning);
+}
+
+.stat-progress-fill.critical {
+    background: var(--error);
+}
+
+/* Store Details Card */
+.details-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.details-header {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.details-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.details-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0;
+}
+
+.detail-item {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border-subtle);
+    border-right: 1px solid var(--border-subtle);
+}
+
+.detail-item:nth-child(2n) {
+    border-right: none;
+}
+
+.detail-item:nth-last-child(-n+2) {
+    border-bottom: none;
+}
+
+.detail-label {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+}
+
+.detail-value {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.detail-value a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+.detail-value a:hover {
+    text-decoration: underline;
+}
+
+.details-actions {
+    padding: 20px 28px;
+    display: flex;
+    gap: 12px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 640px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .quick-actions {
+        flex-direction: column;
+    }
+
+    .quick-action-btn {
+        justify-content: center;
+    }
+
+    .details-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .detail-item {
+        border-right: none;
+    }
+}
+{% endblock %}
+
+{% block dashboard_content %}
+<div class="page-header">
+    <h1 class="page-title">Overview</h1>
+    <p class="page-subtitle">Welcome back! Here's how your store is doing.</p>
+</div>
+
+<!-- Quick Actions -->
+<div class="quick-actions">
+    <a href="{{ customer.store_url }}" target="_blank" class="quick-action-btn primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+        </svg>
+        Visit Store
+    </a>
+    <button id="restart-btn" class="quick-action-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6"></path>
+            <path d="M1 20v-6h6"></path>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        Restart Store
+    </button>
+    <a href="{{ url_for('dashboard_backups') }}" class="quick-action-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+        </svg>
+        Create Backup
+    </a>
+    <a href="{{ url_for('dashboard_health') }}" class="quick-action-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+        </svg>
+        View Logs
+    </a>
+</div>
+
+<!-- Stats Grid -->
+<div class="stats-grid">
+    <!-- Status Card -->
+    <div class="stat-card">
+        <div class="stat-header">
+            <span class="stat-label">Status</span>
+            <div class="stat-icon status" id="status-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+            </div>
+        </div>
+        <div class="stat-value running" id="status-value">Running</div>
+        <div class="stat-subtext" id="uptime-text">Uptime: Loading...</div>
+    </div>
+
+    <!-- Disk Card -->
+    <div class="stat-card">
+        <div class="stat-header">
+            <span class="stat-label">Disk</span>
+            <div class="stat-icon disk">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                </svg>
+            </div>
+        </div>
+        <div class="stat-value">{{ usage.disk.used_gb|default(0) }} GB</div>
+        <div class="stat-subtext">of {{ usage.disk.limit_gb|default(10) }} GB</div>
+        <div class="stat-progress">
+            <div class="stat-progress-fill {% if usage.disk.percent|default(0) >= 90 %}critical{% elif usage.disk.percent|default(0) >= 80 %}warning{% else %}healthy{% endif %}"
+                 style="width: {{ [usage.disk.percent|default(0), 100]|min }}%"></div>
+        </div>
+    </div>
+
+    <!-- Bandwidth Card -->
+    <div class="stat-card">
+        <div class="stat-header">
+            <span class="stat-label">Bandwidth</span>
+            <div class="stat-icon bandwidth">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                </svg>
+            </div>
+        </div>
+        <div class="stat-value">{{ usage.bandwidth.used_gb|default(0) }} GB</div>
+        <div class="stat-subtext">of {{ usage.bandwidth.limit_gb|default(100) }} GB</div>
+        <div class="stat-progress">
+            <div class="stat-progress-fill {% if usage.bandwidth.percent|default(0) >= 90 %}critical{% elif usage.bandwidth.percent|default(0) >= 80 %}warning{% else %}healthy{% endif %}"
+                 style="width: {{ [usage.bandwidth.percent|default(0), 100]|min }}%"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Store Details -->
+<div class="details-card">
+    <div class="details-header">
+        <h2 class="details-title">Store Details</h2>
+    </div>
+    <div class="details-grid">
+        <div class="detail-item">
+            <div class="detail-label">Domain</div>
+            <div class="detail-value">
+                <a href="https://{{ customer.domain }}" target="_blank">{{ customer.domain }}</a>
+            </div>
+        </div>
+        <div class="detail-item">
+            <div class="detail-label">Platform</div>
+            <div class="detail-value">{{ customer.platform|title }}</div>
+        </div>
+        <div class="detail-item">
+            <div class="detail-label">Plan</div>
+            <div class="detail-value">{{ plan.name if plan else 'N/A' }}</div>
+        </div>
+        <div class="detail-item">
+            <div class="detail-label">Created</div>
+            <div class="detail-value">{{ customer.created_at.strftime('%b %d, %Y') if customer.created_at else 'N/A' }}</div>
+        </div>
+    </div>
+    <div class="details-actions">
+        {% if credentials %}
+        <a href="{{ credentials.admin_url }}" target="_blank" class="quick-action-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
+            Admin Panel
+        </a>
+        {% endif %}
+        <a href="https://{{ customer.domain }}:8443" target="_blank" class="quick-action-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+            </svg>
+            phpMyAdmin
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block dashboard_js %}
+<script nonce="{{ csp_nonce() }}">
+    let restartCooldown = false;
+
+    // Fetch container status
+    async function fetchContainerStatus() {
+        try {
+            const response = await fetch('/api/container/status', {
+                credentials: 'same-origin'
+            });
+
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                throw new Error('Non-JSON response');
+            }
+
+            const data = await response.json();
+
+            const statusValue = document.getElementById('status-value');
+            const statusIcon = document.getElementById('status-icon');
+            const uptimeText = document.getElementById('uptime-text');
+
+            if (data.running) {
+                statusValue.textContent = 'Running';
+                statusValue.className = 'stat-value running';
+                statusIcon.className = 'stat-icon status';
+                uptimeText.textContent = data.uptime ? 'Uptime: ' + data.uptime : '';
+            } else {
+                statusValue.textContent = data.status === 'restarting' ? 'Restarting' : 'Stopped';
+                statusValue.className = 'stat-value stopped';
+                statusIcon.className = 'stat-icon status stopped';
+                uptimeText.textContent = '';
+            }
+
+        } catch (error) {
+            console.error('Failed to fetch status:', error);
+        }
+    }
+
+    // Restart container
+    async function restartContainer() {
+        if (restartCooldown) {
+            alert('Please wait 5 minutes between restarts.');
+            return;
+        }
+
+        if (!confirm('Are you sure you want to restart your store? It will be unavailable for ~30 seconds.')) {
+            return;
+        }
+
+        const btn = document.getElementById('restart-btn');
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+
+        try {
+            const response = await fetch('/api/container/restart', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                alert(data.message);
+                restartCooldown = true;
+                setTimeout(() => {
+                    restartCooldown = false;
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                }, 300000);
+
+                setTimeout(fetchContainerStatus, 5000);
+                setTimeout(fetchContainerStatus, 15000);
+                setTimeout(fetchContainerStatus, 30000);
+            } else {
+                alert('Restart failed: ' + data.message);
+                btn.disabled = false;
+                btn.style.opacity = '1';
+            }
+        } catch (error) {
+            alert('Failed to restart: ' + error.message);
+            btn.disabled = false;
+            btn.style.opacity = '1';
+        }
+    }
+
+    // Initialize
+    document.getElementById('restart-btn').addEventListener('click', restartContainer);
+    fetchContainerStatus();
+    setInterval(fetchContainerStatus, 10000);
+</script>
+{% endblock %}

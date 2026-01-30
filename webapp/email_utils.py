@@ -396,3 +396,225 @@ def send_resource_alert(customer, alert_type, resource_type, used_gb, limit_gb, 
     """
 
     return send_email(customer.email, subject, html_body)
+
+
+def send_2fa_recovery_email(to_email, recovery_code):
+    """
+    Send 2FA recovery code via email.
+
+    Args:
+        to_email: Customer's email address
+        recovery_code: The 8-character recovery code
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    subject = "ShopHosting.io - Your 2FA Recovery Code"
+
+    html_body = f"""
+    <html>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f4f4f5;">
+        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+            <h1 style="margin: 0; color: white; font-size: 24px;">Two-Factor Authentication</h1>
+            <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.7);">Recovery Code Request</p>
+        </div>
+
+        <div style="background: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            <p style="color: #374151; font-size: 16px; margin-bottom: 20px;">
+                You requested to bypass two-factor authentication. Use the code below to complete your login:
+            </p>
+
+            <div style="background: #f0f9ff; border: 2px dashed #0ea5e9; border-radius: 8px; padding: 20px; text-align: center; margin: 25px 0;">
+                <span style="font-family: 'Courier New', monospace; font-size: 32px; font-weight: 700; letter-spacing: 4px; color: #0369a1;">
+                    {recovery_code}
+                </span>
+            </div>
+
+            <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #92400e; font-size: 14px;">
+                    <strong>Security Notice:</strong> This code expires in 15 minutes. If you did not request this code, please secure your account immediately.
+                </p>
+            </div>
+
+            <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
+                For your security, this code can only be used once and will expire shortly. After logging in, we recommend reviewing your account security settings.
+            </p>
+        </div>
+
+        <div style="text-align: center; padding: 20px; color: #9ca3af; font-size: 12px;">
+            <p style="margin: 0;">This email was sent by ShopHosting.io</p>
+            <p style="margin: 5px 0 0 0;">If you didn't request this, please ignore this email.</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    text_body = f"""
+Two-Factor Authentication Recovery Code
+
+You requested to bypass two-factor authentication. Use the code below to complete your login:
+
+Recovery Code: {recovery_code}
+
+IMPORTANT: This code expires in 15 minutes.
+
+If you did not request this code, please secure your account immediately.
+
+--
+ShopHosting.io
+"""
+
+    return send_email(to_email, subject, html_body, text_body)
+
+
+def send_email_change_verification(to_email, token):
+    """
+    Send email change verification link.
+
+    Args:
+        to_email: New email address to verify
+        token: Verification token
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    verify_url = f"https://shophosting.io/settings/verify-email?token={token}"
+    subject = "ShopHosting.io - Verify Your New Email Address"
+
+    html_body = f"""
+    <html>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f4f4f5;">
+        <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+            <h1 style="margin: 0; color: white; font-size: 24px;">Verify Your Email</h1>
+        </div>
+
+        <div style="background: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+            <p style="color: #374151; font-size: 16px; margin-bottom: 20px;">
+                You requested to change your email address to this one. Click the button below to verify:
+            </p>
+
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{verify_url}" style="display: inline-block; background: linear-gradient(135deg, #0088ff 0%, #00d4ff 100%); color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+                    Verify Email Address
+                </a>
+            </div>
+
+            <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 0; color: #92400e; font-size: 14px;">
+                    <strong>Note:</strong> This link expires in 1 hour. If you did not request this change, you can ignore this email.
+                </p>
+            </div>
+
+            <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
+                If the button doesn't work, copy and paste this link into your browser:<br>
+                <a href="{verify_url}" style="color: #0088ff; word-break: break-all;">{verify_url}</a>
+            </p>
+        </div>
+
+        <div style="text-align: center; padding: 20px; color: #9ca3af; font-size: 12px;">
+            <p style="margin: 0;">This email was sent by ShopHosting.io</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    text_body = f"""
+Verify Your New Email Address
+
+You requested to change your email address to this one.
+
+Click the link below to verify:
+{verify_url}
+
+This link expires in 1 hour.
+
+If you did not request this change, you can ignore this email.
+
+--
+ShopHosting.io
+"""
+
+    return send_email(to_email, subject, html_body, text_body)
+
+
+def send_data_export_ready_email(to_email, download_token):
+    """
+    Send notification that data export is ready for download.
+    """
+    subject = "Your Data Export is Ready - ShopHosting.io"
+
+    download_url = f"https://shophosting.io/dashboard/settings/export/download?token={download_token}"
+
+    html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; background-color: #08080a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;">
+    <table width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #08080a;">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <table width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 600px; background: linear-gradient(135deg, #111113 0%, #0d0d0f 100%); border: 1px solid #1e1e24; border-radius: 16px;">
+                    <tr>
+                        <td style="padding: 40px;">
+                            <h1 style="color: #f0f0f5; margin: 0 0 24px 0; font-size: 24px; font-weight: 600;">
+                                Your Data Export is Ready
+                            </h1>
+
+                            <p style="color: #a0a0ab; font-size: 16px; line-height: 1.6; margin: 0 0 24px 0;">
+                                We've compiled all your account data as requested. Your export file is ready for download.
+                            </p>
+
+                            <table cellspacing="0" cellpadding="0" border="0" style="margin: 32px 0;">
+                                <tr>
+                                    <td style="background: linear-gradient(135deg, #0088ff 0%, #0066cc 100%); border-radius: 8px;">
+                                        <a href="{download_url}" style="display: inline-block; padding: 14px 32px; color: #ffffff; text-decoration: none; font-weight: 600; font-size: 16px;">
+                                            Download Your Data
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; padding: 16px; margin: 24px 0;">
+                                <p style="color: #f59e0b; margin: 0; font-size: 14px;">
+                                    <strong>Important:</strong> This download link expires in 7 days. After that, you'll need to request a new export.
+                                </p>
+                            </div>
+
+                            <p style="color: #71717a; font-size: 14px; line-height: 1.6; margin: 24px 0 0 0;">
+                                If the button doesn't work, copy and paste this link:<br>
+                                <a href="{download_url}" style="color: #0088ff; word-break: break-all;">{download_url}</a>
+                            </p>
+
+                            <hr style="border: none; border-top: 1px solid #1e1e24; margin: 32px 0;">
+
+                            <p style="color: #52525b; font-size: 12px; margin: 0; text-align: center;">
+                                &copy; 2026 ShopHosting.io. All rights reserved.
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+
+    text_body = f"""
+Your Data Export is Ready
+
+We've compiled all your account data as requested. Your export file is ready for download.
+
+Download your data here:
+{download_url}
+
+IMPORTANT: This download link expires in 7 days. After that, you'll need to request a new export.
+
+--
+ShopHosting.io
+"""
+
+    return send_email(to_email, subject, html_body, text_body)
