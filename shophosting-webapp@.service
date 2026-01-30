@@ -1,0 +1,27 @@
+[Unit]
+Description=ShopHosting.io Flask Web Application (Instance %i)
+After=network.target mysql.service redis.service
+Wants=mysql.service redis.service
+
+[Service]
+Type=simple
+User=agileweb
+Group=agileweb
+WorkingDirectory=/opt/shophosting/webapp
+Environment="PATH=/opt/shophosting/webapp/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="GUNICORN_BIND=127.0.0.1:500%i"
+EnvironmentFile=/opt/shophosting/.env
+ExecStart=/opt/shophosting/webapp/venv/bin/gunicorn --config gunicorn.conf.py app:app
+Restart=always
+RestartSec=10
+
+# Logging - separate log files per instance
+StandardOutput=append:/opt/shophosting/logs/webapp-%i.log
+StandardError=append:/opt/shophosting/logs/webapp-%i.log
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
