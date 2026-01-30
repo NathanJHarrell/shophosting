@@ -29,6 +29,10 @@ rq==1.16.0
 # Payments
 stripe==7.0.0
 
+# Docker & HTTP
+docker==7.0.0
+requests==2.31.0
+
 # Environment
 python-dotenv==1.0.0
 
