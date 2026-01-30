@@ -48,5 +48,38 @@ echo "[shophosting.io] Elasticsearch is ready!"
 
 echo "[shophosting.io] All dependencies ready. Starting Magento..."
 
+# Start background process to fix PHP-FPM socket permissions
+# This is needed because nginx runs as 'nobody' but PHP-FPM creates socket with 0660
+# The socket is created after s6-overlay starts PHP-FPM, so we need to wait for it
+(
+    SOCKET_PATH="/run/php-fpm.sock"
+    MAX_WAIT=120
+    WAITED=0
+
+    # Wait for socket to exist
+    while [ ! -S "$SOCKET_PATH" ] && [ $WAITED -lt $MAX_WAIT ]; do
+        sleep 1
+        WAITED=$((WAITED + 1))
+    done
+
+    if [ -S "$SOCKET_PATH" ]; then
+        chmod 0666 "$SOCKET_PATH"
+        echo "[shophosting.io] Fixed PHP-FPM socket permissions"
+    fi
+
+    # Keep monitoring and fixing in case socket is recreated (e.g., PHP-FPM restart)
+    while true; do
+        if [ -S "$SOCKET_PATH" ]; then
+            # Check current permissions and fix if needed
+            PERMS=$(stat -c %a "$SOCKET_PATH" 2>/dev/null || echo "666")
+            if [ "$PERMS" != "666" ]; then
+                chmod 0666 "$SOCKET_PATH"
+                echo "[shophosting.io] Re-fixed PHP-FPM socket permissions"
+            fi
+        fi
+        sleep 30
+    done
+) &
+
 # Run original docker-php-entrypoint
 exec docker-php-entrypoint "$@"

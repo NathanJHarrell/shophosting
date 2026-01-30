@@ -230,6 +230,13 @@ def customer_detail(customer_id):
     if in_progress_job:
         provisioning_logs = get_provisioning_logs_by_job(in_progress_job['job_id'])
 
+    # Fetch monitoring data for active customers
+    monitoring_status = None
+    monitoring_alerts = []
+    if customer.status == 'active':
+        monitoring_status = CustomerMonitoringStatus.get_or_create(customer_id)
+        monitoring_alerts = MonitoringAlert.get_by_customer(customer_id, limit=5)
+
     return render_template('admin/customer_detail.html',
                            admin=admin,
                            customer=customer,
@@ -238,7 +245,9 @@ def customer_detail(customer_id):
                            jobs=jobs,
                            audit_logs=audit_logs,
                            provisioning_logs=provisioning_logs,
-                           in_progress_job=in_progress_job)
+                           in_progress_job=in_progress_job,
+                           monitoring_status=monitoring_status,
+                           monitoring_alerts=monitoring_alerts)
 
 
 @admin_bp.route('/customers/<int:customer_id>/resources')
@@ -2181,8 +2190,27 @@ def delete_customer(customer_id):
     customer_path = f"/var/customers/customer-{customer_id}"
     db_deleted = False
     directory_deleted = False
+    subscription_cancelled = False
 
     try:
+        # Cancel Stripe subscription if exists
+        subscription = Subscription.get_by_customer_id(customer_id)
+        if subscription and subscription.stripe_subscription_id:
+            try:
+                import stripe
+                from stripe_integration.config import init_stripe
+                init_stripe()
+                stripe.Subscription.cancel(subscription.stripe_subscription_id)
+                subscription_cancelled = True
+                logger.info(f"Cancelled Stripe subscription {subscription.stripe_subscription_id} for customer {customer_id}")
+            except stripe.error.InvalidRequestError as e:
+                # Subscription may already be cancelled or not exist
+                logger.warning(f"Could not cancel Stripe subscription: {e}")
+                subscription_cancelled = True  # Consider it handled
+            except Exception as e:
+                logger.error(f"Failed to cancel Stripe subscription: {e}")
+                # Continue with deletion even if Stripe cancellation fails
+
         # Stop and remove containers with volume removal
         if os.path.exists(customer_path):
             result = subprocess.run(
@@ -2245,7 +2273,13 @@ def delete_customer(customer_id):
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
+            # Delete related records first (foreign key order)
+            cursor.execute("DELETE FROM invoices WHERE customer_id = %s", (customer_id,))
+            cursor.execute("DELETE FROM subscriptions WHERE customer_id = %s", (customer_id,))
             cursor.execute("DELETE FROM provisioning_jobs WHERE customer_id = %s", (customer_id,))
+            cursor.execute("DELETE FROM monitoring_alerts WHERE customer_id = %s", (customer_id,))
+            cursor.execute("DELETE FROM monitoring_checks WHERE customer_id = %s", (customer_id,))
+            cursor.execute("DELETE FROM customer_monitoring_status WHERE customer_id = %s", (customer_id,))
             cursor.execute("DELETE FROM customers WHERE id = %s", (customer_id,))
             conn.commit()
             cursor.close()
@@ -2255,9 +2289,10 @@ def delete_customer(customer_id):
             logger.error(f"Database deletion failed: {db_error}")
             raise
 
+        subscription_msg = ' and cancelled subscription' if subscription_cancelled else ''
         log_admin_action(admin.id, 'delete_customer', 'customer', customer_id,
-                        f'Deleted customer {email} and removed containers', request.remote_addr)
-        flash(f'Customer {email} and all associated resources deleted successfully.', 'success')
+                        f'Deleted customer {email}{subscription_msg} and removed containers', request.remote_addr)
+        flash(f'Customer {email} and all associated resources deleted successfully.{" Stripe subscription cancelled." if subscription_cancelled else ""}', 'success')
     except Exception as e:
         if directory_deleted and db_deleted:
             log_admin_action(admin.id, 'delete_customer_partial', 'customer', customer_id,

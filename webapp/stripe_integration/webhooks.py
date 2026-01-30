@@ -10,7 +10,7 @@ import sys
 # Add provisioning module to path
 sys.path.insert(0, '/opt/shophosting/provisioning')
 
-from models import Customer, PricingPlan, Subscription, Invoice, WebhookEvent
+from models import Customer, PricingPlan, Subscription, Invoice, WebhookEvent, get_db_connection
 from .config import get_stripe_config
 from email_service import email_service
 
@@ -146,6 +146,17 @@ def handle_checkout_completed(session):
         # Update customer with server assignment
         customer.server_id = server.id
         customer.save()
+
+        # Record the job in provisioning_jobs table
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO provisioning_jobs (customer_id, job_id, status, server_id)
+            VALUES (%s, %s, 'queued', %s)
+        """, (customer.id, job.id, server.id))
+        conn.commit()
+        cursor.close()
+        conn.close()
 
         logger.info(f"Provisioning job {job.id} enqueued for customer {customer.id} on server {server.name}")
     except Exception as e:

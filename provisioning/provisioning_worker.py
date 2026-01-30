@@ -741,13 +741,134 @@ class ProvisioningWorker:
                 
                 commands = []
             elif config['platform'] == 'magento':
-                # Magento is pre-installed in the image via environment variables
-                # Wait a bit more for PHP-FPM to be ready, then verify
-                logger.info("Waiting for Magento to initialize...")
-                time.sleep(15)
-                commands = [
-                    f"docker exec {container_name} php -v"  # Simple health check
-                ]
+                # Magento requires explicit installation via setup:install
+                logger.info("Installing Magento...")
+
+                db_container = f"customer-{config['customer_id']}-db"
+
+                # Get database root password for MySQL configuration
+                db_root_pw_result = subprocess.run(
+                    f"docker exec {db_container} printenv MYSQL_ROOT_PASSWORD",
+                    shell=True, capture_output=True, text=True, timeout=10
+                )
+                db_root_password = db_root_pw_result.stdout.strip()
+
+                # Enable log_bin_trust_function_creators for trigger creation
+                # (Required because customer DB user lacks SUPER privilege)
+                logger.info("Configuring MySQL for Magento triggers...")
+                mysql_config = subprocess.run(
+                    f"docker exec {db_container} mysql -uroot -p'{db_root_password}' -e \"SET GLOBAL log_bin_trust_function_creators = 1;\"",
+                    shell=True, capture_output=True, text=True, timeout=30
+                )
+                if mysql_config.returncode != 0:
+                    logger.warning(f"MySQL config warning: {mysql_config.stderr}")
+
+                # Wait for Elasticsearch to be healthy
+                logger.info("Waiting for Elasticsearch...")
+                es_container = f"customer-{config['customer_id']}-elasticsearch"
+                for attempt in range(30):
+                    es_check = subprocess.run(
+                        f"docker exec {es_container} curl -s http://localhost:9200/_cluster/health",
+                        shell=True, capture_output=True, text=True, timeout=10
+                    )
+                    if es_check.returncode == 0 and '"status"' in es_check.stdout:
+                        logger.info("Elasticsearch is ready")
+                        break
+                    time.sleep(5)
+
+                # Create simple password for installation (avoid special character issues)
+                import random
+                import string
+                simple_password = 'Admin' + ''.join(random.choices(string.digits, k=6))
+
+                # Run Magento setup:install
+                install_script = f'''#!/bin/bash
+cd /var/www/html
+rm -rf generated/* var/cache/* var/page_cache/* app/etc/env.php 2>/dev/null || true
+bin/magento setup:install \\
+  --base-url=https://{config['domain']}/ \\
+  --db-host=db \\
+  --db-name={config['db_name']} \\
+  --db-user={config['db_user']} \\
+  --db-password='{config['db_password']}' \\
+  --admin-firstname=Admin \\
+  --admin-lastname=User \\
+  --admin-email={config['email']} \\
+  --admin-user={config['admin_user']} \\
+  --admin-password='{simple_password}' \\
+  --language=en_US \\
+  --currency=USD \\
+  --timezone=America/Chicago \\
+  --use-rewrites=1 \\
+  --search-engine=opensearch \\
+  --opensearch-host=elasticsearch \\
+  --opensearch-port=9200 \\
+  --cleanup-database
+'''
+
+                logger.info("Running Magento setup:install...")
+                install_result = subprocess.run(
+                    f"echo '{install_script}' | docker exec -i {container_name} bash -",
+                    shell=True, capture_output=True, text=True, timeout=900  # 15 min timeout
+                )
+
+                if install_result.returncode != 0 or 'ERROR' in install_result.stderr:
+                    error_msg = install_result.stderr or install_result.stdout
+                    logger.error(f"Magento install failed: {error_msg[-500:]}")
+                    raise ProvisioningError(f"Magento installation failed: {error_msg[-200:]}")
+
+                logger.info("Magento base installation complete")
+
+                # Run DI compile with increased memory
+                logger.info("Compiling Magento DI...")
+                compile_result = subprocess.run(
+                    f"docker exec {container_name} php -d memory_limit=2G bin/magento setup:di:compile",
+                    shell=True, capture_output=True, text=True, timeout=600
+                )
+                if compile_result.returncode != 0:
+                    logger.warning(f"DI compile warning: {compile_result.stderr[-200:]}")
+
+                # Deploy static content
+                logger.info("Deploying Magento static content...")
+                static_result = subprocess.run(
+                    f"docker exec {container_name} php -d memory_limit=2G bin/magento setup:static-content:deploy -f",
+                    shell=True, capture_output=True, text=True, timeout=600
+                )
+                if static_result.returncode != 0:
+                    logger.warning(f"Static content warning: {static_result.stderr[-200:]}")
+
+                # Fix permissions
+                logger.info("Fixing Magento file permissions...")
+                subprocess.run(
+                    f"docker exec {container_name} chown -R www-data:www-data /var/www/html/generated /var/www/html/var",
+                    shell=True, capture_output=True, text=True, timeout=120
+                )
+                subprocess.run(
+                    f"docker exec {container_name} chmod -R 755 /var/www/html/generated /var/www/html/var",
+                    shell=True, capture_output=True, text=True, timeout=120
+                )
+
+                # Flush cache
+                subprocess.run(
+                    f"docker exec {container_name} bin/magento cache:flush",
+                    shell=True, capture_output=True, text=True, timeout=60
+                )
+
+                # Update customer record with the simple password we used
+                try:
+                    conn = self.get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE customers SET admin_password = %s WHERE id = %s",
+                                   (simple_password, config['customer_id']))
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+                    config['admin_password'] = simple_password  # Update for welcome email
+                except Exception as db_err:
+                    logger.warning(f"Could not update admin password in DB: {db_err}")
+
+                logger.info("Magento installation complete")
+                commands = []
 
             # Final check before running commands
             final_check = subprocess.run(

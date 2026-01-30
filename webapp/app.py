@@ -201,11 +201,21 @@ talisman = Talisman(
 # Rate Limiting with Flask-Limiter
 # =============================================================================
 
+def get_real_ip():
+    """Get real client IP, handling reverse proxy"""
+    # Check X-Forwarded-For header (set by nginx)
+    forwarded_for = request.headers.get('X-Forwarded-For')
+    if forwarded_for:
+        # Take the first IP (original client)
+        return forwarded_for.split(',')[0].strip()
+    return request.remote_addr
+
+
 def get_rate_limit_key():
     """Get rate limit key - use user ID if authenticated, otherwise IP"""
     if current_user and current_user.is_authenticated:
         return f"user:{current_user.id}"
-    return get_remote_address()
+    return get_real_ip()
 
 
 # Configure Redis storage for rate limiting (shared across workers)
@@ -588,7 +598,7 @@ def schedule_consultation():
 
 @app.route('/signup', methods=['GET', 'POST'])
 @app.route('/signup/<plan_slug>', methods=['GET', 'POST'])
-@limiter.limit("10 per hour", error_message="Too many signup attempts. Please try again later.")
+@limiter.limit("30 per hour", error_message="Too many signup attempts. Please try again later.")
 def signup(plan_slug=None):
     """Customer signup page with payment integration"""
     if current_user.is_authenticated:

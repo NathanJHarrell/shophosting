@@ -10,7 +10,7 @@ services:
       - "{{ web_port }}:80"
     environment:
       VARNISH_BACKEND_HOST: web
-      VARNISH_BACKEND_PORT: 8080
+      VARNISH_BACKEND_PORT: 80
       VARNISH_SIZE: 128m
     volumes:
       - ./volumes/varnish/default.vcl:/etc/varnish/default.vcl:ro
@@ -30,7 +30,7 @@ services:
     user: root
     restart: unless-stopped
     expose:
-      - "8080"
+      - "80"
     environment:
       MAGENTO_DATABASE_HOST: db
       MAGENTO_DATABASE_NAME: "{{ db_name }}"
@@ -64,6 +64,7 @@ services:
     image: mysql:8.0
     container_name: {{ container_prefix }}-db
     restart: unless-stopped
+    command: --log-bin-trust-function-creators=1
     environment:
       MYSQL_DATABASE: "{{ db_name }}"
       MYSQL_USER: "{{ db_user }}"

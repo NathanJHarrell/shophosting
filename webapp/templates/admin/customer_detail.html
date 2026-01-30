@@ -160,6 +160,160 @@
     </div>
 </div>
 
+<!-- Monitoring Status -->
+{% if monitoring_status and customer.status == 'active' %}
+<div class="card" style="margin-top: 24px;">
+    <div class="card-header">
+        <h3 class="card-title">Monitoring Status</h3>
+        <a href="{{ url_for('admin.monitoring_detail', customer_id=customer.id) }}" class="btn btn-secondary btn-sm">View Details</a>
+    </div>
+    <div class="card-body">
+        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 24px;">
+            <!-- HTTP Status -->
+            <div>
+                <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 8px;">HTTP Status</div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    {% if monitoring_status.http_status == 'healthy' %}
+                        <span style="width: 10px; height: 10px; background: var(--success); border-radius: 50%; display: inline-block;"></span>
+                        <span style="color: var(--success); font-weight: 500;">Healthy</span>
+                    {% elif monitoring_status.http_status == 'degraded' %}
+                        <span style="width: 10px; height: 10px; background: var(--warning); border-radius: 50%; display: inline-block;"></span>
+                        <span style="color: var(--warning); font-weight: 500;">Degraded</span>
+                    {% elif monitoring_status.http_status == 'down' %}
+                        <span style="width: 10px; height: 10px; background: var(--error); border-radius: 50%; display: inline-block;"></span>
+                        <span style="color: var(--error); font-weight: 500;">Down</span>
+                    {% else %}
+                        <span style="width: 10px; height: 10px; background: var(--text-muted); border-radius: 50%; display: inline-block;"></span>
+                        <span class="text-muted">Unknown</span>
+                    {% endif %}
+                </div>
+                {% if monitoring_status.last_http_check %}
+                <div class="text-muted" style="font-size: 0.75rem; margin-top: 4px;">
+                    {{ monitoring_status.last_http_check.strftime('%H:%M:%S') }}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Container Status -->
+            <div>
+                <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 8px;">Container</div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    {% if monitoring_status.container_status == 'running' %}
+                        <span style="width: 10px; height: 10px; background: var(--success); border-radius: 50%; display: inline-block;"></span>
+                        <span style="color: var(--success); font-weight: 500;">Running</span>
+                    {% elif monitoring_status.container_status == 'stopped' %}
+                        <span style="width: 10px; height: 10px; background: var(--error); border-radius: 50%; display: inline-block;"></span>
+                        <span style="color: var(--error); font-weight: 500;">Stopped</span>
+                    {% else %}
+                        <span style="width: 10px; height: 10px; background: var(--text-muted); border-radius: 50%; display: inline-block;"></span>
+                        <span class="text-muted">Unknown</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Response Time -->
+            <div>
+                <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 8px;">Response Time</div>
+                {% if monitoring_status.last_http_response_ms %}
+                    {% set response_ms = monitoring_status.last_http_response_ms %}
+                    <div style="font-weight: 600; font-size: 1.1rem; color: {% if response_ms < 500 %}var(--success){% elif response_ms < 1500 %}var(--warning){% else %}var(--error){% endif %};">
+                        {{ response_ms }}ms
+                    </div>
+                {% else %}
+                    <div class="text-muted">-</div>
+                {% endif %}
+            </div>
+
+            <!-- Uptime -->
+            <div>
+                <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 8px;">Uptime (24h)</div>
+                {% if monitoring_status.uptime_24h is not none %}
+                    {% set uptime = monitoring_status.uptime_24h | float %}
+                    <div style="font-weight: 600; font-size: 1.1rem; color: {% if uptime >= 99.5 %}var(--success){% elif uptime >= 95 %}var(--warning){% else %}var(--error){% endif %};">
+                        {{ "%.2f"|format(uptime) }}%
+                    </div>
+                {% else %}
+                    <div class="text-muted">-</div>
+                {% endif %}
+            </div>
+
+            <!-- Resource Usage -->
+            <div>
+                <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 8px;">Resources</div>
+                {% if monitoring_status.cpu_percent is not none or monitoring_status.memory_percent is not none %}
+                    <div style="display: flex; gap: 12px; font-size: 0.9rem;">
+                        {% if monitoring_status.cpu_percent is not none %}
+                        <span title="CPU Usage" style="color: {% if monitoring_status.cpu_percent > 80 %}var(--warning){% else %}var(--text-primary){% endif %};">
+                            <strong>CPU:</strong> {{ "%.1f"|format(monitoring_status.cpu_percent) }}%
+                        </span>
+                        {% endif %}
+                        {% if monitoring_status.memory_percent is not none %}
+                        <span title="Memory Usage" style="color: {% if monitoring_status.memory_percent > 80 %}var(--warning){% else %}var(--text-primary){% endif %};">
+                            <strong>Mem:</strong> {{ "%.1f"|format(monitoring_status.memory_percent) }}%
+                        </span>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="text-muted">-</div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if monitoring_status.consecutive_failures > 0 %}
+        <div style="margin-top: 16px; padding: 12px 16px; background: var(--warning-muted); border-radius: var(--radius-md); border: 1px solid rgba(245, 158, 11, 0.25);">
+            <span style="color: var(--warning); font-weight: 500;">
+                ⚠ {{ monitoring_status.consecutive_failures }} consecutive failure{{ 's' if monitoring_status.consecutive_failures > 1 else '' }}
+            </span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Active Alerts -->
+{% if monitoring_alerts %}
+<div class="card" style="margin-top: 24px;">
+    <div class="card-header">
+        <h3 class="card-title">Recent Alerts</h3>
+        <span class="badge badge-warning">{{ monitoring_alerts | length }}</span>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Message</th>
+                    <th>Status</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for alert in monitoring_alerts %}
+                <tr>
+                    <td>
+                        <span class="badge badge-{{ 'error' if alert.alert_type in ['http_down', 'container_stopped'] else 'warning' }}">
+                            {{ alert.alert_type | replace('_', ' ') | title }}
+                        </span>
+                    </td>
+                    <td style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        {{ alert.message }}
+                    </td>
+                    <td>
+                        {% if alert.acknowledged %}
+                            <span class="badge badge-success">Acknowledged</span>
+                        {% else %}
+                            <span class="badge badge-warning">Active</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ alert.created_at.strftime('%Y-%m-%d %H:%M') if alert.created_at else '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
 <!-- Subscription -->
 {% if subscription %}
 <div class="card">
