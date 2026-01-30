@@ -15,7 +15,7 @@ import mimetypes
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_file, abort, g
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_wtf import FlaskForm
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, CSRFError
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_talisman import Talisman
@@ -3229,6 +3229,17 @@ def internal_error(error):
     """Handle 500 errors"""
     logger.error(f"Internal server error: {error}")
     return render_template('errors/500.html'), 500
+
+
+@app.errorhandler(CSRFError)
+def handle_csrf_error(error):
+    """Handle CSRF token errors gracefully"""
+    flash('Your session has expired. Please try again.', 'info')
+    # Redirect back to the referring page, or home if no referrer
+    referrer = request.referrer
+    if referrer:
+        return redirect(referrer)
+    return redirect(url_for('home'))
 
 
 # =============================================================================
