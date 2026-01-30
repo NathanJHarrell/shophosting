@@ -16,6 +16,7 @@ A multi-tenant Docker hosting platform that automatically provisions containeriz
 - **SSL/TLS Support**: Automatic certificate management with Let's Encrypt
 - **Resource Isolation**: Each customer gets isolated Docker containers with configurable resource limits
 - **Automated Backups**: Daily encrypted backups to remote server using restic with 30-day retention
+- **DNS Management**: Customers connect their Cloudflare account to manage DNS records directly from the dashboard
 
 ## Requirements
 
@@ -606,6 +607,62 @@ Add DNS record:
 status.shophosting.io  A  147.135.8.170
 ```
 
+## DNS Management
+
+Customers can connect their Cloudflare account to manage DNS records directly from their ShopHosting dashboard.
+
+### Features
+
+- **Cloudflare OAuth Integration**: Customers connect their own Cloudflare account via secure OAuth flow
+- **Automatic DNS Configuration**: On connection, automatically configures A and CNAME records to point to the customer's store
+- **Confirmation Flow**: If existing DNS records are found, customers review and confirm changes before they're applied
+- **Full DNS Management**: Add, edit, and delete A, CNAME, MX, and TXT records from the dashboard
+- **Record Preservation**: MX and TXT records (email, SPF, DKIM) are preserved during auto-configuration
+- **Local Caching**: DNS records are cached locally for fast display
+
+### Setup
+
+1. **Run the migration:**
+   ```bash
+   mysql -u root -p shophosting_db < /opt/shophosting/migrations/014_add_cloudflare_tables.sql
+   ```
+
+2. **Register a Cloudflare OAuth application:**
+   - Go to [Cloudflare Dashboard](https://dash.cloudflare.com) → Manage Account → API Tokens → OAuth section
+   - Create an OAuth application with redirect URI: `https://yourdomain.com/dashboard/cloudflare/callback`
+   - Request scopes: `zone:read`, `dns:read`, `dns:edit`
+
+3. **Add credentials to `.env`:**
+   ```bash
+   CLOUDFLARE_CLIENT_ID=your_client_id
+   CLOUDFLARE_CLIENT_SECRET=your_client_secret
+   CLOUDFLARE_REDIRECT_URI=https://yourdomain.com/dashboard/cloudflare/callback
+   ```
+
+4. **Restart the webapp:**
+   ```bash
+   sudo systemctl restart shophosting-webapp
+   ```
+
+### Customer Usage
+
+1. Navigate to Dashboard → Domains
+2. Click "Connect Cloudflare" (includes link to Cloudflare signup for new users)
+3. Authorize ShopHosting to manage DNS
+4. Review proposed DNS changes (if existing records found)
+5. Confirm to apply changes
+6. Manage DNS records directly from the dashboard
+
+### Technical Details
+
+| Component | Location |
+|-----------|----------|
+| Database migration | `migrations/014_add_cloudflare_tables.sql` |
+| Models | `webapp/cloudflare/models.py` |
+| API wrapper | `webapp/cloudflare/api.py` |
+| Routes | `webapp/cloudflare/routes.py` |
+| Templates | `webapp/templates/dashboard/domains.html`, `cloudflare_confirm.html` |
+
 ## Architecture
 
 ```
@@ -653,6 +710,11 @@ status.shophosting.io  A  147.135.8.170
 │   │   ├── models.py       # Admin user model
 │   │   ├── api.py          # Admin API endpoints
 │   │   └── templates/      # Admin panel templates
+│   ├── cloudflare/         # Cloudflare DNS management
+│   │   ├── __init__.py
+│   │   ├── api.py          # Cloudflare API v4 wrapper
+│   │   ├── models.py       # Connection and DNS cache models
+│   │   └── routes.py       # OAuth and DNS CRUD routes
 │   │       ├── base_admin.html
 │   │       ├── admins.html           # Admin users list
 │   │       ├── admin_form.html       # Create/edit admin form
