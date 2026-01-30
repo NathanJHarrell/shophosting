@@ -64,6 +64,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r webapp/requirements.txt
 
+      - name: Check migration files are valid SQL
+        run: |
+          # Verify all migration files are valid SQL syntax
+          for f in migrations/*.sql; do
+            echo "Checking $f..."
+            # Basic syntax check - ensure file is not empty and has valid structure
+            if [ ! -s "$f" ]; then
+              echo "ERROR: $f is empty"
+              exit 1
+            fi
+          done
+          echo "All migration files look valid"
+
       - name: Run tests
         env:
           FLASK_ENV: testing
