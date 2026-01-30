@@ -92,32 +92,40 @@ def _create_new_stripe_price(plan, amount_cents):
 
 
 def _update_existing_stripe_price(plan, amount_cents):
-    """Update an existing Stripe price."""
+    """
+    Update an existing Stripe price.
+
+    Note: Stripe prices are immutable - unit_amount cannot be changed.
+    If the amount differs, we must create a new price instead.
+    This function only updates metadata for the same price amount.
+    """
     try:
         if not plan.stripe_price_id:
             return _create_new_stripe_price(plan, amount_cents)
-        
+
+        # Check if price amount actually changed
+        try:
+            existing_price = stripe.Price.retrieve(plan.stripe_price_id)
+            if existing_price.unit_amount != amount_cents:
+                # Stripe prices are immutable - must create new price for amount changes
+                logger.info(f"Price amount changed from {existing_price.unit_amount} to {amount_cents}, creating new price")
+                return _create_new_stripe_price(plan, amount_cents)
+        except Exception as e:
+            logger.warning(f"Could not retrieve existing price {plan.stripe_price_id}: {e}")
+            return _create_new_stripe_price(plan, amount_cents)
+
+        # Only update metadata if amount is the same
         stripe.Price.modify(
             plan.stripe_price_id,
-            unit_amount=amount_cents,
             metadata={'updated_at': datetime.utcnow().isoformat()}
         )
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            UPDATE pricing_plans SET price_monthly = %s, updated_at = NOW() WHERE id = %s
-        """, (plan.price_monthly / 100, plan.id))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        logger.info(f"Updated Stripe price {plan.stripe_price_id} for plan {plan.id}")
+
+        logger.info(f"Updated Stripe price metadata for {plan.stripe_price_id}")
         return {
             'success': True,
-            'message': f'Updated price: {plan.stripe_price_id}'
+            'message': f'Updated price metadata: {plan.stripe_price_id}'
         }
-        
+
     except Exception as e:
         logger.error(f"Error updating Stripe price: {e}")
         return {'success': False, 'message': str(e)}
