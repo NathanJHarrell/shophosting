@@ -17,16 +17,19 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: webapp/requirements.txt
 
       - name: Install linting dependencies
         run: |
           python -m pip install --upgrade pip
           pip install flake8 black isort bandit
 
-      - name: Run flake8
-        run: |
-          flake8 webapp/ --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 webapp/ --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+      - name: Run flake8 (critical errors)
+        run: flake8 webapp/ --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Run flake8 (style warnings)
+        run: flake8 webapp/ --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
 
       - name: Check formatting with black
         run: black --check --line-length 120 webapp/ || echo "Formatting suggestions above (non-blocking)"
@@ -78,6 +81,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: webapp/requirements.txt
 
       - name: Install dependencies
         run: |
@@ -93,9 +98,11 @@ jobs:
 
       - name: Set up test database
         run: |
-          mysql -h 127.0.0.1 -u root -ptestpassword shophosting_test < migrations/001_initial_schema.sql || true
-          mysql -h 127.0.0.1 -u root -ptestpassword shophosting_test < migrations/002_add_admin_users.sql || true
-          mysql -h 127.0.0.1 -u root -ptestpassword shophosting_test < migrations/003_add_tickets_tables.sql || true
+          # Apply all migrations in order
+          for migration in migrations/*.sql; do
+            echo "Applying $migration..."
+            mysql -h 127.0.0.1 -u root -ptestpassword shophosting_test < "$migration" || true
+          done
 
       - name: Run tests
         env:
@@ -111,11 +118,13 @@ jobs:
           STRIPE_WEBHOOK_SECRET: whsec_test_placeholder
         run: |
           cd webapp
-          python -m pytest tests/ -v --tb=short || echo "Tests completed"
+          python -m pytest tests/ -v --tb=short
 
   security:
     name: Security Scan
     runs-on: ubuntu-latest
+    # Run in parallel with lint (no dependency needed)
+
     steps:
       - uses: actions/checkout@v4
 
@@ -123,17 +132,17 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: webapp/requirements.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install safety pip-audit
+          pip install pip-audit
+          pip install -r webapp/requirements.txt
 
       - name: Check for known vulnerabilities in dependencies
-        run: |
-          pip install -r webapp/requirements.txt
-          pip-audit || echo "Vulnerability check completed (review above)"
-        continue-on-error: true
+        run: pip-audit
 
       - name: Check for secret patterns in code
         run: |
