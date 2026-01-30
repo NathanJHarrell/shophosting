@@ -5,8 +5,8 @@
 -- Table: status_incidents
 -- Tracks outages and issues affecting services
 CREATE TABLE IF NOT EXISTS status_incidents (
-    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    server_id INT UNSIGNED NULL,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    server_id INT NULL,
     title VARCHAR(255) NOT NULL,
     status ENUM('investigating', 'identified', 'monitoring', 'resolved') NOT NULL DEFAULT 'investigating',
     severity ENUM('minor', 'major', 'critical') NOT NULL DEFAULT 'minor',
@@ -22,11 +22,11 @@ CREATE TABLE IF NOT EXISTS status_incidents (
 -- Table: status_incident_updates
 -- Timeline updates for incidents
 CREATE TABLE IF NOT EXISTS status_incident_updates (
-    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    incident_id INT UNSIGNED NOT NULL,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    incident_id INT NOT NULL,
     status ENUM('investigating', 'identified', 'monitoring', 'resolved') NOT NULL,
     message TEXT NOT NULL,
-    created_by INT UNSIGNED NULL,
+    created_by INT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_status_incident_updates_incident_id FOREIGN KEY (incident_id) REFERENCES status_incidents(id) ON DELETE CASCADE,
     CONSTRAINT fk_status_incident_updates_created_by FOREIGN KEY (created_by) REFERENCES admin_users(id) ON DELETE SET NULL,
@@ -36,14 +36,14 @@ CREATE TABLE IF NOT EXISTS status_incident_updates (
 -- Table: status_maintenance
 -- Scheduled maintenance windows
 CREATE TABLE IF NOT EXISTS status_maintenance (
-    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    server_id INT UNSIGNED NULL,
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    server_id INT NULL,
     title VARCHAR(255) NOT NULL,
     description TEXT NULL,
     scheduled_start DATETIME NOT NULL,
     scheduled_end DATETIME NOT NULL,
     status ENUM('scheduled', 'in_progress', 'completed', 'cancelled') NOT NULL DEFAULT 'scheduled',
-    created_by INT UNSIGNED NULL,
+    created_by INT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_status_maintenance_server_id FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE SET NULL,
@@ -54,11 +54,11 @@ CREATE TABLE IF NOT EXISTS status_maintenance (
 -- Table: status_overrides
 -- Manual status overrides for services
 CREATE TABLE IF NOT EXISTS status_overrides (
-    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY,
     service_name VARCHAR(100) NOT NULL UNIQUE,
     display_status ENUM('operational', 'degraded', 'partial_outage', 'major_outage', 'maintenance') NOT NULL,
     message TEXT NULL,
-    created_by INT UNSIGNED NULL,
+    created_by INT NULL,
     expires_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
