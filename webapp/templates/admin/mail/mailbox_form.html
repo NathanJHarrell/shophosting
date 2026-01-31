@@ -26,11 +26,7 @@
                         <input type="text" id="username" name="username" class="form-control" required
                                placeholder="username" style="flex: 1;">
                         <span style="color: var(--text-secondary); font-size: 1.1rem;">@</span>
-                        <select id="domain" name="domain" class="form-control" required style="flex: 1;">
-                            {% for domain in domains %}
-                            <option value="{{ domain }}">{{ domain }}</option>
-                            {% endfor %}
-                        </select>
+                        <span style="color: var(--text-primary); font-size: 1rem; padding: 8px 12px; background: var(--bg-surface); border-radius: var(--radius-md);">{{ mail_domain }}</span>
                     </div>
                 </div>
 
@@ -90,7 +86,7 @@
                     </p>
                 </div>
 
-                {% if mailbox and mailbox.is_virtual %}
+                {% if mailbox and not mailbox.is_system_user %}
                 <!-- Password change section for virtual users -->
                 <div class="card" style="margin-top: 24px; background: var(--bg-surface);">
                     <div class="card-header">
@@ -154,7 +150,7 @@
                             <tbody>
                                 {% for alias in mailbox.aliases %}
                                 <tr>
-                                    <td class="mono">{{ alias.alias_email }}</td>
+                                    <td class="mono">{{ alias.alias }}</td>
                                     <td>
                                         {% if alias.is_active %}
                                             <span class="badge badge-active">Active</span>
