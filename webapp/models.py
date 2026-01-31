@@ -1220,7 +1220,7 @@ class Invoice:
                  amount_due=0, amount_paid=0, currency='usd', status='draft',
                  invoice_pdf_url=None, hosted_invoice_url=None,
                  period_start=None, period_end=None, paid_at=None,
-                 created_at=None):
+                 created_at=None, manual=False, notes=None, created_by_admin_id=None):
         self.id = id
         self.customer_id = customer_id
         self.subscription_id = subscription_id
@@ -1236,6 +1236,9 @@ class Invoice:
         self.period_end = period_end
         self.paid_at = paid_at
         self.created_at = created_at or datetime.now()
+        self.manual = manual
+        self.notes = notes
+        self.created_by_admin_id = created_by_admin_id
 
     def save(self):
         """Save invoice to database"""

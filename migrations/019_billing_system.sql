@@ -82,12 +82,38 @@ CREATE TABLE IF NOT EXISTS billing_settings (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Add fields to invoices table for manual invoices
-ALTER TABLE invoices
-    ADD COLUMN IF NOT EXISTS manual BOOLEAN DEFAULT FALSE,
-    ADD COLUMN IF NOT EXISTS notes TEXT NULL,
-    ADD COLUMN IF NOT EXISTS created_by_admin_id INT NULL,
-    ADD CONSTRAINT fk_invoices_created_by_admin
-        FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id) ON DELETE SET NULL;
+-- Note: Run these separately if columns already exist (MySQL < 8.0.19 doesn't support IF NOT EXISTS)
+-- Check if columns exist before adding:
+SET @dbname = DATABASE();
+SET @tablename = 'invoices';
+
+-- Add manual column if not exists
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = @dbname AND table_name = @tablename AND column_name = 'manual');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE invoices ADD COLUMN manual BOOLEAN DEFAULT FALSE', 'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- Add notes column if not exists
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = @dbname AND table_name = @tablename AND column_name = 'notes');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE invoices ADD COLUMN notes TEXT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- Add created_by_admin_id column if not exists
+SET @col_exists = (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = @dbname AND table_name = @tablename AND column_name = 'created_by_admin_id');
+SET @sql = IF(@col_exists = 0, 'ALTER TABLE invoices ADD COLUMN created_by_admin_id INT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- Add foreign key if not exists (check constraint name)
+SET @fk_exists = (SELECT COUNT(*) FROM information_schema.table_constraints WHERE table_schema = @dbname AND table_name = @tablename AND constraint_name = 'fk_invoices_created_by_admin');
+SET @sql = IF(@fk_exists = 0, 'ALTER TABLE invoices ADD CONSTRAINT fk_invoices_created_by_admin FOREIGN KEY (created_by_admin_id) REFERENCES admin_users(id) ON DELETE SET NULL', 'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- Insert default billing settings
 INSERT INTO billing_settings (setting_key, setting_value, updated_by_admin_id) VALUES
