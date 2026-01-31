@@ -447,9 +447,12 @@
             <p>Cancelling your subscription will:</p>
             <ul style="margin: 16px 0; padding-left: 24px;">
                 <li>Continue service until {{ subscription.current_period_end.strftime('%B %d, %Y') if subscription.current_period_end else 'end of billing period' }}</li>
-                <li>Suspend your site after a 7-day grace period</li>
-                <li>Your data will be preserved for 30 days</li>
+                <li>After a 7-day grace period, your site will be <strong>permanently deleted</strong></li>
+                <li style="color: var(--error);"><strong>All data will be removed</strong> - please download backups first</li>
             </ul>
+            <p style="margin-top: 12px; padding: 12px; background: var(--error-muted); border-radius: var(--radius-md);">
+                <strong>Tip:</strong> Consider <em>pausing</em> instead if you might return. Paused accounts preserve your data.
+            </p>
             <div style="margin-top: 16px;">
                 <label for="cancelReason" style="display: block; margin-bottom: 8px; font-weight: 500;">Why are you cancelling? (optional)</label>
                 <select id="cancelReason" name="reason" class="form-control" style="width: 100%;">

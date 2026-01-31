@@ -107,7 +107,7 @@ class SubscriptionWorker:
         return base_date + timedelta(days=GRACE_PERIOD_DAYS)
 
     def suspend_customer(self, customer_id, email, reason):
-        """Suspend a customer and stop their containers"""
+        """Suspend a customer and stop their containers (preserves data)"""
         logger.info(f"Suspending customer {customer_id} ({email}): {reason}")
 
         # Stop containers (does NOT delete data)
@@ -146,17 +146,68 @@ class SubscriptionWorker:
             cursor.close()
             conn.close()
 
-    def send_warning_email(self, customer_id, email, domain, days_until_suspension, reason):
-        """Send warning email before suspension"""
-        logger.info(f"Sending {days_until_suspension}-day warning to {email}")
+    def terminate_customer(self, customer_id, email, reason):
+        """Terminate a customer - delete containers and files (for cancelled subscriptions)"""
+        logger.info(f"Terminating customer {customer_id} ({email}): {reason}")
+
+        # Delete containers and volumes
+        success, msg = ContainerService.delete_containers(customer_id, remove_volumes=True)
+        if not success:
+            logger.warning(f"Could not delete containers for {customer_id}: {msg}")
+
+        # Delete customer files
+        file_success, file_msg = ContainerService.delete_customer_files(customer_id)
+        if not file_success:
+            logger.warning(f"Could not delete files for {customer_id}: {file_msg}")
+
+        # Update customer status to terminated
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE customers
+                SET status = 'suspended',
+                    suspension_reason = %s,
+                    suspended_at = NOW(),
+                    auto_suspended = TRUE
+                WHERE id = %s AND status = 'active'
+            """, (f"TERMINATED: {reason}", customer_id))
+
+            if cursor.rowcount > 0:
+                # Log the termination
+                cursor.execute("""
+                    INSERT INTO customer_suspension_log
+                    (customer_id, action, reason, auto_action)
+                    VALUES (%s, 'terminated', %s, TRUE)
+                """, (customer_id, reason))
+
+            conn.commit()
+            logger.info(f"Customer {customer_id} terminated - containers and files deleted")
+            return cursor.rowcount > 0
+        except Exception as e:
+            logger.error(f"Error terminating customer {customer_id}: {e}")
+            conn.rollback()
+            return False
+        finally:
+            cursor.close()
+            conn.close()
+
+    def send_warning_email(self, customer_id, email, domain, days_until_suspension, reason, will_delete=False):
+        """Send warning email before suspension/termination"""
+        logger.info(f"Sending {days_until_suspension}-day warning to {email} (delete={will_delete})")
 
         try:
-            # Use the existing suspension notification with a warning message
+            if will_delete:
+                message = (f"Warning: Your site and all data will be DELETED in {days_until_suspension} day(s) "
+                          f"due to: {reason}. Please reactivate your subscription or download your data immediately.")
+            else:
+                message = (f"Warning: Your service will be suspended in {days_until_suspension} day(s) "
+                          f"due to: {reason}. Please update your payment method or contact support to avoid interruption.")
+
             send_suspension_notification(
                 to_email=email,
                 domain=domain,
-                reason=f"Warning: Your service will be suspended in {days_until_suspension} day(s) due to: {reason}. "
-                       f"Please update your payment method or contact support to avoid interruption."
+                reason=message
             )
             return True
         except Exception as e:
@@ -217,32 +268,32 @@ class SubscriptionWorker:
             reason = "Subscription cancelled"
 
             if days_until <= 0:
-                # Grace period expired - suspend
-                if self.suspend_customer(customer_id, email, reason):
+                # Grace period expired - TERMINATE (delete containers and files)
+                if self.terminate_customer(customer_id, email, reason):
                     suspended_count += 1
-                    # Send suspension notification
+                    # Send termination notification
                     try:
                         send_suspension_notification(
                             to_email=email,
                             domain=domain,
                             reason=f"Your subscription has been cancelled and the grace period has ended. "
-                                   f"Your site has been suspended. Contact support to reactivate."
+                                   f"Your site and data have been deleted. Contact support if you need assistance."
                         )
                     except Exception as e:
-                        logger.error(f"Failed to send suspension notification: {e}")
+                        logger.error(f"Failed to send termination notification: {e}")
 
             else:
-                # Check if we should send a warning
+                # Check if we should send a warning (will_delete=True for cancellations)
                 for warning_day in WARNING_DAYS:
                     if days_until <= warning_day:
                         warning_type = f'{warning_day}day'
                         if not self.check_warning_sent(customer_id, warning_type):
-                            if self.send_warning_email(customer_id, email, domain, days_until, reason):
+                            if self.send_warning_email(customer_id, email, domain, days_until, reason, will_delete=True):
                                 self.log_warning_sent(customer_id, warning_type, reason)
                                 warning_count += 1
                         break
 
-        logger.info(f"Cancelled subscriptions: {suspended_count} suspended, {warning_count} warnings sent")
+        logger.info(f"Cancelled subscriptions: {suspended_count} terminated, {warning_count} warnings sent")
         return suspended_count, warning_count
 
     def process_past_due_subscriptions(self):

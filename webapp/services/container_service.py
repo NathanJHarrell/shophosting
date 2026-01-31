@@ -167,6 +167,88 @@ class ContainerService:
         return None
 
     @staticmethod
+    def delete_containers(customer_id, remove_volumes=True):
+        """
+        Delete all containers for a customer (removes containers and optionally data)
+
+        Args:
+            customer_id: The customer ID
+            remove_volumes: If True, also removes volumes (data). Default True.
+
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        customer_dir = ContainerService.get_customer_dir(customer_id)
+        compose_file = ContainerService.get_compose_file(customer_id)
+
+        if not compose_file.exists():
+            logger.warning(f"No docker-compose.yml found for customer {customer_id}")
+            return True, "No containers to delete"
+
+        try:
+            logger.info(f"Deleting containers for customer {customer_id} (remove_volumes={remove_volumes})")
+
+            # Build command
+            cmd = ['docker', 'compose', '-f', str(compose_file), 'down']
+            if remove_volumes:
+                cmd.append('-v')  # Remove volumes
+            cmd.append('--remove-orphans')
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=180,
+                cwd=str(customer_dir)
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr or "Unknown error"
+                logger.error(f"Failed to delete containers for customer {customer_id}: {error_msg}")
+                return False, f"Failed to delete containers: {error_msg}"
+
+            logger.info(f"Containers deleted for customer {customer_id}")
+            return True, "Containers deleted successfully"
+
+        except subprocess.TimeoutExpired:
+            logger.error(f"Timeout deleting containers for customer {customer_id}")
+            return False, "Timeout while deleting containers"
+        except Exception as e:
+            logger.error(f"Error deleting containers for customer {customer_id}: {e}")
+            return False, str(e)
+
+    @staticmethod
+    def delete_customer_files(customer_id):
+        """
+        Delete all files for a customer (after containers are removed)
+
+        Args:
+            customer_id: The customer ID
+
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        import shutil
+
+        customer_dir = ContainerService.get_customer_dir(customer_id)
+
+        if not customer_dir.exists():
+            return True, "No files to delete"
+
+        try:
+            logger.info(f"Deleting customer files at {customer_dir}")
+
+            # Remove the entire customer directory
+            shutil.rmtree(str(customer_dir))
+
+            logger.info(f"Customer files deleted for customer {customer_id}")
+            return True, "Files deleted successfully"
+
+        except Exception as e:
+            logger.error(f"Error deleting files for customer {customer_id}: {e}")
+            return False, str(e)
+
+    @staticmethod
     def restart_containers(customer_id):
         """
         Restart all containers for a customer
