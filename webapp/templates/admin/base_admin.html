@@ -363,6 +363,13 @@
         .badge-failed, .badge-error { background: var(--error-muted); color: var(--error); }
         .badge-suspended { background: var(--bg-surface); color: var(--text-tertiary); }
 
+        /* Admin role badges */
+        .badge-super_admin { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
+        .badge-admin { background: var(--info-muted); color: var(--accent-blue); }
+        .badge-finance_admin { background: var(--success-muted); color: var(--success); }
+        .badge-acquisition { background: rgba(236, 72, 153, 0.15); color: #f472b6; }
+        .badge-support { background: var(--warning-muted); color: var(--warning); }
+
         .pulse-indicator {
             display: inline-block;
             width: 8px;
@@ -590,6 +597,15 @@
                 </div>
                 <div class="nav-section">
                     <div class="nav-section-title">Management</div>
+                    {% if session.get('admin_user_role') in ['super_admin', 'admin', 'acquisition'] %}
+                    {# TODO: Enable when admin.leads route is implemented
+                    <a href="{{ url_for('admin.leads') }}" class="nav-link {% if 'leads' in request.endpoint %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                        Leads
+                    </a>
+                    #}
+                    {% endif %}
+                    {% if session.get('admin_user_role') not in ['acquisition'] %}
                     <a href="{{ url_for('admin.customers') }}" class="nav-link {% if 'customer' in request.endpoint %}active{% endif %}">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
                         Customers
@@ -598,6 +614,8 @@
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
                         Provisioning
                     </a>
+                    {% endif %}
+                    {% if session.get('admin_user_role') not in ['acquisition', 'finance_admin'] %}
                     <a href="{{ url_for('admin.tickets') }}" class="nav-link {% if 'ticket' in request.endpoint %}active{% endif %}">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
                         Support Tickets
@@ -606,7 +624,9 @@
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
                         Appointments
                     </a>
+                    {% endif %}
                 </div>
+                {% if session.get('admin_user_role') not in ['acquisition', 'finance_admin', 'support'] %}
                 <div class="nav-section">
                     <div class="nav-section-title">Mail</div>
                     <a href="{{ url_for('admin.mail.dashboard') }}" class="nav-link {% if request.endpoint == 'admin.mail.dashboard' %}active{% endif %}">
@@ -633,6 +653,7 @@
                         Site Pages
                     </a>
                 </div>
+                {% endif %}
                 <div class="nav-section">
                     <div class="nav-section-title">Administration</div>
                     {% if session.get('admin_user_role') == 'super_admin' %}
@@ -641,17 +662,21 @@
                         Pricing Plans
                     </a>
                     {% endif %}
+                    {% if session.get('admin_user_role') not in ['acquisition', 'finance_admin'] %}
                     <a href="{{ url_for('admin.admins') }}" class="nav-link {% if request.endpoint in ['admin.admins', 'admin.new_admin', 'admin.edit_admin'] %}active{% endif %}">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
                         Admin Users
                     </a>
+                    {% endif %}
                     <a href="{{ url_for('admin.change_password') }}" class="nav-link {% if request.endpoint == 'admin.change_password' %}active{% endif %}">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
                         Change Password
                     </a>
                 </div>
+                {% if session.get('admin_user_role') not in ['acquisition', 'support'] %}
                 <div class="nav-section">
                     <div class="nav-section-title">System</div>
+                    {% if session.get('admin_user_role') not in ['finance_admin'] %}
                     <a href="{{ url_for('admin.monitoring') }}" class="nav-link {% if 'monitoring' in request.endpoint %}active{% endif %}">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
                         Monitoring
@@ -670,11 +695,13 @@
                         System Backups
                     </a>
                     #}
+                    {% endif %}
                     <a href="{{ url_for('admin_billing.dashboard') }}" class="nav-link {% if 'admin_billing' in request.endpoint %}active{% endif %}">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         Billing
                     </a>
                 </div>
+                {% endif %}
             </nav>
         </aside>
 

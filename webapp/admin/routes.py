@@ -78,6 +78,18 @@ def admin_or_super_required(f):
     return decorated
 
 
+def acquisition_or_admin_required(f):
+    """Require acquisition, admin, or super_admin role for leads management access"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        role = session.get('admin_user_role')
+        if role not in ['acquisition', 'admin', 'super_admin']:
+            flash('This action requires acquisition or admin privileges.', 'error')
+            return redirect(url_for('admin.dashboard'))
+        return f(*args, **kwargs)
+    return decorated
+
+
 def get_current_admin():
     """Get current logged in admin user"""
     admin_id = session.get('admin_user_id')
@@ -2405,6 +2417,7 @@ class AdminUserForm(FlaskForm):
         ('admin', 'Admin'),
         ('support', 'Support'),
         ('finance_admin', 'Finance Admin'),
+        ('acquisition', 'Acquisition'),
         ('super_admin', 'Super Admin')
     ], default='admin')
     is_active = BooleanField('Active', default=True)

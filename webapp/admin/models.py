@@ -13,6 +13,29 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import get_db_connection
 
 
+# =============================================================================
+# Role Definitions
+# =============================================================================
+
+# Valid admin roles with their hierarchy (highest to lowest privilege)
+ADMIN_ROLES = [
+    'super_admin',    # Everything - full system access including settings
+    'admin',          # Everything except system settings
+    'finance_admin',  # Billing & revenue only (read-only)
+    'acquisition',    # Leads & migration previews only (NEW - for sales/marketing)
+    'support',        # Tickets & limited refunds
+]
+
+# Role descriptions for UI display
+ROLE_DESCRIPTIONS = {
+    'super_admin': 'Full system access including settings',
+    'admin': 'Full access except system settings',
+    'finance_admin': 'Billing and revenue (read-only)',
+    'acquisition': 'Leads and migration previews only',
+    'support': 'Tickets and limited refunds',
+}
+
+
 class AdminUser:
     """Admin user model for admin panel authentication"""
 
@@ -136,6 +159,22 @@ class AdminUser:
             cursor.execute("SELECT * FROM admin_users ORDER BY created_at DESC")
             rows = cursor.fetchall()
             return [AdminUser(**row) for row in rows]
+        finally:
+            cursor.close()
+            conn.close()
+
+    def delete(self):
+        """Delete admin user from database"""
+        if not self.id:
+            raise ValueError("Cannot delete admin user without ID")
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("DELETE FROM admin_users WHERE id = %s", (self.id,))
+            conn.commit()
+            return True
         finally:
             cursor.close()
             conn.close()
