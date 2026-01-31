@@ -11,19 +11,19 @@
     </div>
     <div class="card-body">
         <div style="display: flex; flex-wrap: wrap; gap: 12px;">
-            <a href="{{ url_for('admin.mail_mailbox_create') }}" class="btn btn-primary">
+            <a href="{{ url_for('admin.mail.create_mailbox') }}" class="btn btn-primary">
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                 New Mailbox
             </a>
-            <a href="{{ url_for('admin.mail_mailboxes') }}" class="btn btn-secondary">
+            <a href="{{ url_for('admin.mail.mailboxes') }}" class="btn btn-secondary">
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
                 View All Mailboxes
             </a>
-            <a href="{{ url_for('admin.mail_aliases') }}" class="btn btn-secondary">
+            <a href="{{ url_for('admin.mail.aliases') }}" class="btn btn-secondary">
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
                 Aliases
             </a>
-            <a href="{{ url_for('admin.mail_catch_all') }}" class="btn btn-secondary">
+            <a href="{{ url_for('admin.mail.catch_all') }}" class="btn btn-secondary">
                 <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
                 Catch-All
             </a>
@@ -68,7 +68,7 @@
 <div class="card">
     <div class="card-header">
         <h3 class="card-title">Recent Mailboxes</h3>
-        <a href="{{ url_for('admin.mail_mailboxes') }}" class="btn btn-secondary btn-sm">View All</a>
+        <a href="{{ url_for('admin.mail.mailboxes') }}" class="btn btn-secondary btn-sm">View All</a>
     </div>
     <div class="table-container">
         <table>
@@ -85,7 +85,7 @@
                 {% for mailbox in recent_mailboxes %}
                 <tr>
                     <td>
-                        <a href="{{ url_for('admin.mail_mailbox_edit', mailbox_id=mailbox.id) }}" style="color: var(--text-primary); text-decoration: none;">
+                        <a href="{{ url_for('admin.mail.edit_mailbox', mailbox_id=mailbox.id) }}" style="color: var(--text-primary); text-decoration: none;">
                             {{ mailbox.email }}
                         </a>
                     </td>

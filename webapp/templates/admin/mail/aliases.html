@@ -7,7 +7,7 @@
 <!-- Header with New Alias button -->
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
     <h2 style="margin: 0; font-size: 1.25rem; font-weight: 600;">All Aliases</h2>
-    <a href="{{ url_for('admin.mail_alias_create') }}" class="btn btn-primary">
+    <a href="{{ url_for('admin.mail.create_alias') }}" class="btn btn-primary">
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
         New Alias
     </a>
@@ -23,7 +23,7 @@
     </select>
     <button type="submit" class="btn btn-secondary">Filter</button>
     {% if search or status_filter %}
-        <a href="{{ url_for('admin.mail_aliases') }}" class="btn btn-secondary">Clear</a>
+        <a href="{{ url_for('admin.mail.aliases') }}" class="btn btn-secondary">Clear</a>
     {% endif %}
 </form>
 
@@ -57,7 +57,7 @@
                     </td>
                     <td class="text-muted">{{ alias.created_at.strftime('%Y-%m-%d') if alias.created_at else '-' }}</td>
                     <td>
-                        <form method="POST" action="{{ url_for('admin.mail_alias_delete', alias_id=alias.id) }}" style="display: inline;">
+                        <form method="POST" action="{{ url_for('admin.mail.delete_alias', alias_id=alias.id) }}" style="display: inline;">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to delete this alias?')">Delete</button>
                         </form>
@@ -77,21 +77,21 @@
 {% if total_pages > 1 %}
 <div class="pagination">
     {% if page > 1 %}
-        <a href="{{ url_for('admin.mail_aliases', page=page-1, search=search, status=status_filter) }}">Previous</a>
+        <a href="{{ url_for('admin.mail.aliases', page=page-1, search=search, status=status_filter) }}">Previous</a>
     {% endif %}
 
     {% for p in range(1, total_pages + 1) %}
         {% if p == page %}
             <span class="active">{{ p }}</span>
         {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
-            <a href="{{ url_for('admin.mail_aliases', page=p, search=search, status=status_filter) }}">{{ p }}</a>
+            <a href="{{ url_for('admin.mail.aliases', page=p, search=search, status=status_filter) }}">{{ p }}</a>
         {% elif p == page - 3 or p == page + 3 %}
             <span>...</span>
         {% endif %}
     {% endfor %}
 
     {% if page < total_pages %}
-        <a href="{{ url_for('admin.mail_aliases', page=page+1, search=search, status=status_filter) }}">Next</a>
+        <a href="{{ url_for('admin.mail.aliases', page=page+1, search=search, status=status_filter) }}">Next</a>
     {% endif %}
 </div>
 {% endif %}

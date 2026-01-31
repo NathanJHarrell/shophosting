@@ -7,7 +7,7 @@
 <!-- Header with New Mailbox button -->
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
     <h2 style="margin: 0; font-size: 1.25rem; font-weight: 600;">All Mailboxes</h2>
-    <a href="{{ url_for('admin.mail_mailbox_create') }}" class="btn btn-primary">
+    <a href="{{ url_for('admin.mail.create_mailbox') }}" class="btn btn-primary">
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
         New Mailbox
     </a>
@@ -24,7 +24,7 @@
     </select>
     <button type="submit" class="btn btn-secondary">Filter</button>
     {% if search or status %}
-        <a href="{{ url_for('admin.mail_mailboxes') }}" class="btn btn-secondary">Clear</a>
+        <a href="{{ url_for('admin.mail.mailboxes') }}" class="btn btn-secondary">Clear</a>
     {% endif %}
 </form>
 
@@ -76,8 +76,8 @@
                     </td>
                     <td>
                         <div style="display: flex; gap: 8px;">
-                            <a href="{{ url_for('admin.mail_mailbox_edit', mailbox_id=mailbox.id) }}" class="btn btn-secondary btn-sm">Edit</a>
-                            <form method="POST" action="{{ url_for('admin.mail_mailbox_delete', mailbox_id=mailbox.id) }}" style="display: inline;">
+                            <a href="{{ url_for('admin.mail.edit_mailbox', mailbox_id=mailbox.id) }}" class="btn btn-secondary btn-sm">Edit</a>
+                            <form method="POST" action="{{ url_for('admin.mail.delete_mailbox', mailbox_id=mailbox.id) }}" style="display: inline;">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to delete this mailbox? This action cannot be undone.')">Delete</button>
                             </form>
@@ -98,21 +98,21 @@
 {% if total_pages > 1 %}
 <div class="pagination">
     {% if page > 1 %}
-        <a href="{{ url_for('admin.mail_mailboxes', page=page-1, search=search, status=status) }}">Previous</a>
+        <a href="{{ url_for('admin.mail.mailboxes', page=page-1, search=search, status=status) }}">Previous</a>
     {% endif %}
 
     {% for p in range(1, total_pages + 1) %}
         {% if p == page %}
             <span class="active">{{ p }}</span>
         {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
-            <a href="{{ url_for('admin.mail_mailboxes', page=p, search=search, status=status) }}">{{ p }}</a>
+            <a href="{{ url_for('admin.mail.mailboxes', page=p, search=search, status=status) }}">{{ p }}</a>
         {% elif p == page - 3 or p == page + 3 %}
             <span>...</span>
         {% endif %}
     {% endfor %}
 
     {% if page < total_pages %}
-        <a href="{{ url_for('admin.mail_mailboxes', page=page+1, search=search, status=status) }}">Next</a>
+        <a href="{{ url_for('admin.mail.mailboxes', page=page+1, search=search, status=status) }}">Next</a>
     {% endif %}
 </div>
 {% endif %}

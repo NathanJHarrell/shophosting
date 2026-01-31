@@ -5,7 +5,7 @@
 
 {% block content %}
 <div style="max-width: 700px;">
-    <a href="{{ url_for('admin.mail_mailboxes') }}" class="btn btn-secondary btn-sm mb-4">
+    <a href="{{ url_for('admin.mail.mailboxes') }}" class="btn btn-secondary btn-sm mb-4">
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
         Back to Mailboxes
     </a>
@@ -140,7 +140,7 @@
                 <div class="card" style="margin-top: 24px; background: var(--bg-surface);">
                     <div class="card-header">
                         <h3 class="card-title" style="font-size: 1rem;">Aliases</h3>
-                        <a href="{{ url_for('admin.mail_alias_create', destination=mailbox.email) }}" class="btn btn-secondary btn-sm">Add Alias</a>
+                        <a href="{{ url_for('admin.mail.create_alias', destination=mailbox.email) }}" class="btn btn-secondary btn-sm">Add Alias</a>
                     </div>
                     <div class="table-container">
                         <table>
@@ -163,7 +163,7 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        <form method="POST" action="{{ url_for('admin.mail_alias_delete', alias_id=alias.id) }}" style="display: inline;">
+                                        <form method="POST" action="{{ url_for('admin.mail.delete_alias', alias_id=alias.id) }}" style="display: inline;">
                                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                             <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Delete this alias?')">Delete</button>
                                         </form>
@@ -184,7 +184,7 @@
                     <button type="submit" class="btn btn-primary">
                         {% if mailbox %}Update Mailbox{% else %}Create Mailbox{% endif %}
                     </button>
-                    <a href="{{ url_for('admin.mail_mailboxes') }}" class="btn btn-secondary">Cancel</a>
+                    <a href="{{ url_for('admin.mail.mailboxes') }}" class="btn btn-secondary">Cancel</a>
                 </div>
             </form>
         </div>
@@ -198,7 +198,7 @@
         </div>
         <div class="card-body">
             <p class="text-muted mb-4">Deleting a mailbox is permanent and cannot be undone. All emails will be lost.</p>
-            <form method="POST" action="{{ url_for('admin.mail_mailbox_delete', mailbox_id=mailbox.id) }}">
+            <form method="POST" action="{{ url_for('admin.mail.delete_mailbox', mailbox_id=mailbox.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-danger" onclick="return confirm('Are you absolutely sure? This will permanently delete the mailbox and all its emails.')">
                     Delete Mailbox
