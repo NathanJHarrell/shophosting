@@ -1,0 +1,251 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Subscription - {{ subscription.customer_email }}{% endblock %}
+{% block page_title %}Subscription Management{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin_billing.subscriptions') }}" class="btn btn-secondary btn-sm">Back to Subscriptions</a>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+    <!-- Subscription Details -->
+    <div>
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <h3 class="card-title">Subscription Details</h3>
+                <span class="badge badge-{% if subscription.status == 'active' %}success{% elif subscription.status == 'trialing' %}info{% elif subscription.status in ['past_due', 'unpaid'] %}warning{% elif subscription.status == 'canceled' %}error{% else %}secondary{% endif %}" style="font-size: 0.9rem;">
+                    {{ subscription.status | upper }}
+                </span>
+            </div>
+            <div class="card-body">
+                <table style="width: 100%;">
+                    <tr>
+                        <td class="text-muted" style="padding: 10px 0; width: 160px;">Customer</td>
+                        <td>
+                            <a href="{{ url_for('admin.customer_detail', customer_id=subscription.customer_id) }}" style="color: var(--accent-blue);">
+                                {{ subscription.customer_email }}
+                            </a>
+                            {% if subscription.customer_name %}
+                            <span class="text-muted"> ({{ subscription.customer_name }})</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted" style="padding: 10px 0;">Current Plan</td>
+                        <td style="font-weight: 600;">{{ subscription.plan_name or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted" style="padding: 10px 0;">Monthly Price</td>
+                        <td style="font-size: 1.25rem; font-weight: 600;">
+                            {% if subscription.price_monthly %}
+                            ${{ "%.2f"|format(subscription.price_monthly) }}/mo
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted" style="padding: 10px 0;">Stripe ID</td>
+                        <td class="mono">{{ subscription.stripe_subscription_id or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted" style="padding: 10px 0;">Current Period</td>
+                        <td>
+                            {% if subscription.current_period_start and subscription.current_period_end %}
+                            {{ subscription.current_period_start.strftime('%Y-%m-%d') }} to {{ subscription.current_period_end.strftime('%Y-%m-%d') }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if subscription.cancel_at %}
+                    <tr>
+                        <td class="text-muted" style="padding: 10px 0;">Cancels At</td>
+                        <td style="color: var(--warning);">{{ subscription.cancel_at.strftime('%Y-%m-%d') }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <td class="text-muted" style="padding: 10px 0;">Created</td>
+                        <td>{{ subscription.created_at.strftime('%Y-%m-%d %H:%M') if subscription.created_at else '-' }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recent Invoices -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Recent Invoices</h3>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Invoice</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Date</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inv in invoices %}
+                        <tr>
+                            <td class="mono">{{ inv.stripe_invoice_id[:16] if inv.stripe_invoice_id else inv.id }}...</td>
+                            <td>${{ "%.2f"|format(inv.amount_due / 100) }}</td>
+                            <td>
+                                <span class="badge badge-{% if inv.status == 'paid' %}success{% elif inv.status in ['open', 'draft'] %}warning{% else %}error{% endif %}">
+                                    {{ inv.status }}
+                                </span>
+                            </td>
+                            <td>{{ inv.created_at.strftime('%Y-%m-%d') if inv.created_at else '-' }}</td>
+                            <td>
+                                <a href="{{ url_for('admin_billing.invoice_detail', invoice_id=inv.id) }}" style="color: var(--accent-blue); font-size: 0.85rem;">View</a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-muted">No invoices</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions Panel -->
+    <div>
+        {% if can_modify %}
+        <!-- Change Plan -->
+        {% if subscription.status in ['active', 'trialing'] %}
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <h3 class="card-title">Change Plan</h3>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin_billing.change_subscription_plan', subscription_id=subscription.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div style="margin-bottom: 16px;">
+                        <label style="display: block; margin-bottom: 6px; font-size: 0.85rem;">New Plan</label>
+                        <select name="plan_id" required style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                            <option value="">Select plan...</option>
+                            {% for plan in available_plans %}
+                            {% if plan.is_active and plan.stripe_price_id %}
+                            <option value="{{ plan.id }}" {% if plan.id == subscription.plan_id %}selected{% endif %}>
+                                {{ plan.name }} - ${{ "%.2f"|format(plan.price_monthly) }}/mo
+                            </option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <label style="display: block; margin-bottom: 6px; font-size: 0.85rem;">Reason (optional)</label>
+                        <input type="text" name="reason" placeholder="Customer requested upgrade..."
+                               style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;"
+                            onclick="return confirm('Change subscription plan? Customer will be prorated.');">
+                        Change Plan
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Pause/Resume -->
+        {% if subscription.status == 'active' %}
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <h3 class="card-title">Pause Subscription</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-muted" style="margin-bottom: 16px; font-size: 0.85rem;">
+                    Pausing will suspend payment collection. The subscription remains active but won't charge.
+                </p>
+                <form method="POST" action="{{ url_for('admin_billing.pause_subscription', subscription_id=subscription.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div style="margin-bottom: 16px;">
+                        <label style="display: block; margin-bottom: 6px; font-size: 0.85rem;">Reason (optional)</label>
+                        <input type="text" name="reason" placeholder="Customer vacation..."
+                               style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                    </div>
+                    <button type="submit" class="btn btn-warning" style="width: 100%;">
+                        Pause Subscription
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% elif subscription.status == 'paused' %}
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <h3 class="card-title">Resume Subscription</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-muted" style="margin-bottom: 16px; font-size: 0.85rem;">
+                    Resume payment collection for this subscription.
+                </p>
+                <form method="POST" action="{{ url_for('admin_billing.resume_subscription', subscription_id=subscription.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-success" style="width: 100%;">
+                        Resume Subscription
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Cancel Subscription -->
+        {% if subscription.status in ['active', 'trialing', 'past_due'] %}
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <h3 class="card-title">Cancel Subscription</h3>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin_billing.cancel_subscription', subscription_id=subscription.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div style="margin-bottom: 16px;">
+                        <label style="display: block; margin-bottom: 6px; font-size: 0.85rem;">Reason (required)</label>
+                        <textarea name="reason" required rows="2"
+                                  style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary); resize: vertical;"></textarea>
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" name="immediately" value="true">
+                            <span style="font-size: 0.85rem;">Cancel immediately (instead of end of period)</span>
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-danger" style="width: 100%;"
+                            onclick="return confirm('Are you sure you want to cancel this subscription?');">
+                        Cancel Subscription
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        {% else %}
+        <div class="card">
+            <div class="card-body">
+                <p class="text-muted">You do not have permission to modify subscriptions.</p>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Quick Links -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Quick Links</h3>
+            </div>
+            <div class="card-body" style="display: flex; flex-direction: column; gap: 8px;">
+                <a href="{{ url_for('admin.customer_detail', customer_id=subscription.customer_id) }}" class="btn btn-secondary btn-sm">
+                    View Customer
+                </a>
+                <a href="{{ url_for('admin_billing.invoices', customer=subscription.customer_email) }}" class="btn btn-secondary btn-sm">
+                    View All Invoices
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

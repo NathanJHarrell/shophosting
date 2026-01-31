@@ -1,0 +1,100 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Billing Audit Log{% endblock %}
+{% block page_title %}Billing Audit Log{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin_billing.dashboard') }}" class="btn btn-secondary btn-sm">Back to Billing</a>
+</div>
+
+<!-- Filters -->
+<div class="card" style="margin-bottom: 24px;">
+    <div class="card-body" style="padding: 16px;">
+        <form method="GET" style="display: flex; gap: 16px; align-items: flex-end;">
+            <div>
+                <label style="display: block; margin-bottom: 6px; font-size: 0.85rem; color: var(--text-muted);">Action Type</label>
+                <select name="action" style="padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                    <option value="">All Actions</option>
+                    <option value="refund" {% if action_type == 'refund' %}selected{% endif %}>Refund</option>
+                    <option value="credit" {% if action_type == 'credit' %}selected{% endif %}>Credit</option>
+                    <option value="plan_change" {% if action_type == 'plan_change' %}selected{% endif %}>Plan Change</option>
+                    <option value="subscription_cancel" {% if action_type == 'subscription_cancel' %}selected{% endif %}>Subscription Cancel</option>
+                    <option value="subscription_pause" {% if action_type == 'subscription_pause' %}selected{% endif %}>Subscription Pause</option>
+                    <option value="subscription_resume" {% if action_type == 'subscription_resume' %}selected{% endif %}>Subscription Resume</option>
+                    <option value="payment_retry" {% if action_type == 'payment_retry' %}selected{% endif %}>Payment Retry</option>
+                    <option value="invoice_create" {% if action_type == 'invoice_create' %}selected{% endif %}>Invoice Create</option>
+                    <option value="coupon_apply" {% if action_type == 'coupon_apply' %}selected{% endif %}>Coupon Apply</option>
+                </select>
+            </div>
+            <div>
+                <label style="display: block; margin-bottom: 6px; font-size: 0.85rem; color: var(--text-muted);">Admin</label>
+                <select name="admin_id" style="padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                    <option value="">All Admins</option>
+                    {% for a in admins %}
+                    <option value="{{ a.id }}" {% if admin_filter == a.id|string %}selected{% endif %}>{{ a.full_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            {% if action_type or admin_filter %}
+            <a href="{{ url_for('admin_billing.audit_log') }}" class="btn btn-secondary btn-sm">Clear</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Audit Log</h3>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Action</th>
+                    <th>Admin</th>
+                    <th>Customer</th>
+                    <th>Amount</th>
+                    <th>Reason</th>
+                    <th>IP Address</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td style="white-space: nowrap;">{{ log.created_at.strftime('%Y-%m-%d %H:%M') if log.created_at else '-' }}</td>
+                    <td>
+                        <span class="badge badge-{% if log.action_type == 'refund' %}warning{% elif log.action_type == 'credit' %}success{% elif log.action_type == 'subscription_cancel' %}error{% elif log.action_type == 'plan_change' %}info{% else %}secondary{% endif %}">
+                            {{ log.action_type | replace('_', ' ') | title }}
+                        </span>
+                    </td>
+                    <td>{{ log.admin_name or '-' }}</td>
+                    <td>{{ log.customer_email or '-' }}</td>
+                    <td>
+                        {% if log.amount_cents %}
+                        ${{ "%.2f"|format(log.amount_cents / 100) }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ log.reason or '' }}">
+                        {{ log.reason or '-' }}
+                    </td>
+                    <td class="mono" style="font-size: 0.8rem;">{{ log.ip_address or '-' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-muted">No audit log entries found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div style="margin-top: 24px; padding: 16px; background: var(--bg-secondary); border-radius: var(--radius-md); font-size: 0.85rem; color: var(--text-muted);">
+    <strong>Compliance Note:</strong> This audit log is append-only and cannot be modified or deleted. All billing actions are automatically logged for compliance purposes.
+</div>
+{% endblock %}

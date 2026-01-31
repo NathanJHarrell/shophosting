@@ -1,0 +1,122 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Subscriptions{% endblock %}
+{% block page_title %}Subscriptions{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin_billing.dashboard') }}" class="btn btn-secondary btn-sm">Back to Billing</a>
+</div>
+
+<!-- Filters -->
+<div class="card" style="margin-bottom: 24px;">
+    <div class="card-body" style="padding: 16px;">
+        <form method="GET" style="display: flex; gap: 16px; align-items: flex-end;">
+            <div style="flex: 1;">
+                <label style="display: block; margin-bottom: 6px; font-size: 0.85rem; color: var(--text-muted);">Customer</label>
+                <input type="text" name="customer" value="{{ customer_search }}" placeholder="Search by email or company..."
+                       style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+            </div>
+            <div>
+                <label style="display: block; margin-bottom: 6px; font-size: 0.85rem; color: var(--text-muted);">Status</label>
+                <select name="status" style="padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                    <option value="">All Statuses</option>
+                    <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+                    <option value="trialing" {% if status_filter == 'trialing' %}selected{% endif %}>Trialing</option>
+                    <option value="past_due" {% if status_filter == 'past_due' %}selected{% endif %}>Past Due</option>
+                    <option value="canceled" {% if status_filter == 'canceled' %}selected{% endif %}>Canceled</option>
+                    <option value="unpaid" {% if status_filter == 'unpaid' %}selected{% endif %}>Unpaid</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            {% if status_filter or customer_search %}
+            <a href="{{ url_for('admin_billing.subscriptions') }}" class="btn btn-secondary btn-sm">Clear</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<!-- Results -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">
+            {% if total > 0 %}{{ total }} Subscription{{ 's' if total != 1 else '' }}{% else %}No Subscriptions{% endif %}
+        </h3>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th>Plan</th>
+                    <th>Price</th>
+                    <th>Status</th>
+                    <th>Current Period</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sub in subscriptions %}
+                <tr>
+                    <td>
+                        <div>{{ sub.customer_email or '-' }}</div>
+                        {% if sub.customer_name %}
+                        <div class="text-muted" style="font-size: 0.8rem;">{{ sub.customer_name }}</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ sub.plan_name or '-' }}</td>
+                    <td style="font-weight: 500;">
+                        {% if sub.price_monthly %}
+                        ${{ "%.2f"|format(sub.price_monthly) }}/mo
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-{% if sub.status == 'active' %}success{% elif sub.status == 'trialing' %}info{% elif sub.status in ['past_due', 'unpaid'] %}warning{% elif sub.status == 'canceled' %}error{% else %}secondary{% endif %}">
+                            {{ sub.status }}
+                        </span>
+                        {% if sub.cancel_at %}
+                        <div class="text-muted" style="font-size: 0.75rem;">Cancels {{ sub.cancel_at.strftime('%m/%d') }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if sub.current_period_start and sub.current_period_end %}
+                        {{ sub.current_period_start.strftime('%m/%d') }} - {{ sub.current_period_end.strftime('%m/%d/%Y') }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('admin_billing.subscription_detail', subscription_id=sub.id) }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 4px 8px;">
+                            Manage
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-muted">No subscriptions found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div style="padding: 16px; display: flex; justify-content: center; gap: 8px;">
+        {% if page > 1 %}
+        <a href="{{ url_for('admin_billing.subscriptions', page=page-1, status=status_filter, customer=customer_search) }}" class="btn btn-secondary btn-sm">Previous</a>
+        {% endif %}
+
+        <span style="padding: 8px 16px; color: var(--text-muted);">
+            Page {{ page }} of {{ total_pages }}
+        </span>
+
+        {% if page < total_pages %}
+        <a href="{{ url_for('admin_billing.subscriptions', page=page+1, status=status_filter, customer=customer_search) }}" class="btn btn-secondary btn-sm">Next</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

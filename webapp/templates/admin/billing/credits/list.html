@@ -1,0 +1,82 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Customer Credits{% endblock %}
+{% block page_title %}Customer Credits{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin_billing.dashboard') }}" class="btn btn-secondary btn-sm">Back to Billing</a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">
+            {% if total > 0 %}{{ total }} Credit{{ 's' if total != 1 else '' }}{% else %}No Credits{% endif %}
+        </h3>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th>Amount</th>
+                    <th>Reason</th>
+                    <th>Applied By</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for credit in credits %}
+                <tr>
+                    <td>
+                        <div>{{ credit.customer_email or '-' }}</div>
+                        {% if credit.customer_name %}
+                        <div class="text-muted" style="font-size: 0.8rem;">{{ credit.customer_name }}</div>
+                        {% endif %}
+                    </td>
+                    <td style="color: var(--success); font-weight: 600;">
+                        +${{ "%.2f"|format(credit.amount_cents / 100) }}
+                    </td>
+                    <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        {{ credit.reason or '-' }}
+                    </td>
+                    <td>{{ credit.admin_name or '-' }}</td>
+                    <td>
+                        {% if credit.applied_to_invoice_id %}
+                        <span class="badge badge-info">Applied</span>
+                        {% elif credit.expires_at and credit.expires_at < now %}
+                        <span class="badge badge-error">Expired</span>
+                        {% else %}
+                        <span class="badge badge-success">Available</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ credit.created_at.strftime('%Y-%m-%d %H:%M') if credit.created_at else '-' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-muted">No credits found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div style="padding: 16px; display: flex; justify-content: center; gap: 8px;">
+        {% if page > 1 %}
+        <a href="{{ url_for('admin_billing.credits', page=page-1) }}" class="btn btn-secondary btn-sm">Previous</a>
+        {% endif %}
+
+        <span style="padding: 8px 16px; color: var(--text-muted);">
+            Page {{ page }} of {{ total_pages }}
+        </span>
+
+        {% if page < total_pages %}
+        <a href="{{ url_for('admin_billing.credits', page=page+1) }}" class="btn btn-secondary btn-sm">Next</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

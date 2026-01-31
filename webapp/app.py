@@ -388,6 +388,10 @@ init_stripe()
 from admin import admin_bp
 app.register_blueprint(admin_bp, url_prefix='/admin')
 
+# Register admin billing blueprint
+from admin.billing_routes import billing_bp
+app.register_blueprint(billing_bp)
+
 # Register metrics blueprint for Prometheus
 from metrics import metrics_bp
 app.register_blueprint(metrics_bp)

@@ -1170,6 +1170,22 @@ class Subscription:
             conn.close()
 
     @staticmethod
+    def get_by_id(subscription_id):
+        """Get subscription by ID"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("SELECT * FROM subscriptions WHERE id = %s", (subscription_id,))
+            row = cursor.fetchone()
+            if row:
+                return Subscription(**row)
+            return None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
     def get_by_stripe_subscription_id(stripe_subscription_id):
         """Get subscription by Stripe subscription ID"""
         conn = get_db_connection()
@@ -1255,6 +1271,22 @@ class Invoice:
 
             conn.commit()
             return self
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_id(invoice_id):
+        """Get invoice by ID"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("SELECT * FROM invoices WHERE id = %s", (invoice_id,))
+            row = cursor.fetchone()
+            if row:
+                return Invoice(**row)
+            return None
         finally:
             cursor.close()
             conn.close()

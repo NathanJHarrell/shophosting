@@ -1,0 +1,113 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Invoices{% endblock %}
+{% block page_title %}Invoices{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin_billing.dashboard') }}" class="btn btn-secondary btn-sm">Back to Billing</a>
+</div>
+
+<!-- Filters -->
+<div class="card" style="margin-bottom: 24px;">
+    <div class="card-body" style="padding: 16px;">
+        <form method="GET" style="display: flex; gap: 16px; align-items: flex-end;">
+            <div style="flex: 1;">
+                <label style="display: block; margin-bottom: 6px; font-size: 0.85rem; color: var(--text-muted);">Customer</label>
+                <input type="text" name="customer" value="{{ customer_search }}" placeholder="Search by email or company..."
+                       style="width: 100%; padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+            </div>
+            <div>
+                <label style="display: block; margin-bottom: 6px; font-size: 0.85rem; color: var(--text-muted);">Status</label>
+                <select name="status" style="padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                    <option value="">All Statuses</option>
+                    <option value="paid" {% if status_filter == 'paid' %}selected{% endif %}>Paid</option>
+                    <option value="open" {% if status_filter == 'open' %}selected{% endif %}>Open</option>
+                    <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+                    <option value="uncollectible" {% if status_filter == 'uncollectible' %}selected{% endif %}>Failed</option>
+                    <option value="void" {% if status_filter == 'void' %}selected{% endif %}>Void</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+            {% if status_filter or customer_search %}
+            <a href="{{ url_for('admin_billing.invoices') }}" class="btn btn-secondary btn-sm">Clear</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<!-- Results -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">
+            {% if total > 0 %}{{ total }} Invoice{{ 's' if total != 1 else '' }}{% else %}No Invoices{% endif %}
+        </h3>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Invoice ID</th>
+                    <th>Customer</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Paid</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in invoices %}
+                <tr>
+                    <td class="mono">
+                        <a href="{{ url_for('admin_billing.invoice_detail', invoice_id=invoice.id) }}" style="color: var(--accent-blue);">
+                            {{ invoice.stripe_invoice_id[:20] if invoice.stripe_invoice_id else invoice.id }}...
+                        </a>
+                    </td>
+                    <td>
+                        <div>{{ invoice.customer_email or '-' }}</div>
+                        {% if invoice.customer_name %}
+                        <div class="text-muted" style="font-size: 0.8rem;">{{ invoice.customer_name }}</div>
+                        {% endif %}
+                    </td>
+                    <td style="font-weight: 500;">${{ "%.2f"|format(invoice.amount_due / 100) }}</td>
+                    <td>
+                        <span class="badge badge-{% if invoice.status == 'paid' %}success{% elif invoice.status in ['open', 'draft'] %}warning{% elif invoice.status == 'uncollectible' %}error{% else %}secondary{% endif %}">
+                            {{ invoice.status }}
+                        </span>
+                    </td>
+                    <td>{{ invoice.created_at.strftime('%Y-%m-%d') if invoice.created_at else '-' }}</td>
+                    <td>{{ invoice.paid_at.strftime('%Y-%m-%d') if invoice.paid_at else '-' }}</td>
+                    <td>
+                        <a href="{{ url_for('admin_billing.invoice_detail', invoice_id=invoice.id) }}" class="btn btn-secondary btn-sm" style="font-size: 0.75rem; padding: 4px 8px;">
+                            View
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-muted">No invoices found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div style="padding: 16px; display: flex; justify-content: center; gap: 8px;">
+        {% if page > 1 %}
+        <a href="{{ url_for('admin_billing.invoices', page=page-1, status=status_filter, customer=customer_search) }}" class="btn btn-secondary btn-sm">Previous</a>
+        {% endif %}
+
+        <span style="padding: 8px 16px; color: var(--text-muted);">
+            Page {{ page }} of {{ total_pages }}
+        </span>
+
+        {% if page < total_pages %}
+        <a href="{{ url_for('admin_billing.invoices', page=page+1, status=status_filter, customer=customer_search) }}" class="btn btn-secondary btn-sm">Next</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,163 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Invoice {{ invoice.stripe_invoice_id[:20] }}...{% endblock %}
+{% block page_title %}Invoice Details{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin_billing.invoices') }}" class="btn btn-secondary btn-sm">Back to Invoices</a>
+    <div style="display: flex; gap: 12px;">
+        {% if invoice.hosted_invoice_url %}
+        <a href="{{ invoice.hosted_invoice_url }}" target="_blank" class="btn btn-secondary btn-sm">View on Stripe</a>
+        {% endif %}
+        {% if invoice.invoice_pdf_url %}
+        <a href="{{ invoice.invoice_pdf_url }}" target="_blank" class="btn btn-secondary btn-sm">Download PDF</a>
+        {% endif %}
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px;">
+    <!-- Invoice Details -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Invoice Information</h3>
+            <span class="badge badge-{% if invoice.status == 'paid' %}success{% elif invoice.status in ['open', 'draft'] %}warning{% elif invoice.status == 'uncollectible' %}error{% else %}secondary{% endif %}" style="font-size: 0.9rem;">
+                {{ invoice.status | upper }}
+            </span>
+        </div>
+        <div class="card-body">
+            <table style="width: 100%;">
+                <tr>
+                    <td class="text-muted" style="padding: 10px 0; width: 160px;">Invoice ID</td>
+                    <td class="mono">{{ invoice.stripe_invoice_id }}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted" style="padding: 10px 0;">Customer</td>
+                    <td>
+                        <a href="{{ url_for('admin.customer_detail', customer_id=invoice.customer_id) }}" style="color: var(--accent-blue);">
+                            {{ invoice.customer_email }}
+                        </a>
+                        {% if invoice.customer_name %}
+                        <span class="text-muted"> ({{ invoice.customer_name }})</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="text-muted" style="padding: 10px 0;">Plan</td>
+                    <td>{{ invoice.plan_name or '-' }}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted" style="padding: 10px 0;">Amount Due</td>
+                    <td style="font-size: 1.25rem; font-weight: 600;">${{ "%.2f"|format(invoice.amount_due / 100) }}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted" style="padding: 10px 0;">Amount Paid</td>
+                    <td style="color: var(--success);">${{ "%.2f"|format(invoice.amount_paid / 100) }}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted" style="padding: 10px 0;">Currency</td>
+                    <td style="text-transform: uppercase;">{{ invoice.currency }}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted" style="padding: 10px 0;">Period</td>
+                    <td>
+                        {% if invoice.period_start and invoice.period_end %}
+                        {{ invoice.period_start.strftime('%Y-%m-%d') }} to {{ invoice.period_end.strftime('%Y-%m-%d') }}
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="text-muted" style="padding: 10px 0;">Created</td>
+                    <td>{{ invoice.created_at.strftime('%Y-%m-%d %H:%M') if invoice.created_at else '-' }}</td>
+                </tr>
+                <tr>
+                    <td class="text-muted" style="padding: 10px 0;">Paid At</td>
+                    <td>{{ invoice.paid_at.strftime('%Y-%m-%d %H:%M') if invoice.paid_at else '-' }}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- Actions Panel -->
+    <div>
+        <!-- Refund Action -->
+        {% if invoice.status == 'paid' and can_refund %}
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <h3 class="card-title">Process Refund</h3>
+            </div>
+            <div class="card-body">
+                {% if refund_limit is not none %}
+                <div style="padding: 12px; background: var(--warning-muted); border-radius: var(--radius-md); margin-bottom: 16px; font-size: 0.85rem;">
+                    Your refund limit: ${{ "%.2f"|format(refund_limit / 100) }}
+                </div>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('admin_billing.refund_invoice', invoice_id=invoice.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div style="margin-bottom: 16px;">
+                        <label style="display: block; margin-bottom: 6px; font-size: 0.85rem;">Amount ($)</label>
+                        <input type="number" name="amount" step="0.01" min="0.01"
+                               max="{{ invoice.amount_paid / 100 }}" required
+                               placeholder="0.00"
+                               style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                        <div class="text-muted" style="font-size: 0.75rem; margin-top: 4px;">
+                            Max: ${{ "%.2f"|format(invoice.amount_paid / 100) }}
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <label style="display: block; margin-bottom: 6px; font-size: 0.85rem;">Reason (required)</label>
+                        <textarea name="reason" required rows="3"
+                                  style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary); resize: vertical;"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-warning" style="width: 100%;"
+                            onclick="return confirm('Are you sure you want to process this refund?');">
+                        Process Refund
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Retry Payment Action -->
+        {% if invoice.status in ['open', 'uncollectible'] and admin_role in ['support', 'admin', 'super_admin'] %}
+        <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+                <h3 class="card-title">Retry Payment</h3>
+            </div>
+            <div class="card-body">
+                <p class="text-muted" style="margin-bottom: 16px; font-size: 0.85rem;">
+                    Attempt to charge the customer's payment method again.
+                </p>
+                <form method="POST" action="{{ url_for('admin_billing.retry_invoice_payment', invoice_id=invoice.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-primary" style="width: 100%;"
+                            onclick="return confirm('Retry payment for this invoice?');">
+                        Retry Payment
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Quick Links -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Quick Links</h3>
+            </div>
+            <div class="card-body" style="display: flex; flex-direction: column; gap: 8px;">
+                <a href="{{ url_for('admin.customer_detail', customer_id=invoice.customer_id) }}" class="btn btn-secondary btn-sm">
+                    View Customer
+                </a>
+                {% if invoice.subscription_id %}
+                <a href="{{ url_for('admin_billing.subscription_detail', subscription_id=invoice.subscription_id) }}" class="btn btn-secondary btn-sm">
+                    View Subscription
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
