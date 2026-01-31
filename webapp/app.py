@@ -306,9 +306,23 @@ def check_session_timeout():
                     f"SESSION_TIMEOUT: user={current_user.id} email={current_user.email} "
                     f"idle_time={idle_time:.0f}s IP={request.remote_addr}"
                 )
+                # Preserve admin session data before clearing
+                admin_session_data = {
+                    'admin_user_id': session.get('admin_user_id'),
+                    'admin_user_name': session.get('admin_user_name'),
+                    'admin_user_role': session.get('admin_user_role'),
+                    'admin_last_activity': session.get('admin_last_activity'),
+                }
                 logout_user()
                 session.clear()
+                # Restore admin session if it existed
+                for key, value in admin_session_data.items():
+                    if value is not None:
+                        session[key] = value
                 flash('Your session has expired due to inactivity. Please log in again.', 'info')
+                # Redirect to admin login if on an admin route
+                if request.endpoint and request.endpoint.startswith('admin.'):
+                    return redirect(url_for('admin.login'))
                 return redirect(url_for('login'))
         session['last_activity'] = time.time()
 
@@ -408,6 +422,10 @@ app.register_blueprint(status_bp, url_prefix='/status')
 from cloudflare import cloudflare_bp
 app.register_blueprint(cloudflare_bp)
 
+# Register leads blueprint for public speed test pages (no prefix for public routes)
+from leads import leads_bp
+app.register_blueprint(leads_bp, url_prefix='')
+
 # Exempt metrics endpoints from rate limiting (Prometheus scrapes frequently)
 limiter.exempt(app.view_functions['metrics.prometheus_metrics'])
 limiter.exempt(app.view_functions['metrics.health_check'])
@@ -417,6 +435,17 @@ limiter.exempt(app.view_functions['container_metrics.container_metrics'])
 # Admin accounts are high-value targets, so we limit more aggressively
 limiter.limit("3 per minute")(app.view_functions['admin.login'])
 limiter.limit("10 per hour")(app.view_functions['admin.login'])
+
+# Apply rate limiting to leads scan endpoint (prevent abuse)
+# 10 scans per hour per IP to prevent automated scraping
+limiter.limit("10 per hour", error_message="Too many scan requests. Please try again later.")(
+    app.view_functions['leads.speed_test_scan']
+)
+
+# Exempt leads API endpoints from CSRF (they accept JSON)
+csrf.exempt(app.view_functions['leads.speed_test_scan'])
+csrf.exempt(app.view_functions['leads.speed_test_unlock'])
+csrf.exempt(app.view_functions['leads.request_preview'])
 
 
 @login_manager.user_loader

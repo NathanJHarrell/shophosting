@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}Performance Report - {{ scan.url }} - ShopHosting.io{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 1000px; margin: 40px auto; padding: 0 20px;">
+    <!-- Header -->
+    <div class="card" style="padding: 32px; margin-bottom: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
+            <div>
+                <h1 style="font-size: 1.5rem; margin-bottom: 8px;">Performance Report</h1>
+                <p style="color: var(--text-secondary);">{{ scan.url }}</p>
+                <p style="color: var(--text-tertiary); font-size: 0.85rem;">
+                    Scanned on {{ scan.created_at.strftime('%B %d, %Y at %H:%M UTC') if scan.created_at else 'N/A' }}
+                </p>
+            </div>
+            <div style="text-align: center;">
+                <div style="font-size: 3.5rem; font-weight: 700;
+                    {% if scan.performance_score >= 90 %}color: var(--success);
+                    {% elif scan.performance_score >= 50 %}color: var(--warning);
+                    {% else %}color: var(--error);{% endif %}">
+                    {{ scan.performance_score or '?' }}
+                </div>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">Performance Score</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+        <div class="card" style="padding: 24px; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 600; color: var(--accent-cyan);">
+                {{ scan.load_time_ms or 'N/A' }}<span style="font-size: 1rem; color: var(--text-secondary);">ms</span>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 0.9rem;">Load Time</p>
+        </div>
+        <div class="card" style="padding: 24px; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 600; color: var(--accent-blue);">
+                {{ scan.ttfb_ms or 'N/A' }}<span style="font-size: 1rem; color: var(--text-secondary);">ms</span>
+            </div>
+            <p style="color: var(--text-secondary); font-size: 0.9rem;">Time to First Byte</p>
+        </div>
+        <div class="card" style="padding: 24px; text-align: center;">
+            <div style="font-size: 2rem; font-weight: 600; color: var(--error);">
+                {% if scan.estimated_revenue_loss %}
+                ${{ '{:,.0f}'.format(scan.estimated_revenue_loss) }}
+                {% else %}
+                N/A
+                {% endif %}
+            </div>
+            <p style="color: var(--text-secondary); font-size: 0.9rem;">Est. Monthly Revenue Loss</p>
+        </div>
+    </div>
+
+    <!-- Core Web Vitals -->
+    {% if pagespeed_data and pagespeed_data.metrics %}
+    <div class="card" style="padding: 24px; margin-bottom: 24px;">
+        <h2 style="font-size: 1.25rem; margin-bottom: 20px;">Core Web Vitals</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
+            {% if pagespeed_data.metrics.lcp %}
+            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-md);">
+                <p style="color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 4px;">Largest Contentful Paint</p>
+                <p style="font-size: 1.25rem; font-weight: 600;">{{ pagespeed_data.metrics.lcp.display }}</p>
+            </div>
+            {% endif %}
+            {% if pagespeed_data.metrics.fcp %}
+            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-md);">
+                <p style="color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 4px;">First Contentful Paint</p>
+                <p style="font-size: 1.25rem; font-weight: 600;">{{ pagespeed_data.metrics.fcp.display }}</p>
+            </div>
+            {% endif %}
+            {% if pagespeed_data.metrics.cls %}
+            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-md);">
+                <p style="color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 4px;">Cumulative Layout Shift</p>
+                <p style="font-size: 1.25rem; font-weight: 600;">{{ pagespeed_data.metrics.cls.display }}</p>
+            </div>
+            {% endif %}
+            {% if pagespeed_data.metrics.tbt %}
+            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-md);">
+                <p style="color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 4px;">Total Blocking Time</p>
+                <p style="font-size: 1.25rem; font-weight: 600;">{{ pagespeed_data.metrics.tbt.display }}</p>
+            </div>
+            {% endif %}
+            {% if pagespeed_data.metrics.speed_index %}
+            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-md);">
+                <p style="color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 4px;">Speed Index</p>
+                <p style="font-size: 1.25rem; font-weight: 600;">{{ pagespeed_data.metrics.speed_index.display }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Technology & Hosting Detection -->
+    {% if custom_probe_data %}
+    <div class="card" style="padding: 24px; margin-bottom: 24px;">
+        <h2 style="font-size: 1.25rem; margin-bottom: 20px;">Technology Analysis</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+            {% if custom_probe_data.technology %}
+            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-md);">
+                <p style="color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 4px;">Platform</p>
+                <p style="font-size: 1.1rem; font-weight: 600; text-transform: capitalize;">
+                    {{ custom_probe_data.technology.platform | default('Unknown') }}
+                </p>
+            </div>
+            {% endif %}
+            {% if custom_probe_data.hosting %}
+            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-md);">
+                <p style="color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 4px;">Hosting Provider</p>
+                <p style="font-size: 1.1rem; font-weight: 600; text-transform: capitalize;">
+                    {{ custom_probe_data.hosting.provider | default('Unknown') }}
+                </p>
+            </div>
+            {% endif %}
+            {% if custom_probe_data.headers and custom_probe_data.headers.cdn %}
+            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-md);">
+                <p style="color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 4px;">CDN</p>
+                <p style="font-size: 1.1rem; font-weight: 600; text-transform: capitalize;">
+                    {% if custom_probe_data.headers.cdn.using_cdn %}
+                        {{ custom_probe_data.headers.cdn.detected | default('Active') }}
+                    {% else %}
+                        Not Detected
+                    {% endif %}
+                </p>
+            </div>
+            {% endif %}
+            {% if custom_probe_data.ssl %}
+            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-md);">
+                <p style="color: var(--text-tertiary); font-size: 0.8rem; margin-bottom: 4px;">SSL Certificate</p>
+                <p style="font-size: 1.1rem; font-weight: 600;">
+                    {% if custom_probe_data.ssl.valid %}
+                        Valid ({{ custom_probe_data.ssl.days_until_expiry }} days left)
+                    {% else %}
+                        Invalid
+                    {% endif %}
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recommendations -->
+    {% if pagespeed_data and pagespeed_data.recommendations %}
+    <div class="card" style="padding: 24px; margin-bottom: 24px;">
+        <h2 style="font-size: 1.25rem; margin-bottom: 20px;">Top Recommendations</h2>
+        <div style="display: flex; flex-direction: column; gap: 12px;">
+            {% for rec in pagespeed_data.recommendations[:5] %}
+            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-md); border-left: 3px solid var(--warning);">
+                <p style="font-weight: 500; margin-bottom: 4px;">{{ rec.title }}</p>
+                {% if rec.savings_ms > 0 %}
+                <p style="color: var(--success); font-size: 0.85rem;">Potential savings: {{ rec.savings_ms }}ms</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- CTA Section -->
+    <div class="card" style="padding: 32px; text-align: center; background: var(--gradient-glow); border: 1px solid var(--border-accent);">
+        <h2 style="font-size: 1.5rem; margin-bottom: 12px;">Ready to Boost Your Store's Performance?</h2>
+        <p style="color: var(--text-secondary); margin-bottom: 24px; max-width: 600px; margin-left: auto; margin-right: auto;">
+            Our team can migrate your store to our optimized infrastructure and dramatically improve your load times.
+            Request a free migration preview to see the difference.
+        </p>
+
+        {% if migration_request %}
+        <div style="padding: 16px; background: var(--success-muted); border-radius: var(--radius-md); color: var(--success);">
+            <p style="font-weight: 500;">Migration preview request submitted!</p>
+            <p style="font-size: 0.9rem;">Our team will contact you at {{ scan.email }} within 24 hours.</p>
+        </div>
+        {% else %}
+        <form id="preview-form" method="POST" action="{{ url_for('leads.request_preview', scan_id=scan.id) }}" style="max-width: 400px; margin: 0 auto;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
+                <input type="text" name="current_host" placeholder="Current hosting provider (optional)"
+                    style="padding: 12px 16px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-elevated); color: var(--text-primary);">
+                <input type="number" name="monthly_revenue" placeholder="Monthly revenue (optional)"
+                    style="padding: 12px 16px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-elevated); color: var(--text-primary);">
+            </div>
+            <button type="submit" class="btn-primary" style="width: 100%; padding: 14px 28px;">
+                Request Free Migration Preview
+            </button>
+        </form>
+        {% endif %}
+    </div>
+
+    <!-- Back to speed test -->
+    <div style="text-align: center; margin-top: 24px;">
+        <a href="{{ url_for('leads.speed_test') }}" style="color: var(--text-secondary); text-decoration: none;">
+            &larr; Test another site
+        </a>
+    </div>
+</div>
+{% endblock %}

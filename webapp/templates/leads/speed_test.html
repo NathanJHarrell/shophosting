@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}Free Site Speed Test - ShopHosting.io{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 900px; margin: 60px auto; padding: 0 20px;">
+    <div class="card" style="padding: 40px; text-align: center;">
+        <h1 style="font-size: 2.5rem; margin-bottom: 16px; background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+            Free Site Speed Test
+        </h1>
+        <p style="color: var(--text-secondary); font-size: 1.1rem; margin-bottom: 32px;">
+            Discover how your store's performance impacts your revenue and conversions.
+        </p>
+
+        {% if not scan %}
+        <!-- Initial form state -->
+        <form id="scan-form" method="POST" action="{{ url_for('leads.speed_test_scan') }}" style="max-width: 500px; margin: 0 auto;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div style="display: flex; gap: 12px;">
+                <input type="text" name="url" id="url-input"
+                    placeholder="Enter your store URL (e.g., mystore.com)"
+                    style="flex: 1; padding: 14px 18px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-elevated); color: var(--text-primary); font-size: 1rem;"
+                    required>
+                <button type="submit" class="btn-primary" style="padding: 14px 28px; white-space: nowrap;">
+                    Analyze
+                </button>
+            </div>
+        </form>
+
+        <div id="scan-progress" style="display: none; margin-top: 32px;">
+            <div class="loading-spinner" style="width: 48px; height: 48px; margin: 0 auto 16px;"></div>
+            <p id="progress-text" style="color: var(--text-secondary);">Analyzing your site...</p>
+            <div style="background: var(--bg-elevated); border-radius: 8px; height: 8px; margin-top: 16px; overflow: hidden;">
+                <div id="progress-bar" style="background: var(--gradient-primary); height: 100%; width: 10%; transition: width 0.5s ease;"></div>
+            </div>
+        </div>
+
+        {% else %}
+        <!-- Scan in progress or completed state -->
+        <div id="scan-result">
+            {% if status.status == 'completed' %}
+                <div style="margin-bottom: 24px;">
+                    <div style="font-size: 4rem; font-weight: 700; background: var(--gradient-primary); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                        {{ scan.performance_score or '?' }}<span style="font-size: 2rem;">/100</span>
+                    </div>
+                    <p style="color: var(--text-secondary);">Performance Score</p>
+                </div>
+
+                {% if not scan.email %}
+                <form id="unlock-form" method="POST" action="{{ url_for('leads.speed_test_unlock', scan_id=scan.id) }}" style="max-width: 400px; margin: 24px auto;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                        Enter your email to unlock the full performance report.
+                    </p>
+                    <div style="display: flex; gap: 12px;">
+                        <input type="email" name="email" placeholder="your@email.com"
+                            style="flex: 1; padding: 14px 18px; border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-elevated); color: var(--text-primary);"
+                            required>
+                        <button type="submit" class="btn-primary" style="padding: 14px 28px;">
+                            Unlock Report
+                        </button>
+                    </div>
+                </form>
+                {% else %}
+                <a href="{{ url_for('leads.report', scan_id=scan.id) }}" class="btn-primary" style="display: inline-block; padding: 14px 32px;">
+                    View Full Report
+                </a>
+                {% endif %}
+            {% else %}
+                <div class="loading-spinner" style="width: 48px; height: 48px; margin: 0 auto 16px;"></div>
+                <p style="color: var(--text-secondary);">Analyzing {{ scan.url }}...</p>
+                <div style="background: var(--bg-elevated); border-radius: 8px; height: 8px; margin-top: 16px; overflow: hidden;">
+                    <div id="progress-bar" style="background: var(--gradient-primary); height: 100%; width: {{ status.progress }}%; transition: width 0.5s ease;"></div>
+                </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Benefits section -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; margin-top: 40px;">
+        <div class="card" style="padding: 24px; text-align: center;">
+            <div style="font-size: 2rem; margin-bottom: 12px;">&#9889;</div>
+            <h3 style="margin-bottom: 8px;">Performance Score</h3>
+            <p style="color: var(--text-secondary); font-size: 0.9rem;">Get your Google PageSpeed score and Core Web Vitals.</p>
+        </div>
+        <div class="card" style="padding: 24px; text-align: center;">
+            <div style="font-size: 2rem; margin-bottom: 12px;">&#128176;</div>
+            <h3 style="margin-bottom: 8px;">Revenue Impact</h3>
+            <p style="color: var(--text-secondary); font-size: 0.9rem;">See how slow load times affect your sales.</p>
+        </div>
+        <div class="card" style="padding: 24px; text-align: center;">
+            <div style="font-size: 2rem; margin-bottom: 12px;">&#128295;</div>
+            <h3 style="margin-bottom: 8px;">Recommendations</h3>
+            <p style="color: var(--text-secondary); font-size: 0.9rem;">Get actionable tips to improve performance.</p>
+        </div>
+    </div>
+</div>
+
+<style>
+.loading-spinner {
+    border: 4px solid var(--bg-elevated);
+    border-top: 4px solid var(--accent-blue);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+
+{% if scan and status.status != 'completed' %}
+<script>
+// Poll for scan status
+(function() {
+    var pollInterval = setInterval(function() {
+        fetch('{{ url_for("leads.speed_test_status", scan_id=scan.id) }}', {
+            headers: { 'Accept': 'application/json' }
+        })
+        .then(function(response) { return response.json(); })
+        .then(function(data) {
+            document.getElementById('progress-bar').style.width = data.progress + '%';
+            if (data.status === 'completed') {
+                clearInterval(pollInterval);
+                window.location.reload();
+            }
+        })
+        .catch(function(err) {
+            console.error('Poll error:', err);
+        });
+    }, 2000);
+})();
+</script>
+{% endif %}
+
+{% if not scan %}
+<script>
+// Handle form submission with AJAX
+document.getElementById('scan-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    var form = this;
+    var formData = new FormData(form);
+    var progressDiv = document.getElementById('scan-progress');
+    var progressBar = document.getElementById('progress-bar');
+
+    form.style.display = 'none';
+    progressDiv.style.display = 'block';
+
+    fetch(form.action, {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRFToken': formData.get('csrf_token')
+        },
+        body: formData
+    })
+    .then(function(response) { return response.json(); })
+    .then(function(data) {
+        if (data.error) {
+            alert(data.error);
+            form.style.display = 'flex';
+            progressDiv.style.display = 'none';
+            return;
+        }
+
+        // Start polling
+        var progress = 10;
+        var pollInterval = setInterval(function() {
+            fetch(data.status_url, {
+                headers: { 'Accept': 'application/json' }
+            })
+            .then(function(response) { return response.json(); })
+            .then(function(statusData) {
+                progressBar.style.width = statusData.progress + '%';
+                document.getElementById('progress-text').textContent =
+                    statusData.status === 'processing' ? 'Processing results...' : 'Analyzing your site...';
+
+                if (statusData.status === 'completed') {
+                    clearInterval(pollInterval);
+                    window.location.href = data.status_url;
+                }
+            })
+            .catch(function(err) {
+                console.error('Poll error:', err);
+            });
+        }, 2000);
+    })
+    .catch(function(err) {
+        console.error('Submit error:', err);
+        alert('An error occurred. Please try again.');
+        form.style.display = 'flex';
+        progressDiv.style.display = 'none';
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

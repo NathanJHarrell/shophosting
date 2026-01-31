@@ -9,3 +9,4 @@ leads_bp = Blueprint('leads', __name__, template_folder='../templates/leads')
 
 from . import models
 from . import scanner
+from . import routes
