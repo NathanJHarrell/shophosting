@@ -141,13 +141,13 @@ class Mailbox:
             where_clause = 'WHERE ' + ' AND '.join(conditions)
 
         # Get total count
-        cursor.execute(f'SELECT COUNT(*) as total FROM virtual_mailboxes {where_clause}', params)
+        cursor.execute(f'SELECT COUNT(*) as total FROM mail_mailboxes {where_clause}', params)
         total = cursor.fetchone()['total']
 
         # Get paginated results
         offset = (page - 1) * per_page
         cursor.execute(f'''
-            SELECT * FROM virtual_mailboxes
+            SELECT * FROM mail_mailboxes
             {where_clause}
             ORDER BY created_at DESC
             LIMIT %s OFFSET %s
@@ -162,7 +162,7 @@ class Mailbox:
     def get_by_id(db, mailbox_id):
         """Get a mailbox by its ID."""
         cursor = db.cursor(dictionary=True)
-        cursor.execute('SELECT * FROM virtual_mailboxes WHERE id = %s', (mailbox_id,))
+        cursor.execute('SELECT * FROM mail_mailboxes WHERE id = %s', (mailbox_id,))
         result = cursor.fetchone()
         cursor.close()
         return result
@@ -171,7 +171,7 @@ class Mailbox:
     def get_by_email(db, email):
         """Get a mailbox by its email address."""
         cursor = db.cursor(dictionary=True)
-        cursor.execute('SELECT * FROM virtual_mailboxes WHERE email = %s', (email,))
+        cursor.execute('SELECT * FROM mail_mailboxes WHERE email = %s', (email,))
         result = cursor.fetchone()
         cursor.close()
         return result
@@ -195,15 +195,12 @@ class Mailbox:
         # Hash password
         password_hash = hash_password(password)
 
-        # Build maildir path
-        maildir = f'{VMAIL_BASE}/{username}/'
-
         cursor = db.cursor()
         cursor.execute('''
-            INSERT INTO virtual_mailboxes
-            (email, username, domain, password_hash, maildir, quota_bytes, is_active, is_system_user)
-            VALUES (%s, %s, %s, %s, %s, %s, 1, %s)
-        ''', (email, username, MAIL_DOMAIN, password_hash, maildir, quota_mb * 1024 * 1024, is_system_user))
+            INSERT INTO mail_mailboxes
+            (email, username, password_hash, quota_mb, is_active, is_system_user)
+            VALUES (%s, %s, %s, %s, 1, %s)
+        ''', (email, username, password_hash, quota_mb, is_system_user))
 
         mailbox_id = cursor.lastrowid
         db.commit()
@@ -232,8 +229,8 @@ class Mailbox:
         params = []
 
         if 'quota_mb' in updates:
-            set_clauses.append('quota_bytes = %s')
-            params.append(updates['quota_mb'] * 1024 * 1024)
+            set_clauses.append('quota_mb = %s')
+            params.append(updates['quota_mb'])
 
         if 'is_active' in updates:
             set_clauses.append('is_active = %s')
@@ -242,7 +239,7 @@ class Mailbox:
         params.append(mailbox_id)
 
         cursor.execute(f'''
-            UPDATE virtual_mailboxes
+            UPDATE mail_mailboxes
             SET {', '.join(set_clauses)}
             WHERE id = %s
         ''', params)
@@ -258,7 +255,7 @@ class Mailbox:
 
         cursor = db.cursor()
         cursor.execute('''
-            UPDATE virtual_mailboxes
+            UPDATE mail_mailboxes
             SET password_hash = %s
             WHERE id = %s
         ''', (password_hash, mailbox_id))
@@ -284,13 +281,13 @@ class Mailbox:
         cursor = db.cursor()
 
         # Delete aliases first (foreign key constraint)
-        cursor.execute('DELETE FROM virtual_aliases WHERE destination_mailbox_id = %s', (mailbox_id,))
+        cursor.execute('DELETE FROM mail_aliases WHERE destination_mailbox_id = %s', (mailbox_id,))
 
         # Delete autoresponder if exists
-        cursor.execute('DELETE FROM autoresponders WHERE mailbox_id = %s', (mailbox_id,))
+        cursor.execute('DELETE FROM mail_autoresponders WHERE mailbox_id = %s', (mailbox_id,))
 
         # Delete mailbox
-        cursor.execute('DELETE FROM virtual_mailboxes WHERE id = %s', (mailbox_id,))
+        cursor.execute('DELETE FROM mail_mailboxes WHERE id = %s', (mailbox_id,))
 
         db.commit()
         cursor.close()
@@ -314,7 +311,7 @@ class Mailbox:
                 SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active,
                 SUM(CASE WHEN is_active = 0 THEN 1 ELSE 0 END) as inactive,
                 SUM(CASE WHEN is_system_user = 1 THEN 1 ELSE 0 END) as system_users
-            FROM virtual_mailboxes
+            FROM mail_mailboxes
         ''')
 
         result = cursor.fetchone()
@@ -341,16 +338,16 @@ class Alias:
         if mailbox_id:
             cursor.execute('''
                 SELECT a.*, m.email as destination_email
-                FROM virtual_aliases a
-                JOIN virtual_mailboxes m ON a.destination_mailbox_id = m.id
+                FROM mail_aliases a
+                JOIN mail_mailboxes m ON a.destination_mailbox_id = m.id
                 WHERE a.destination_mailbox_id = %s
                 ORDER BY a.created_at DESC
             ''', (mailbox_id,))
         else:
             cursor.execute('''
                 SELECT a.*, m.email as destination_email
-                FROM virtual_aliases a
-                JOIN virtual_mailboxes m ON a.destination_mailbox_id = m.id
+                FROM mail_aliases a
+                JOIN mail_mailboxes m ON a.destination_mailbox_id = m.id
                 ORDER BY a.created_at DESC
             ''')
 
@@ -370,7 +367,7 @@ class Alias:
 
         # Check destination mailbox exists
         cursor = db.cursor(dictionary=True)
-        cursor.execute('SELECT id, email FROM virtual_mailboxes WHERE id = %s', (destination_mailbox_id,))
+        cursor.execute('SELECT id, email FROM mail_mailboxes WHERE id = %s', (destination_mailbox_id,))
         mailbox = cursor.fetchone()
         if not mailbox:
             cursor.close()
@@ -379,13 +376,13 @@ class Alias:
         destination = mailbox['email']
 
         # Check alias doesn't already exist
-        cursor.execute('SELECT id FROM virtual_aliases WHERE alias = %s', (alias,))
+        cursor.execute('SELECT id FROM mail_aliases WHERE alias = %s', (alias,))
         if cursor.fetchone():
             cursor.close()
             raise ValueError(f'Alias already exists: {alias}')
 
         cursor.execute('''
-            INSERT INTO virtual_aliases (alias, destination, destination_mailbox_id, is_active)
+            INSERT INTO mail_aliases (alias, destination, destination_mailbox_id, is_active)
             VALUES (%s, %s, %s, 1)
         ''', (alias, destination, destination_mailbox_id))
 
@@ -399,7 +396,7 @@ class Alias:
     def delete(db, alias_id):
         """Delete an alias by ID."""
         cursor = db.cursor()
-        cursor.execute('DELETE FROM virtual_aliases WHERE id = %s', (alias_id,))
+        cursor.execute('DELETE FROM mail_aliases WHERE id = %s', (alias_id,))
         db.commit()
         cursor.close()
         return True
@@ -413,7 +410,7 @@ class Autoresponder:
         """Get autoresponder settings for a mailbox."""
         cursor = db.cursor(dictionary=True)
         cursor.execute('''
-            SELECT * FROM autoresponders WHERE mailbox_id = %s
+            SELECT * FROM mail_autoresponders WHERE mailbox_id = %s
         ''', (mailbox_id,))
         result = cursor.fetchone()
         cursor.close()
@@ -435,19 +432,19 @@ class Autoresponder:
         cursor = db.cursor(dictionary=True)
 
         # Check if autoresponder already exists
-        cursor.execute('SELECT id FROM autoresponders WHERE mailbox_id = %s', (mailbox_id,))
+        cursor.execute('SELECT id FROM mail_autoresponders WHERE mailbox_id = %s', (mailbox_id,))
         existing = cursor.fetchone()
 
         if existing:
             cursor.execute('''
-                UPDATE autoresponders
+                UPDATE mail_autoresponders
                 SET subject = %s, body = %s, is_active = %s,
                     start_date = %s, end_date = %s
                 WHERE mailbox_id = %s
             ''', (subject, body, is_active, start_date, end_date, mailbox_id))
         else:
             cursor.execute('''
-                INSERT INTO autoresponders
+                INSERT INTO mail_autoresponders
                 (mailbox_id, subject, body, is_active, start_date, end_date)
                 VALUES (%s, %s, %s, %s, %s, %s)
             ''', (mailbox_id, subject, body, is_active, start_date, end_date))
@@ -530,8 +527,8 @@ vacation :days 1 :subject "{subject}"
         cursor = db.cursor(dictionary=True)
         cursor.execute('''
             SELECT a.*, m.username, m.email
-            FROM autoresponders a
-            JOIN virtual_mailboxes m ON a.mailbox_id = m.id
+            FROM mail_autoresponders a
+            JOIN mail_mailboxes m ON a.mailbox_id = m.id
             WHERE a.is_active = 1
             ORDER BY a.created_at DESC
         ''')

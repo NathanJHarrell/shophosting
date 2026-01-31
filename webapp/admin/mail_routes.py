@@ -37,11 +37,11 @@ def dashboard():
 
         # Get alias count
         cursor = conn.cursor(dictionary=True)
-        cursor.execute('SELECT COUNT(*) as total FROM virtual_aliases')
+        cursor.execute('SELECT COUNT(*) as total FROM mail_aliases')
         alias_count = cursor.fetchone()['total']
 
         # Get active autoresponders count
-        cursor.execute('SELECT COUNT(*) as total FROM autoresponders WHERE is_active = 1')
+        cursor.execute('SELECT COUNT(*) as total FROM mail_autoresponders WHERE is_active = 1')
         autoresponder_count = cursor.fetchone()['total']
         cursor.close()
 
@@ -361,7 +361,7 @@ def delete_alias(alias_id):
     try:
         # Get alias info for logging
         cursor = conn.cursor(dictionary=True)
-        cursor.execute('SELECT * FROM virtual_aliases WHERE id = %s', (alias_id,))
+        cursor.execute('SELECT * FROM mail_aliases WHERE id = %s', (alias_id,))
         alias = cursor.fetchone()
         cursor.close()
 
@@ -403,7 +403,7 @@ def catch_all():
 
         # Check for existing catch-all
         catch_all_alias = f'@{MAIL_DOMAIN}'
-        cursor.execute('SELECT * FROM virtual_aliases WHERE alias = %s', (catch_all_alias,))
+        cursor.execute('SELECT * FROM mail_aliases WHERE alias = %s', (catch_all_alias,))
         current_catch_all = cursor.fetchone()
         cursor.close()
 
@@ -444,7 +444,7 @@ def catch_all():
 
                     # Refresh catch-all info
                     cursor = conn.cursor(dictionary=True)
-                    cursor.execute('SELECT * FROM virtual_aliases WHERE alias = %s', (catch_all_alias,))
+                    cursor.execute('SELECT * FROM mail_aliases WHERE alias = %s', (catch_all_alias,))
                     current_catch_all = cursor.fetchone()
                     cursor.close()
 
@@ -472,10 +472,10 @@ def api_stats():
         stats = Mailbox.get_stats(conn)
 
         cursor = conn.cursor(dictionary=True)
-        cursor.execute('SELECT COUNT(*) as total FROM virtual_aliases')
+        cursor.execute('SELECT COUNT(*) as total FROM mail_aliases')
         stats['aliases'] = cursor.fetchone()['total']
 
-        cursor.execute('SELECT COUNT(*) as total FROM autoresponders WHERE is_active = 1')
+        cursor.execute('SELECT COUNT(*) as total FROM mail_autoresponders WHERE is_active = 1')
         stats['autoresponders'] = cursor.fetchone()['total']
         cursor.close()
 
