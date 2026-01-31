@@ -1,0 +1,99 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Billing Settings{% endblock %}
+{% block page_title %}Billing Settings{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin_billing.dashboard') }}" class="btn btn-secondary btn-sm">Back to Billing</a>
+</div>
+
+<div style="max-width: 700px;">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Billing Configuration</h3>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <!-- Refund Settings -->
+                <h4 style="margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border);">Refund Settings</h4>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Support Role Refund Limit ($)</label>
+                    <input type="number" name="support_refund_limit" step="1" min="0"
+                           value="{{ settings.get('support_refund_limit_cents', 5000) | int // 100 }}"
+                           style="width: 200px; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                    <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">
+                        Maximum refund amount that support role can process without escalation
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 24px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" name="require_refund_reason"
+                               {% if settings.get('require_refund_reason', 'true') == 'true' %}checked{% endif %}>
+                        <span>Require reason for all refunds</span>
+                    </label>
+                </div>
+
+                <!-- Credit Settings -->
+                <h4 style="margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border);">Credit Settings</h4>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Default Credit Expiry (days)</label>
+                    <input type="number" name="credit_expiry_days" step="1" min="0"
+                           value="{{ settings.get('default_credit_expiry_days', 365) }}"
+                           style="width: 200px; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                    <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">
+                        Set to 0 for credits that never expire
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 24px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" name="require_credit_reason"
+                               {% if settings.get('require_credit_reason', 'true') == 'true' %}checked{% endif %}>
+                        <span>Require reason for all credits</span>
+                    </label>
+                </div>
+
+                <!-- Invoice Settings -->
+                <h4 style="margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border);">Invoice Settings</h4>
+
+                <div style="margin-bottom: 24px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" name="enable_manual_invoices"
+                               {% if settings.get('enable_manual_invoices', 'true') == 'true' %}checked{% endif %}>
+                        <span>Enable manual invoice creation</span>
+                    </label>
+                    <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px; margin-left: 26px;">
+                        Allow admins to create invoices outside of regular subscription billing
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 12px; padding-top: 16px; border-top: 1px solid var(--border);">
+                    <button type="submit" class="btn btn-primary">Save Settings</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="card" style="margin-top: 24px; border-color: var(--error);">
+        <div class="card-header" style="background: var(--error-muted);">
+            <h3 class="card-title" style="color: var(--error);">Audit & Compliance</h3>
+        </div>
+        <div class="card-body">
+            <p class="text-muted" style="margin-bottom: 16px;">
+                Billing audit logs are retained for 7 years for compliance. These settings cannot be changed.
+            </p>
+            <div style="display: flex; gap: 12px;">
+                <a href="{{ url_for('admin_billing.audit_log') }}" class="btn btn-secondary btn-sm">View Audit Log</a>
+                <a href="{{ url_for('admin_billing.audit_log_export') }}" class="btn btn-secondary btn-sm">Export Audit Log</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

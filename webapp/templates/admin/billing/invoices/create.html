@@ -1,0 +1,79 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Create Manual Invoice{% endblock %}
+{% block page_title %}Create Manual Invoice{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin_billing.invoices') }}" class="btn btn-secondary btn-sm">Back to Invoices</a>
+</div>
+
+<div style="max-width: 600px;">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Create Manual Invoice</h3>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Customer</label>
+                    <select name="customer_id" required style="width: 100%; padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                        <option value="">Select customer...</option>
+                        {% for customer in customers %}
+                        <option value="{{ customer.id }}">
+                            {{ customer.email }}
+                            {% if customer.company_name %} ({{ customer.company_name }}){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">
+                        Only active customers with Stripe accounts are shown
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Amount ($)</label>
+                    <input type="number" name="amount" step="0.01" min="0.01" required
+                           placeholder="0.00"
+                           style="width: 100%; padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Description</label>
+                    <input type="text" name="description" required
+                           placeholder="e.g., Custom development work"
+                           style="width: 100%; padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                    <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">
+                        This will appear on the invoice
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 24px;">
+                    <label style="display: block; margin-bottom: 8px; font-weight: 500;">Internal Notes (optional)</label>
+                    <textarea name="notes" rows="3"
+                              placeholder="Internal notes about this invoice..."
+                              style="width: 100%; padding: 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary); resize: vertical;"></textarea>
+                    <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">
+                        For internal reference only, not shown to customer
+                    </div>
+                </div>
+
+                <div style="padding: 16px; background: var(--warning-muted); border-radius: var(--radius-md); margin-bottom: 24px;">
+                    <strong style="color: var(--warning);">Note:</strong>
+                    <span class="text-muted">This will create a real invoice in Stripe. The customer will receive an email and can pay via their Stripe portal.</span>
+                </div>
+
+                <div style="display: flex; gap: 12px;">
+                    <a href="{{ url_for('admin_billing.invoices') }}" class="btn btn-secondary" style="flex: 1;">Cancel</a>
+                    <button type="submit" class="btn btn-primary" style="flex: 1;"
+                            onclick="return confirm('Create this invoice? The customer will receive an email.');">
+                        Create Invoice
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,160 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Revenue Reports{% endblock %}
+{% block page_title %}Revenue Reports{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin_billing.dashboard') }}" class="btn btn-secondary btn-sm">Back to Billing</a>
+    <div style="display: flex; gap: 12px;">
+        <form method="GET" style="display: flex; gap: 8px; align-items: center;">
+            <select name="days" onchange="this.form.submit()" style="padding: 8px 12px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                <option value="7" {% if days == 7 %}selected{% endif %}>Last 7 days</option>
+                <option value="30" {% if days == 30 %}selected{% endif %}>Last 30 days</option>
+                <option value="90" {% if days == 90 %}selected{% endif %}>Last 90 days</option>
+                <option value="365" {% if days == 365 %}selected{% endif %}>Last year</option>
+            </select>
+        </form>
+        <a href="{{ url_for('admin_billing.revenue_export', days=days) }}" class="btn btn-primary btn-sm">
+            Export CSV
+        </a>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 32px;">
+    <div class="card">
+        <div class="card-body" style="text-align: center; padding: 24px;">
+            <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 8px;">Total Revenue</div>
+            <div style="font-size: 2rem; font-weight: 700; color: var(--success);">
+                ${{ "%.2f"|format(summary.total_revenue_cents / 100) }}
+            </div>
+            <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">{{ summary.invoice_count }} invoices</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body" style="text-align: center; padding: 24px;">
+            <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 8px;">Avg Invoice</div>
+            <div style="font-size: 2rem; font-weight: 700; color: var(--accent-blue);">
+                ${{ "%.2f"|format(summary.avg_invoice_cents / 100) }}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body" style="text-align: center; padding: 24px;">
+            <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 8px;">Active Subscriptions</div>
+            <div style="font-size: 2rem; font-weight: 700;">
+                {{ summary.active_subscriptions }}
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body" style="text-align: center; padding: 24px;">
+            <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 8px;">Refunds</div>
+            <div style="font-size: 2rem; font-weight: 700; color: var(--warning);">
+                ${{ "%.2f"|format(summary.total_refunds_cents / 100) }}
+            </div>
+            <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">{{ summary.refund_count }} refunds</div>
+        </div>
+    </div>
+</div>
+
+<!-- Revenue Chart -->
+<div class="card" style="margin-bottom: 24px;">
+    <div class="card-header">
+        <h3 class="card-title">Revenue Trend</h3>
+    </div>
+    <div class="card-body">
+        <canvas id="revenueChart" style="width: 100%; height: 300px;"></canvas>
+    </div>
+</div>
+
+<!-- Plan Distribution -->
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Subscription Distribution</h3>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Plan</th>
+                    <th>Active Subscriptions</th>
+                    <th>Monthly Revenue</th>
+                    <th>% of Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% set total_subs = plan_distribution | sum(attribute='count') %}
+                {% for plan in plan_distribution %}
+                <tr>
+                    <td style="font-weight: 500;">{{ plan.plan_name }}</td>
+                    <td>{{ plan.count }}</td>
+                    <td style="color: var(--success);">${{ "%.2f"|format((plan.monthly_revenue or 0)) }}</td>
+                    <td>
+                        {% if total_subs > 0 %}
+                        {{ "%.1f"|format(plan.count / total_subs * 100) }}%
+                        {% else %}
+                        0%
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-muted">No active subscriptions</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script nonce="{{ csp_nonce() }}">
+document.addEventListener('DOMContentLoaded', function() {
+    var ctx = document.getElementById('revenueChart').getContext('2d');
+
+    // Fetch data from API
+    fetch('{{ url_for("admin_billing.revenue_api_mrr", days=days) }}')
+        .then(response => response.json())
+        .then(data => {
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Daily Revenue ($)',
+                        data: data.values,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toFixed(2);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+});
+</script>
+{% endblock %}

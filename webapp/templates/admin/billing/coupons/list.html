@@ -1,0 +1,127 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Coupon Management{% endblock %}
+{% block page_title %}Coupon Management{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin_billing.dashboard') }}" class="btn btn-secondary btn-sm">Back to Billing</a>
+    <a href="https://dashboard.stripe.com/coupons" target="_blank" class="btn btn-primary btn-sm">
+        Create Coupon in Stripe
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Active Coupons</h3>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Coupon ID</th>
+                    <th>Name</th>
+                    <th>Discount</th>
+                    <th>Duration</th>
+                    <th>Redemptions</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for coupon in coupons %}
+                <tr>
+                    <td class="mono">{{ coupon.id }}</td>
+                    <td>{{ coupon.name or '-' }}</td>
+                    <td>
+                        {% if coupon.percent_off %}
+                        <span style="color: var(--success); font-weight: 600;">{{ coupon.percent_off }}% off</span>
+                        {% elif coupon.amount_off %}
+                        <span style="color: var(--success); font-weight: 600;">${{ "%.2f"|format(coupon.amount_off / 100) }} off</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if coupon.duration == 'forever' %}
+                        Forever
+                        {% elif coupon.duration == 'once' %}
+                        Once
+                        {% elif coupon.duration == 'repeating' %}
+                        {{ coupon.duration_in_months }} months
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ coupon.times_redeemed or 0 }}
+                        {% if coupon.max_redemptions %}
+                        / {{ coupon.max_redemptions }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-secondary btn-sm"
+                                onclick="showApplyModal('{{ coupon.id }}')"
+                                style="font-size: 0.75rem; padding: 4px 8px;">
+                            Apply to Subscription
+                        </button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-muted">No coupons found. Create coupons in your Stripe Dashboard.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Apply Coupon Modal -->
+<div id="applyModal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5);">
+    <div style="background-color: var(--bg-secondary); margin: 10% auto; padding: 24px; border-radius: var(--radius-lg); width: 500px; max-width: 90%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3>Apply Coupon</h3>
+            <span onclick="closeApplyModal()" style="cursor: pointer; font-size: 24px; color: var(--text-muted);">&times;</span>
+        </div>
+        <form method="POST" action="{{ url_for('admin_billing.apply_coupon') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="coupon_id" id="modalCouponId">
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 6px; font-weight: 500;">Coupon ID</label>
+                <input type="text" id="modalCouponDisplay" readonly
+                       style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-tertiary); color: var(--text-muted);">
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 6px; font-weight: 500;">Subscription ID</label>
+                <input type="text" name="subscription_id" required
+                       placeholder="Enter subscription ID..."
+                       style="width: 100%; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--bg-primary); color: var(--text-primary);">
+                <div class="text-muted" style="font-size: 0.8rem; margin-top: 4px;">
+                    Find the subscription ID on the subscription detail page
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeApplyModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Apply Coupon</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script nonce="{{ csp_nonce() }}">
+function showApplyModal(couponId) {
+    document.getElementById('modalCouponId').value = couponId;
+    document.getElementById('modalCouponDisplay').value = couponId;
+    document.getElementById('applyModal').style.display = 'block';
+}
+
+function closeApplyModal() {
+    document.getElementById('applyModal').style.display = 'none';
+}
+
+window.onclick = function(event) {
+    if (event.target.id === 'applyModal') {
+        closeApplyModal();
+    }
+}
+</script>
+{% endblock %}

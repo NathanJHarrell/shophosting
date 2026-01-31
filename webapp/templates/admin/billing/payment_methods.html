@@ -1,0 +1,100 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Payment Methods - {{ customer.email }}{% endblock %}
+{% block page_title %}Payment Methods{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <a href="{{ url_for('admin.customer_detail', customer_id=customer.id) }}" class="btn btn-secondary btn-sm">Back to Customer</a>
+</div>
+
+<div class="card" style="margin-bottom: 24px;">
+    <div class="card-header">
+        <h3 class="card-title">Customer</h3>
+    </div>
+    <div class="card-body">
+        <div style="display: flex; gap: 32px;">
+            <div>
+                <div class="text-muted" style="font-size: 0.85rem;">Email</div>
+                <div>{{ customer.email }}</div>
+            </div>
+            <div>
+                <div class="text-muted" style="font-size: 0.85rem;">Company</div>
+                <div>{{ customer.company_name or '-' }}</div>
+            </div>
+            <div>
+                <div class="text-muted" style="font-size: 0.85rem;">Stripe ID</div>
+                <div class="mono">{{ customer.stripe_customer_id or '-' }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Payment Methods on File</h3>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Card</th>
+                    <th>Last 4</th>
+                    <th>Expiry</th>
+                    <th>Country</th>
+                    <th>Created</th>
+                    {% if admin_role in ['admin', 'super_admin'] %}
+                    <th>Actions</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for pm in payment_methods %}
+                <tr>
+                    <td style="text-transform: capitalize;">
+                        {% if pm.card.brand == 'visa' %}
+                        <span style="color: #1a1f71;">Visa</span>
+                        {% elif pm.card.brand == 'mastercard' %}
+                        <span style="color: #eb001b;">Mastercard</span>
+                        {% elif pm.card.brand == 'amex' %}
+                        <span style="color: #006fcf;">American Express</span>
+                        {% else %}
+                        {{ pm.card.brand }}
+                        {% endif %}
+                    </td>
+                    <td class="mono">**** {{ pm.card.last4 }}</td>
+                    <td>{{ "%02d"|format(pm.card.exp_month) }}/{{ pm.card.exp_year }}</td>
+                    <td>{{ pm.card.country or '-' }}</td>
+                    <td>{{ pm.created | default('-') }}</td>
+                    {% if admin_role in ['admin', 'super_admin'] %}
+                    <td>
+                        <form method="POST" action="{{ url_for('admin_billing.remove_payment_method', customer_id=customer.id, pm_id=pm.id) }}" style="display: inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-danger btn-sm"
+                                    style="font-size: 0.75rem; padding: 4px 8px;"
+                                    onclick="return confirm('Remove this payment method? The customer may need to add a new one.');">
+                                Remove
+                            </button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{% if admin_role in ['admin', 'super_admin'] %}6{% else %}5{% endif %}" class="text-muted">
+                        No payment methods on file
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if not customer.stripe_customer_id %}
+<div style="margin-top: 24px; padding: 16px; background: var(--warning-muted); border-radius: var(--radius-md);">
+    <strong style="color: var(--warning);">Note:</strong>
+    <span class="text-muted">This customer does not have a Stripe account. Payment methods cannot be managed until they complete a checkout.</span>
+</div>
+{% endif %}
+{% endblock %}

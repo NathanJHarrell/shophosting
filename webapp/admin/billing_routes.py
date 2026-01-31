@@ -768,3 +768,590 @@ def audit_log():
                            action_type=action_type,
                            admin_filter=admin_filter,
                            page=page)
+
+
+# =============================================================================
+# Revenue Reports (Phase 3)
+# =============================================================================
+
+@billing_bp.route('/revenue')
+@admin_required
+@require_revenue_access
+def revenue():
+    """Revenue reports dashboard"""
+    admin = get_current_admin()
+    role = session.get('admin_user_role')
+
+    # Get date range from params (default: last 30 days)
+    days = int(request.args.get('days', 30))
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days)
+
+    summary = BillingService.get_revenue_summary(start_date, end_date)
+
+    # Get MRR trend data
+    mrr_data = get_mrr_trend(days=days)
+
+    # Get plan distribution
+    plan_distribution = get_plan_distribution()
+
+    return render_template('admin/billing/revenue/reports.html',
+                           admin=admin,
+                           admin_role=role,
+                           summary=summary,
+                           mrr_data=mrr_data,
+                           plan_distribution=plan_distribution,
+                           days=days)
+
+
+def get_mrr_trend(days=30):
+    """Get MRR trend data for charts"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT DATE(paid_at) as date, SUM(amount_paid) as revenue
+            FROM invoices
+            WHERE status = 'paid'
+              AND paid_at >= DATE_SUB(NOW(), INTERVAL %s DAY)
+            GROUP BY DATE(paid_at)
+            ORDER BY date
+        """, (days,))
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_plan_distribution():
+    """Get subscription distribution by plan"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT p.name as plan_name, COUNT(s.id) as count,
+                   SUM(p.price_monthly) as monthly_revenue
+            FROM subscriptions s
+            JOIN pricing_plans p ON s.plan_id = p.id
+            WHERE s.status = 'active'
+            GROUP BY p.id, p.name
+            ORDER BY count DESC
+        """)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+@billing_bp.route('/revenue/api/mrr')
+@admin_required
+@require_revenue_access
+def revenue_api_mrr():
+    """API endpoint for MRR chart data"""
+    days = int(request.args.get('days', 30))
+    data = get_mrr_trend(days=days)
+
+    return jsonify({
+        'labels': [row['date'].strftime('%Y-%m-%d') if row['date'] else '' for row in data],
+        'values': [float(row['revenue'] or 0) / 100 for row in data]
+    })
+
+
+@billing_bp.route('/revenue/export')
+@admin_required
+@require_revenue_access
+def revenue_export():
+    """Export revenue data as CSV"""
+    from flask import Response
+    import csv
+    import io
+
+    days = int(request.args.get('days', 30))
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days)
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT i.stripe_invoice_id, c.email as customer_email,
+                   i.amount_due, i.amount_paid, i.status,
+                   i.created_at, i.paid_at
+            FROM invoices i
+            LEFT JOIN customers c ON i.customer_id = c.id
+            WHERE i.created_at BETWEEN %s AND %s
+            ORDER BY i.created_at DESC
+        """, (start_date, end_date))
+        rows = cursor.fetchall()
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Invoice ID', 'Customer Email', 'Amount Due', 'Amount Paid', 'Status', 'Created', 'Paid'])
+
+        for row in rows:
+            writer.writerow([
+                row['stripe_invoice_id'],
+                row['customer_email'],
+                f"${row['amount_due']/100:.2f}",
+                f"${row['amount_paid']/100:.2f}",
+                row['status'],
+                row['created_at'].strftime('%Y-%m-%d %H:%M') if row['created_at'] else '',
+                row['paid_at'].strftime('%Y-%m-%d %H:%M') if row['paid_at'] else ''
+            ])
+
+        output.seek(0)
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename=revenue_export_{start_date.strftime("%Y%m%d")}_{end_date.strftime("%Y%m%d")}.csv'}
+        )
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =============================================================================
+# Manual Invoice Creation (Phase 3)
+# =============================================================================
+
+@billing_bp.route('/invoices/create', methods=['GET', 'POST'])
+@admin_required
+@require_billing_write
+def create_invoice():
+    """Create manual invoice"""
+    admin = get_current_admin()
+    role = session.get('admin_user_role')
+
+    if request.method == 'POST':
+        customer_id = request.form.get('customer_id')
+        amount_str = request.form.get('amount', '0')
+        description = request.form.get('description', '').strip()
+        notes = request.form.get('notes', '').strip()
+
+        if not customer_id:
+            flash('Please select a customer.', 'error')
+            return redirect(url_for('admin_billing.create_invoice'))
+
+        try:
+            amount_cents = int(float(amount_str) * 100)
+        except ValueError:
+            flash('Invalid amount.', 'error')
+            return redirect(url_for('admin_billing.create_invoice'))
+
+        if amount_cents <= 0:
+            flash('Amount must be positive.', 'error')
+            return redirect(url_for('admin_billing.create_invoice'))
+
+        try:
+            result = create_manual_invoice(
+                admin_id=admin.id,
+                customer_id=int(customer_id),
+                amount_cents=amount_cents,
+                description=description,
+                notes=notes,
+                ip_address=request.remote_addr
+            )
+            flash(f'Manual invoice created successfully.', 'success')
+            return redirect(url_for('admin_billing.invoice_detail', invoice_id=result['invoice_id']))
+        except Exception as e:
+            logger.error(f"Manual invoice creation error: {e}")
+            flash(f'Failed to create invoice: {str(e)}', 'error')
+
+    # GET: show form
+    customers = get_customers_for_select()
+
+    return render_template('admin/billing/invoices/create.html',
+                           admin=admin,
+                           admin_role=role,
+                           customers=customers)
+
+
+def get_customers_for_select():
+    """Get customers for dropdown"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("""
+            SELECT id, email, company_name, stripe_customer_id
+            FROM customers
+            WHERE status = 'active'
+            ORDER BY email
+        """)
+        return cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def create_manual_invoice(admin_id, customer_id, amount_cents, description, notes, ip_address):
+    """Create a manual invoice via Stripe"""
+    import stripe
+    from stripe_integration.config import is_stripe_configured
+
+    if not is_stripe_configured():
+        raise BillingServiceError("Stripe is not configured")
+
+    customer = Customer.get_by_id(customer_id)
+    if not customer:
+        raise BillingServiceError(f"Customer {customer_id} not found")
+
+    if not customer.stripe_customer_id:
+        raise BillingServiceError("Customer has no Stripe account")
+
+    try:
+        # Create invoice item
+        stripe.InvoiceItem.create(
+            customer=customer.stripe_customer_id,
+            amount=amount_cents,
+            currency='usd',
+            description=description or 'Manual charge'
+        )
+
+        # Create and finalize invoice
+        stripe_invoice = stripe.Invoice.create(
+            customer=customer.stripe_customer_id,
+            auto_advance=True,  # Auto-finalize
+            metadata={
+                'manual': 'true',
+                'created_by_admin': str(admin_id)
+            }
+        )
+
+        # Finalize the invoice
+        stripe_invoice = stripe.Invoice.finalize_invoice(stripe_invoice.id)
+
+        # Save to local database
+        invoice = Invoice(
+            customer_id=customer_id,
+            stripe_invoice_id=stripe_invoice.id,
+            amount_due=amount_cents,
+            amount_paid=0,
+            currency='usd',
+            status=stripe_invoice.status,
+            hosted_invoice_url=stripe_invoice.hosted_invoice_url,
+            invoice_pdf_url=stripe_invoice.invoice_pdf
+        )
+        invoice.save()
+
+        # Update with manual flag and notes
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                UPDATE invoices SET manual = TRUE, notes = %s, created_by_admin_id = %s
+                WHERE id = %s
+            """, (notes, admin_id, invoice.id))
+            conn.commit()
+        finally:
+            cursor.close()
+            conn.close()
+
+        # Log the action
+        log = BillingAuditLog(
+            admin_user_id=admin_id,
+            action_type='invoice_create',
+            target_customer_id=customer_id,
+            target_invoice_id=invoice.id,
+            amount_cents=amount_cents,
+            after_state={'invoice_id': invoice.id, 'stripe_invoice_id': stripe_invoice.id},
+            ip_address=ip_address
+        )
+        log.save()
+
+        return {'success': True, 'invoice_id': invoice.id}
+
+    except stripe.error.StripeError as e:
+        raise BillingServiceError(f"Stripe error: {str(e)}")
+
+
+# =============================================================================
+# Coupon Management (Phase 3)
+# =============================================================================
+
+@billing_bp.route('/coupons')
+@admin_required
+@require_billing_write
+def coupons():
+    """List and manage coupons"""
+    admin = get_current_admin()
+    role = session.get('admin_user_role')
+
+    stripe_coupons = get_stripe_coupons()
+
+    return render_template('admin/billing/coupons/list.html',
+                           admin=admin,
+                           admin_role=role,
+                           coupons=stripe_coupons)
+
+
+def get_stripe_coupons():
+    """Get coupons from Stripe"""
+    import stripe
+    from stripe_integration.config import is_stripe_configured
+
+    if not is_stripe_configured():
+        return []
+
+    try:
+        coupons = stripe.Coupon.list(limit=100)
+        return coupons.data
+    except stripe.error.StripeError as e:
+        logger.error(f"Error fetching coupons: {e}")
+        return []
+
+
+@billing_bp.route('/coupons/apply', methods=['POST'])
+@admin_required
+@require_billing_write
+def apply_coupon():
+    """Apply coupon to customer subscription"""
+    admin = get_current_admin()
+
+    subscription_id = request.form.get('subscription_id')
+    coupon_id = request.form.get('coupon_id')
+
+    if not subscription_id or not coupon_id:
+        flash('Subscription and coupon are required.', 'error')
+        return redirect(url_for('admin_billing.coupons'))
+
+    subscription = Subscription.get_by_id(int(subscription_id))
+    if not subscription:
+        flash('Subscription not found.', 'error')
+        return redirect(url_for('admin_billing.coupons'))
+
+    try:
+        import stripe
+        stripe.Subscription.modify(
+            subscription.stripe_subscription_id,
+            coupon=coupon_id
+        )
+
+        # Log the action
+        log = BillingAuditLog(
+            admin_user_id=admin.id,
+            action_type='coupon_apply',
+            target_customer_id=subscription.customer_id,
+            target_subscription_id=subscription.id,
+            after_state={'coupon_id': coupon_id},
+            ip_address=request.remote_addr
+        )
+        log.save()
+
+        flash(f'Coupon {coupon_id} applied successfully.', 'success')
+    except Exception as e:
+        logger.error(f"Error applying coupon: {e}")
+        flash(f'Failed to apply coupon: {str(e)}', 'error')
+
+    return redirect(url_for('admin_billing.subscription_detail', subscription_id=subscription_id))
+
+
+# =============================================================================
+# Payment Method Management (Phase 3)
+# =============================================================================
+
+@billing_bp.route('/payment-methods/<int:customer_id>')
+@admin_required
+@require_billing_read
+def payment_methods(customer_id):
+    """View customer payment methods"""
+    admin = get_current_admin()
+    role = session.get('admin_user_role')
+
+    customer = Customer.get_by_id(customer_id)
+    if not customer:
+        flash('Customer not found.', 'error')
+        return redirect(url_for('admin_billing.dashboard'))
+
+    methods = get_customer_payment_methods(customer)
+
+    return render_template('admin/billing/payment_methods.html',
+                           admin=admin,
+                           admin_role=role,
+                           customer=customer,
+                           payment_methods=methods)
+
+
+def get_customer_payment_methods(customer):
+    """Get payment methods for a customer from Stripe"""
+    import stripe
+    from stripe_integration.config import is_stripe_configured
+
+    if not is_stripe_configured() or not customer.stripe_customer_id:
+        return []
+
+    try:
+        methods = stripe.PaymentMethod.list(
+            customer=customer.stripe_customer_id,
+            type='card'
+        )
+        return methods.data
+    except stripe.error.StripeError as e:
+        logger.error(f"Error fetching payment methods: {e}")
+        return []
+
+
+@billing_bp.route('/payment-methods/<int:customer_id>/<pm_id>/remove', methods=['POST'])
+@admin_required
+@require_billing_write
+def remove_payment_method(customer_id, pm_id):
+    """Remove a payment method"""
+    admin = get_current_admin()
+
+    customer = Customer.get_by_id(customer_id)
+    if not customer:
+        flash('Customer not found.', 'error')
+        return redirect(url_for('admin_billing.dashboard'))
+
+    try:
+        import stripe
+        stripe.PaymentMethod.detach(pm_id)
+
+        # Log the action
+        log = BillingAuditLog(
+            admin_user_id=admin.id,
+            action_type='payment_method_update',
+            target_customer_id=customer_id,
+            before_state={'payment_method_id': pm_id},
+            after_state={'action': 'removed'},
+            ip_address=request.remote_addr
+        )
+        log.save()
+
+        flash('Payment method removed.', 'success')
+    except Exception as e:
+        logger.error(f"Error removing payment method: {e}")
+        flash(f'Failed to remove payment method: {str(e)}', 'error')
+
+    return redirect(url_for('admin_billing.payment_methods', customer_id=customer_id))
+
+
+# =============================================================================
+# Billing Settings (Phase 3)
+# =============================================================================
+
+@billing_bp.route('/settings', methods=['GET', 'POST'])
+@admin_required
+@require_billing_admin
+def settings():
+    """Billing settings (super_admin only)"""
+    admin = get_current_admin()
+    role = session.get('admin_user_role')
+
+    if request.method == 'POST':
+        # Update settings
+        settings_to_update = {
+            'support_refund_limit_cents': request.form.get('support_refund_limit', '5000'),
+            'default_credit_expiry_days': request.form.get('credit_expiry_days', '365'),
+            'require_refund_reason': 'true' if request.form.get('require_refund_reason') else 'false',
+            'require_credit_reason': 'true' if request.form.get('require_credit_reason') else 'false',
+            'enable_manual_invoices': 'true' if request.form.get('enable_manual_invoices') else 'false',
+        }
+
+        update_billing_settings(admin.id, settings_to_update, request.remote_addr)
+        flash('Billing settings updated.', 'success')
+        return redirect(url_for('admin_billing.settings'))
+
+    # GET: show current settings
+    current_settings = get_all_billing_settings()
+
+    return render_template('admin/billing/settings.html',
+                           admin=admin,
+                           admin_role=role,
+                           settings=current_settings)
+
+
+def get_all_billing_settings():
+    """Get all billing settings"""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    try:
+        cursor.execute("SELECT setting_key, setting_value FROM billing_settings")
+        rows = cursor.fetchall()
+
+        settings = {}
+        for row in rows:
+            try:
+                import json
+                settings[row['setting_key']] = json.loads(row['setting_value'])
+            except:
+                settings[row['setting_key']] = row['setting_value']
+
+        return settings
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def update_billing_settings(admin_id, settings_dict, ip_address):
+    """Update billing settings"""
+    import json
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        for key, value in settings_dict.items():
+            cursor.execute("""
+                INSERT INTO billing_settings (setting_key, setting_value, updated_by_admin_id)
+                VALUES (%s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by_admin_id = VALUES(updated_by_admin_id)
+            """, (key, json.dumps(value), admin_id))
+
+        conn.commit()
+
+        # Log the settings change
+        log = BillingAuditLog(
+            admin_user_id=admin_id,
+            action_type='settings_change',
+            after_state=settings_dict,
+            ip_address=ip_address
+        )
+        log.save()
+
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =============================================================================
+# Audit Log Export (Phase 3)
+# =============================================================================
+
+@billing_bp.route('/audit-log/export')
+@admin_required
+@require_revenue_access
+def audit_log_export():
+    """Export audit log as CSV"""
+    from flask import Response
+    import csv
+    import io
+
+    logs = BillingAuditLog.search(limit=1000)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Date', 'Action', 'Admin', 'Customer', 'Amount', 'Reason', 'IP Address'])
+
+    for log in logs:
+        writer.writerow([
+            log['created_at'].strftime('%Y-%m-%d %H:%M:%S') if log.get('created_at') else '',
+            log.get('action_type', ''),
+            log.get('admin_name', ''),
+            log.get('customer_email', ''),
+            f"${log['amount_cents']/100:.2f}" if log.get('amount_cents') else '',
+            log.get('reason', ''),
+            log.get('ip_address', '')
+        ])
+
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename=billing_audit_log_{datetime.now().strftime("%Y%m%d")}.csv'}
+    )
