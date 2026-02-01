@@ -1,0 +1,830 @@
+{% extends "admin/base_admin.html" %}
+
+{% block title %}Lead Management{% endblock %}
+{% block page_title %}Lead Management{% endblock %}
+
+{% block extra_css %}
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600&display=swap');
+
+    /* Lead-specific styling with refined luxury aesthetic */
+    .leads-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-bottom: 32px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .leads-header h2 {
+        font-family: 'Playfair Display', Georgia, serif;
+        font-size: 1.75rem;
+        font-weight: 500;
+        letter-spacing: -0.02em;
+        background: linear-gradient(135deg, #f4f4f6 0%, #a1a1aa 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 0;
+    }
+
+    .leads-header .subtitle {
+        font-family: 'Instrument Sans', sans-serif;
+        font-size: 0.875rem;
+        color: var(--text-tertiary);
+        margin-top: 4px;
+    }
+
+    /* Refined stats with subtle gradients */
+    .leads-stats {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+        margin-bottom: 40px;
+    }
+
+    .lead-stat {
+        position: relative;
+        background: linear-gradient(145deg, rgba(30, 30, 36, 0.8) 0%, rgba(24, 24, 28, 0.9) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.04);
+        border-radius: 16px;
+        padding: 24px;
+        overflow: hidden;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .lead-stat::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.1) 50%, transparent 100%);
+    }
+
+    .lead-stat:hover {
+        border-color: rgba(255, 255, 255, 0.08);
+        transform: translateY(-2px);
+        box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.5);
+    }
+
+    .lead-stat .icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 16px;
+    }
+
+    .lead-stat .icon svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .lead-stat.scans .icon { background: rgba(0, 136, 255, 0.15); color: #0088ff; }
+    .lead-stat.leads .icon { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+    .lead-stat.rate .icon { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+    .lead-stat.pending .icon { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+
+    .lead-stat .label {
+        font-family: 'Instrument Sans', sans-serif;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--text-muted);
+        margin-bottom: 8px;
+    }
+
+    .lead-stat .value {
+        font-family: 'Playfair Display', Georgia, serif;
+        font-size: 2.5rem;
+        font-weight: 500;
+        line-height: 1;
+        color: var(--text-primary);
+    }
+
+    .lead-stat .trend {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.75rem;
+        margin-top: 8px;
+        padding: 4px 8px;
+        border-radius: 100px;
+    }
+
+    .lead-stat .trend.up { background: rgba(34, 197, 94, 0.1); color: #22c55e; }
+    .lead-stat .trend.down { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+
+    /* Action buttons with refined styling */
+    .action-buttons {
+        display: flex;
+        gap: 12px;
+    }
+
+    .btn-leads {
+        font-family: 'Instrument Sans', sans-serif;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-weight: 500;
+        font-size: 0.875rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+    }
+
+    .btn-leads-primary {
+        background: linear-gradient(135deg, #0088ff 0%, #5b5bd6 100%);
+        color: white;
+        box-shadow: 0 4px 20px -4px rgba(0, 136, 255, 0.4);
+    }
+
+    .btn-leads-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 30px -4px rgba(0, 136, 255, 0.5);
+    }
+
+    .btn-leads-secondary {
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text-secondary);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .btn-leads-secondary:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: var(--text-primary);
+        border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    /* Filters with refined inputs */
+    .leads-filters {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .leads-filters .filter-input {
+        font-family: 'Instrument Sans', sans-serif;
+        padding: 12px 16px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 10px;
+        font-size: 0.875rem;
+        color: var(--text-primary);
+        min-width: 180px;
+        transition: all 0.2s ease;
+    }
+
+    .leads-filters .filter-input:focus {
+        outline: none;
+        border-color: rgba(0, 136, 255, 0.4);
+        background: rgba(255, 255, 255, 0.05);
+        box-shadow: 0 0 0 3px rgba(0, 136, 255, 0.1);
+    }
+
+    .leads-filters .filter-input::placeholder {
+        color: var(--text-muted);
+    }
+
+    .leads-filters select.filter-input {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2371717a' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+        background-position: right 12px center;
+        background-repeat: no-repeat;
+        background-size: 16px;
+        padding-right: 40px;
+    }
+
+    /* Table with refined styling */
+    .leads-table-wrapper {
+        background: linear-gradient(145deg, rgba(24, 24, 28, 0.6) 0%, rgba(17, 17, 20, 0.8) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.04);
+        border-radius: 16px;
+        overflow: hidden;
+    }
+
+    .leads-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .leads-table thead {
+        background: rgba(0, 0, 0, 0.3);
+    }
+
+    .leads-table th {
+        font-family: 'Instrument Sans', sans-serif;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--text-muted);
+        font-weight: 600;
+        padding: 16px 20px;
+        text-align: left;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    .leads-table td {
+        font-family: 'Instrument Sans', sans-serif;
+        padding: 16px 20px;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        transition: all 0.2s ease;
+    }
+
+    .leads-table tbody tr {
+        transition: all 0.2s ease;
+    }
+
+    .leads-table tbody tr:hover {
+        background: rgba(255, 255, 255, 0.02);
+    }
+
+    .leads-table tbody tr:hover td {
+        color: var(--text-primary);
+    }
+
+    /* Score indicator with visual flair */
+    .score-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .score-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+    }
+
+    .score-good { background: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.5); }
+    .score-medium { background: #f59e0b; box-shadow: 0 0 8px rgba(245, 158, 11, 0.5); }
+    .score-poor { background: #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); }
+
+    /* Platform badges */
+    .platform-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-transform: capitalize;
+    }
+
+    .platform-badge.woocommerce { background: rgba(147, 51, 234, 0.15); color: #a78bfa; }
+    .platform-badge.magento { background: rgba(249, 115, 22, 0.15); color: #fb923c; }
+    .platform-badge.shopify { background: rgba(132, 204, 22, 0.15); color: #a3e635; }
+    .platform-badge.wordpress { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+
+    /* Status badges */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
+        border-radius: 100px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .status-badge::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+    }
+
+    .status-badge.pending { background: rgba(245, 158, 11, 0.12); color: #fbbf24; }
+    .status-badge.pending::before { background: #fbbf24; }
+    .status-badge.contacted { background: rgba(59, 130, 246, 0.12); color: #60a5fa; }
+    .status-badge.contacted::before { background: #60a5fa; }
+    .status-badge.migrating { background: rgba(168, 85, 247, 0.12); color: #c084fc; }
+    .status-badge.migrating::before { background: #c084fc; animation: pulse 2s infinite; }
+    .status-badge.completed { background: rgba(34, 197, 94, 0.12); color: #4ade80; }
+    .status-badge.completed::before { background: #4ade80; }
+    .status-badge.rejected { background: rgba(239, 68, 68, 0.12); color: #f87171; }
+    .status-badge.rejected::before { background: #f87171; }
+
+    /* Revenue loss with dramatic styling */
+    .revenue-loss {
+        font-weight: 600;
+        color: #f87171;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Email cell with truncation */
+    .email-cell {
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .url-cell {
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        color: var(--text-tertiary);
+    }
+
+    /* View button */
+    .btn-view {
+        padding: 8px 16px;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .btn-view:hover {
+        background: rgba(0, 136, 255, 0.1);
+        border-color: rgba(0, 136, 255, 0.3);
+        color: #0088ff;
+    }
+
+    /* Pagination refined */
+    .leads-pagination {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 32px;
+    }
+
+    .leads-pagination a,
+    .leads-pagination span {
+        font-family: 'Instrument Sans', sans-serif;
+        padding: 10px 16px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 8px;
+        color: var(--text-tertiary);
+        text-decoration: none;
+        font-size: 0.85rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+
+    .leads-pagination a:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text-primary);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .leads-pagination .active {
+        background: rgba(0, 136, 255, 0.15);
+        border-color: rgba(0, 136, 255, 0.3);
+        color: #0088ff;
+    }
+
+    /* Empty state */
+    .empty-state {
+        text-align: center;
+        padding: 60px 40px;
+        color: var(--text-tertiary);
+    }
+
+    .empty-state .icon {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 20px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .empty-state .icon svg {
+        width: 32px;
+        height: 32px;
+        color: var(--text-muted);
+    }
+
+    .empty-state h3 {
+        font-family: 'Playfair Display', Georgia, serif;
+        font-size: 1.25rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+    }
+
+    .results-count {
+        font-family: 'Instrument Sans', sans-serif;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        margin-bottom: 20px;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    /* Speed Battle Stats Section */
+    .section-divider {
+        margin: 48px 0 32px;
+        padding-top: 32px;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+    }
+
+    .section-header h3 {
+        font-family: 'Playfair Display', Georgia, serif;
+        font-size: 1.5rem;
+        font-weight: 500;
+        letter-spacing: -0.02em;
+        background: linear-gradient(135deg, #f4f4f6 0%, #a1a1aa 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 0;
+    }
+
+    .section-header .subtitle {
+        font-family: 'Instrument Sans', sans-serif;
+        font-size: 0.875rem;
+        color: var(--text-tertiary);
+        margin-top: 4px;
+    }
+
+    .lead-stat.battles .icon { background: rgba(255, 136, 0, 0.15); color: #ff8800; }
+    .lead-stat.capture .icon { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+    .lead-stat.viral .icon { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+    .lead-stat.wins .icon { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+
+    /* Win/Loss Breakdown */
+    .win-breakdown {
+        display: flex;
+        gap: 12px;
+        margin-top: 12px;
+    }
+
+    .win-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.75rem;
+        color: var(--text-tertiary);
+    }
+
+    .win-item .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+    }
+
+    .win-item.challenger .dot { background: #22c55e; }
+    .win-item.opponent .dot { background: #ef4444; }
+    .win-item.tie .dot { background: #f59e0b; }
+
+    /* Winner badge */
+    .winner-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-transform: capitalize;
+    }
+
+    .winner-badge.challenger { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+    .winner-badge.opponent { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+    .winner-badge.tie { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Stats Grid -->
+<div class="leads-stats">
+    <div class="lead-stat scans">
+        <div class="icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+        </div>
+        <div class="label">Scans Today</div>
+        <div class="value">{{ scan_stats.scans_today or 0 }}</div>
+        {% if scan_stats.scans_this_week %}
+        <span class="trend up">{{ scan_stats.scans_this_week }} this week</span>
+        {% endif %}
+    </div>
+    <div class="lead-stat leads">
+        <div class="icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+        </div>
+        <div class="label">Leads Today</div>
+        <div class="value">{{ scan_stats.leads_today or 0 }}</div>
+        <span class="trend up">{{ scan_stats.total_leads or 0 }} total</span>
+    </div>
+    <div class="lead-stat rate">
+        <div class="icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+        </div>
+        <div class="label">Conversion Rate</div>
+        <div class="value">{{ scan_stats.conversion_rate or 0 }}%</div>
+        {% if scan_stats.avg_performance_score %}
+        <span class="trend">Avg score: {{ scan_stats.avg_performance_score }}</span>
+        {% endif %}
+    </div>
+    <div class="lead-stat pending">
+        <div class="icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        </div>
+        <div class="label">Pending Previews</div>
+        <div class="value">{{ migration_stats.pending_count or 0 }}</div>
+        <span class="trend">{{ migration_stats.total_requests or 0 }} total requests</span>
+    </div>
+</div>
+
+<!-- Speed Battle Stats Section -->
+<div class="section-divider">
+    <div class="section-header">
+        <div>
+            <h3>Speed Battles</h3>
+            <p class="subtitle">Track competitive speed comparison battles</p>
+        </div>
+        <a href="{{ url_for('admin.leads_admin.battles') }}" class="btn-leads btn-leads-secondary">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+            View All Battles
+        </a>
+    </div>
+</div>
+
+<div class="leads-stats">
+    <div class="lead-stat battles">
+        <div class="icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+        </div>
+        <div class="label">Total Battles</div>
+        <div class="value">{{ battle_stats.total_battles or 0 }}</div>
+        <span class="trend">{{ battle_stats.completed_battles or 0 }} completed</span>
+    </div>
+    <div class="lead-stat capture">
+        <div class="icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+        </div>
+        <div class="label">Email Capture Rate</div>
+        <div class="value">{{ battle_stats.email_capture_rate or 0 }}%</div>
+        <span class="trend">{{ battle_stats.total_shares or 0 }} total shares</span>
+    </div>
+    <div class="lead-stat viral">
+        <div class="icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg>
+        </div>
+        <div class="label">Viral Coefficient</div>
+        <div class="value">{{ battle_stats.viral_coefficient or 0 }}</div>
+        <span class="trend">{{ battle_stats.from_referrals or 0 }} from referrals</span>
+    </div>
+    <div class="lead-stat wins">
+        <div class="icon">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"></path></svg>
+        </div>
+        <div class="label">Win/Loss Breakdown</div>
+        <div class="value">{{ battle_stats.completed_battles or 0 }}</div>
+        <div class="win-breakdown">
+            <span class="win-item challenger"><span class="dot"></span>{{ battle_stats.challenger_wins or 0 }} wins</span>
+            <span class="win-item opponent"><span class="dot"></span>{{ battle_stats.opponent_wins or 0 }} losses</span>
+            <span class="win-item tie"><span class="dot"></span>{{ battle_stats.ties or 0 }} ties</span>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Battles Table -->
+{% if recent_battles %}
+<div style="margin-top: 32px;">
+    <h4 style="font-family: 'Instrument Sans', sans-serif; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 16px;">Recent Battles</h4>
+    <div class="leads-table-wrapper">
+        <table class="leads-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Challenger</th>
+                    <th>vs</th>
+                    <th>Opponent</th>
+                    <th>Winner</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for battle in recent_battles %}
+                <tr>
+                    <td style="font-family: 'JetBrains Mono', monospace; color: var(--text-muted);">{{ battle.id }}</td>
+                    <td class="url-cell" title="{{ battle.challenger_url }}">{{ battle.challenger_url }}</td>
+                    <td style="color: var(--text-muted); text-align: center;">vs</td>
+                    <td class="url-cell" title="{{ battle.opponent_url }}">{{ battle.opponent_url }}</td>
+                    <td>
+                        {% if battle.winner %}
+                        <span class="winner-badge {{ battle.winner }}">{{ battle.winner }}</span>
+                        {% else %}
+                        <span style="color: var(--text-muted);">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="email-cell">
+                        {% if battle.email %}
+                        {{ battle.email }}
+                        {% else %}
+                        <span style="color: var(--text-muted);">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="status-badge {{ battle.status }}">{{ battle.status }}</span>
+                    </td>
+                    <td style="color: var(--text-muted); font-size: 0.8rem;">{{ battle.created_at.strftime('%b %d, %H:%M') if battle.created_at else '-' }}</td>
+                    <td>
+                        <a href="{{ url_for('admin.leads_admin.battle_detail', battle_id=battle.id) }}" class="btn-view">
+                            View
+                            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Header -->
+<div class="leads-header">
+    <div>
+        <h2>All Leads</h2>
+        <p class="subtitle">Track and manage leads from your speed test funnel</p>
+    </div>
+    <div class="action-buttons">
+        <a href="{{ url_for('admin.leads_admin.previews') }}" class="btn-leads btn-leads-secondary">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+            Preview Queue
+        </a>
+        <a href="{{ url_for('admin.leads_admin.analytics') }}" class="btn-leads btn-leads-primary">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+            Analytics
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<form method="GET" class="leads-filters">
+    <input type="text" name="search" class="filter-input" placeholder="Search email or URL..." value="{{ search }}" style="flex: 1; min-width: 240px;">
+    <select name="email_filter" class="filter-input">
+        <option value="">All Scans</option>
+        <option value="with_email" {% if email_filter == 'with_email' %}selected{% endif %}>With Email (Leads)</option>
+        <option value="no_email" {% if email_filter == 'no_email' %}selected{% endif %}>No Email</option>
+    </select>
+    <select name="status" class="filter-input">
+        <option value="">All Migration Statuses</option>
+        <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+        <option value="contacted" {% if status_filter == 'contacted' %}selected{% endif %}>Contacted</option>
+        <option value="migrating" {% if status_filter == 'migrating' %}selected{% endif %}>Migrating</option>
+        <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+        <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rejected</option>
+    </select>
+    <button type="submit" class="btn-leads btn-leads-secondary">Filter</button>
+    {% if search or status_filter or email_filter %}
+    <a href="{{ url_for('admin.leads_admin.dashboard') }}" class="btn-leads btn-leads-secondary">Clear</a>
+    {% endif %}
+</form>
+
+<!-- Results count -->
+<p class="results-count">Showing {{ leads|length }} of {{ total }} leads</p>
+
+<!-- Leads Table -->
+<div class="leads-table-wrapper">
+    <table class="leads-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Email</th>
+                <th>URL</th>
+                <th>Score</th>
+                <th>Platform</th>
+                <th>Est. Loss</th>
+                <th>Migration Status</th>
+                <th>Scanned</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lead in leads %}
+            <tr>
+                <td style="font-family: 'JetBrains Mono', monospace; color: var(--text-muted);">{{ lead.id }}</td>
+                <td class="email-cell">
+                    {% if lead.email %}
+                    {{ lead.email }}
+                    {% else %}
+                    <span style="color: var(--text-muted);">-</span>
+                    {% endif %}
+                </td>
+                <td class="url-cell" title="{{ lead.url }}">{{ lead.url }}</td>
+                <td>
+                    {% if lead.performance_score is not none %}
+                    <span class="score-indicator">
+                        <span class="score-dot {% if lead.performance_score >= 90 %}score-good{% elif lead.performance_score >= 50 %}score-medium{% else %}score-poor{% endif %}"></span>
+                        {{ lead.performance_score }}
+                    </span>
+                    {% else %}
+                    <span style="color: var(--text-muted);">-</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if lead.store_platform and lead.store_platform != 'unknown' %}
+                    <span class="platform-badge {{ lead.store_platform }}">{{ lead.store_platform }}</span>
+                    {% else %}
+                    <span style="color: var(--text-muted);">-</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if lead.estimated_revenue_loss %}
+                    <span class="revenue-loss">${{ '{:,.0f}'.format(lead.estimated_revenue_loss) }}</span>
+                    {% else %}
+                    <span style="color: var(--text-muted);">-</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if lead.migration_request_id %}
+                    <span class="status-badge {{ lead.migration_status }}">{{ lead.migration_status }}</span>
+                    {% else %}
+                    <span style="color: var(--text-muted);">-</span>
+                    {% endif %}
+                </td>
+                <td style="color: var(--text-muted); font-size: 0.8rem;">{{ lead.created_at.strftime('%b %d, %H:%M') if lead.created_at else '-' }}</td>
+                <td>
+                    <a href="{{ url_for('admin.leads_admin.detail', scan_id=lead.id) }}" class="btn-view">
+                        View
+                        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                    </a>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="9">
+                    <div class="empty-state">
+                        <div class="icon">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        </div>
+                        <h3>No leads found</h3>
+                        <p>Leads will appear here when visitors use your speed test tool.</p>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<div class="leads-pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('admin.leads_admin.dashboard', page=page-1, search=search, status=status_filter, email_filter=email_filter) }}">Previous</a>
+    {% endif %}
+
+    {% for p in range(1, total_pages + 1) %}
+    {% if p == page %}
+    <span class="active">{{ p }}</span>
+    {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+    <a href="{{ url_for('admin.leads_admin.dashboard', page=p, search=search, status=status_filter, email_filter=email_filter) }}">{{ p }}</a>
+    {% elif p == page - 3 or p == page + 3 %}
+    <span>...</span>
+    {% endif %}
+    {% endfor %}
+
+    {% if page < total_pages %}
+    <a href="{{ url_for('admin.leads_admin.dashboard', page=page+1, search=search, status=status_filter, email_filter=email_filter) }}">Next</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

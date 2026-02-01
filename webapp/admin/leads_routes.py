@@ -218,6 +218,8 @@ def dashboard():
     # Get stats
     scan_stats = SiteScan.get_stats()
     migration_stats = MigrationPreviewRequest.get_stats()
+    battle_stats = SpeedBattle.get_stats()
+    recent_battles = SpeedBattle.get_recent(limit=10)
 
     return render_template('admin/leads/dashboard.html',
                            admin=admin,
@@ -229,7 +231,9 @@ def dashboard():
                            total_pages=total_pages,
                            total=total,
                            scan_stats=scan_stats,
-                           migration_stats=migration_stats)
+                           migration_stats=migration_stats,
+                           battle_stats=battle_stats,
+                           recent_battles=recent_battles)
 
 
 @leads_admin_bp.route('/analytics')
