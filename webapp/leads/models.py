@@ -3,6 +3,8 @@ Lead Funnel Models
 Handles database operations for site scans and migration preview requests
 """
 
+import secrets
+import string
 from datetime import datetime, timedelta
 from models import get_db_connection
 
@@ -506,6 +508,421 @@ class MigrationPreviewRequest:
                 )
             else:
                 stats['completion_rate'] = 0
+
+            return stats
+
+        finally:
+            cursor.close()
+            conn.close()
+
+
+class SpeedBattle:
+    """Model for head-to-head speed battle comparisons with viral tracking"""
+
+    STATUSES = ['pending', 'scanning', 'completed', 'failed']
+    WINNERS = ['challenger', 'opponent', 'tie']
+    EMAIL_SEGMENTS = ['won_dominant', 'won_close', 'lost_close', 'lost_dominant']
+    SHARE_PLATFORMS = ['twitter', 'facebook', 'linkedin', 'copy']
+
+    def __init__(self, id=None, battle_uid=None, challenger_url=None,
+                 challenger_scan_id=None, challenger_score=None,
+                 opponent_url=None, opponent_scan_id=None, opponent_score=None,
+                 winner=None, margin=None, email=None, email_segment=None,
+                 referrer_battle_id=None, share_clicks_twitter=0,
+                 share_clicks_facebook=0, share_clicks_linkedin=0,
+                 share_clicks_copy=0, status='pending', error_message=None,
+                 ip_address=None, created_at=None, updated_at=None,
+                 completed_at=None):
+        self.id = id
+        self.battle_uid = battle_uid
+        self.challenger_url = challenger_url
+        self.challenger_scan_id = challenger_scan_id
+        self.challenger_score = challenger_score
+        self.opponent_url = opponent_url
+        self.opponent_scan_id = opponent_scan_id
+        self.opponent_score = opponent_score
+        self.winner = winner
+        self.margin = margin
+        self.email = email
+        self.email_segment = email_segment
+        self.referrer_battle_id = referrer_battle_id
+        self.share_clicks_twitter = share_clicks_twitter or 0
+        self.share_clicks_facebook = share_clicks_facebook or 0
+        self.share_clicks_linkedin = share_clicks_linkedin or 0
+        self.share_clicks_copy = share_clicks_copy or 0
+        self.status = status
+        self.error_message = error_message
+        self.ip_address = ip_address
+        self.created_at = created_at or datetime.now()
+        self.updated_at = updated_at or datetime.now()
+        self.completed_at = completed_at
+
+    # =========================================================================
+    # Static Utility Methods
+    # =========================================================================
+
+    @staticmethod
+    def generate_battle_uid():
+        """Generate a unique 8-character alphanumeric battle UID"""
+        alphabet = string.ascii_letters + string.digits
+        return ''.join(secrets.choice(alphabet) for _ in range(8))
+
+    # =========================================================================
+    # Instance Methods
+    # =========================================================================
+
+    def determine_winner(self):
+        """Determine winner based on challenger and opponent scores"""
+        if self.challenger_score is None or self.opponent_score is None:
+            return
+
+        diff = self.challenger_score - self.opponent_score
+
+        if diff > 0:
+            self.winner = 'challenger'
+            self.margin = diff
+        elif diff < 0:
+            self.winner = 'opponent'
+            self.margin = abs(diff)
+        else:
+            self.winner = 'tie'
+            self.margin = 0
+
+    def get_email_segment(self):
+        """Get email segment based on winner and margin"""
+        if self.winner is None or self.margin is None:
+            return None
+
+        if self.winner == 'tie':
+            # Tie is not a loss, treat as won_close
+            return 'won_close'
+
+        # Dominant = margin of 20 or more, close = less than 20
+        is_dominant = self.margin >= 20
+
+        if self.winner == 'challenger':
+            return 'won_dominant' if is_dominant else 'won_close'
+        else:  # opponent won
+            return 'lost_dominant' if is_dominant else 'lost_close'
+
+    def to_dict(self):
+        """Return dictionary representation of the battle"""
+        return {
+            'id': self.id,
+            'battle_uid': self.battle_uid,
+            'challenger_url': self.challenger_url,
+            'challenger_scan_id': self.challenger_scan_id,
+            'challenger_score': self.challenger_score,
+            'opponent_url': self.opponent_url,
+            'opponent_scan_id': self.opponent_scan_id,
+            'opponent_score': self.opponent_score,
+            'winner': self.winner,
+            'margin': self.margin,
+            'email': self.email,
+            'email_segment': self.email_segment,
+            'referrer_battle_id': self.referrer_battle_id,
+            'share_clicks_twitter': self.share_clicks_twitter,
+            'share_clicks_facebook': self.share_clicks_facebook,
+            'share_clicks_linkedin': self.share_clicks_linkedin,
+            'share_clicks_copy': self.share_clicks_copy,
+            'status': self.status,
+            'error_message': self.error_message,
+            'ip_address': self.ip_address,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at,
+            'completed_at': self.completed_at
+        }
+
+    # =========================================================================
+    # Query Methods
+    # =========================================================================
+
+    @staticmethod
+    def get_by_id(battle_id):
+        """Get speed battle by ID"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute("SELECT * FROM speed_battles WHERE id = %s", (battle_id,))
+            row = cursor.fetchone()
+
+            if row:
+                return SpeedBattle(**row)
+            return None
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_by_uid(battle_uid):
+        """Get speed battle by UID"""
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute(
+                "SELECT * FROM speed_battles WHERE battle_uid = %s",
+                (battle_uid,)
+            )
+            row = cursor.fetchone()
+
+            if row:
+                return SpeedBattle(**row)
+            return None
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    @staticmethod
+    def get_recent(limit=50):
+        """Get recent speed battles"""
+        conn = get_db_connection(read_only=True)
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            cursor.execute(
+                "SELECT * FROM speed_battles ORDER BY created_at DESC LIMIT %s",
+                (limit,)
+            )
+            rows = cursor.fetchall()
+            return [SpeedBattle(**row) for row in rows]
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    # =========================================================================
+    # Create and Update Methods
+    # =========================================================================
+
+    @staticmethod
+    def create(challenger_url, opponent_url, ip_address=None, referrer_battle_id=None):
+        """Create a new speed battle"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            battle_uid = SpeedBattle.generate_battle_uid()
+
+            cursor.execute("""
+                INSERT INTO speed_battles
+                (battle_uid, challenger_url, opponent_url, ip_address,
+                 referrer_battle_id, status, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, 'pending', NOW(), NOW())
+            """, (battle_uid, challenger_url, opponent_url, ip_address, referrer_battle_id))
+            conn.commit()
+
+            battle_id = cursor.lastrowid
+            return SpeedBattle.get_by_id(battle_id)
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    def update_status(self, status, error_message=None):
+        """Update battle status"""
+        if status not in SpeedBattle.STATUSES:
+            raise ValueError(f"Invalid status: {status}. Must be one of {SpeedBattle.STATUSES}")
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            if error_message:
+                cursor.execute("""
+                    UPDATE speed_battles
+                    SET status = %s, error_message = %s, updated_at = NOW()
+                    WHERE id = %s
+                """, (status, error_message, self.id))
+            else:
+                cursor.execute("""
+                    UPDATE speed_battles
+                    SET status = %s, updated_at = NOW()
+                    WHERE id = %s
+                """, (status, self.id))
+            conn.commit()
+
+            # Update local object
+            self.status = status
+            if error_message:
+                self.error_message = error_message
+            self.updated_at = datetime.now()
+
+            return True
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    def update_scores(self, challenger_scan_id, challenger_score, opponent_scan_id, opponent_score):
+        """Update scores and determine winner"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            # Update local object first
+            self.challenger_scan_id = challenger_scan_id
+            self.challenger_score = challenger_score
+            self.opponent_scan_id = opponent_scan_id
+            self.opponent_score = opponent_score
+
+            # Determine winner
+            self.determine_winner()
+
+            cursor.execute("""
+                UPDATE speed_battles
+                SET challenger_scan_id = %s, challenger_score = %s,
+                    opponent_scan_id = %s, opponent_score = %s,
+                    winner = %s, margin = %s,
+                    status = 'completed', completed_at = NOW(), updated_at = NOW()
+                WHERE id = %s
+            """, (
+                challenger_scan_id, challenger_score,
+                opponent_scan_id, opponent_score,
+                self.winner, self.margin,
+                self.id
+            ))
+            conn.commit()
+
+            self.status = 'completed'
+            self.completed_at = datetime.now()
+            self.updated_at = datetime.now()
+
+            return True
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    def set_email(self, email):
+        """Set email and determine email segment"""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            email_segment = self.get_email_segment()
+
+            cursor.execute("""
+                UPDATE speed_battles
+                SET email = %s, email_segment = %s, updated_at = NOW()
+                WHERE id = %s
+            """, (email, email_segment, self.id))
+            conn.commit()
+
+            # Update local object
+            self.email = email
+            self.email_segment = email_segment
+            self.updated_at = datetime.now()
+
+            return True
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    def increment_share_click(self, platform):
+        """Increment share click counter for a platform"""
+        if platform not in SpeedBattle.SHARE_PLATFORMS:
+            raise ValueError(f"Invalid platform: {platform}. Must be one of {SpeedBattle.SHARE_PLATFORMS}")
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        try:
+            column = f"share_clicks_{platform}"
+            cursor.execute(f"""
+                UPDATE speed_battles
+                SET {column} = {column} + 1, updated_at = NOW()
+                WHERE id = %s
+            """, (self.id,))
+            conn.commit()
+
+            # Update local object
+            current_value = getattr(self, column)
+            setattr(self, column, current_value + 1)
+            self.updated_at = datetime.now()
+
+            return True
+
+        finally:
+            cursor.close()
+            conn.close()
+
+    # =========================================================================
+    # Analytics Methods
+    # =========================================================================
+
+    @staticmethod
+    def get_stats():
+        """Get analytics statistics for speed battles"""
+        conn = get_db_connection(read_only=True)
+        cursor = conn.cursor(dictionary=True)
+
+        try:
+            stats = {}
+
+            # Total battles
+            cursor.execute("SELECT COUNT(*) as total FROM speed_battles")
+            stats['total_battles'] = cursor.fetchone()['total']
+
+            # Completed battles
+            cursor.execute(
+                "SELECT COUNT(*) as total FROM speed_battles WHERE status = 'completed'"
+            )
+            stats['completed_battles'] = cursor.fetchone()['total']
+
+            # Email capture rate
+            cursor.execute(
+                "SELECT COUNT(*) as total FROM speed_battles WHERE email IS NOT NULL"
+            )
+            battles_with_email = cursor.fetchone()['total']
+            if stats['total_battles'] > 0:
+                stats['email_capture_rate'] = round(
+                    (battles_with_email / stats['total_battles']) * 100, 2
+                )
+            else:
+                stats['email_capture_rate'] = 0
+
+            # Winner breakdown
+            cursor.execute(
+                "SELECT COUNT(*) as total FROM speed_battles WHERE winner = 'challenger'"
+            )
+            stats['challenger_wins'] = cursor.fetchone()['total']
+
+            cursor.execute(
+                "SELECT COUNT(*) as total FROM speed_battles WHERE winner = 'opponent'"
+            )
+            stats['opponent_wins'] = cursor.fetchone()['total']
+
+            cursor.execute(
+                "SELECT COUNT(*) as total FROM speed_battles WHERE winner = 'tie'"
+            )
+            stats['ties'] = cursor.fetchone()['total']
+
+            # Total shares
+            cursor.execute("""
+                SELECT COALESCE(SUM(share_clicks_twitter + share_clicks_facebook +
+                       share_clicks_linkedin + share_clicks_copy), 0) as total
+                FROM speed_battles
+            """)
+            stats['total_shares'] = cursor.fetchone()['total']
+
+            # Battles from referrals
+            cursor.execute(
+                "SELECT COUNT(*) as total FROM speed_battles WHERE referrer_battle_id IS NOT NULL"
+            )
+            stats['from_referrals'] = cursor.fetchone()['total']
+
+            # Viral coefficient (referrals / total battles)
+            if stats['total_battles'] > 0:
+                stats['viral_coefficient'] = round(
+                    stats['from_referrals'] / stats['total_battles'], 3
+                )
+            else:
+                stats['viral_coefficient'] = 0
 
             return stats
 
