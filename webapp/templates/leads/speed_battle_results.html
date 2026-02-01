@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block title %}Battle Results - Speed Battle{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            {% if battle.status == 'pending' or battle.status == 'scanning' %}
+            <!-- Scanning in progress -->
+            <div class="text-center">
+                <div class="spinner-border text-primary mb-4" style="width: 3rem; height: 3rem;" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <h2 class="mb-3">Battle in Progress</h2>
+                <p class="text-muted">Scanning both sites... This may take up to a minute.</p>
+                <div class="progress mt-4" style="height: 20px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 50%"></div>
+                </div>
+            </div>
+
+            <script>
+            // Poll for status updates
+            function checkStatus() {
+                fetch('{{ url_for("leads.speed_battle_status", battle_uid=battle.battle_uid) }}')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'completed' || data.status === 'failed') {
+                            window.location.reload();
+                        } else {
+                            setTimeout(checkStatus, 2000);
+                        }
+                    });
+            }
+            checkStatus();
+            </script>
+
+            {% elif battle.status == 'failed' %}
+            <!-- Battle failed -->
+            <div class="text-center">
+                <div class="text-danger mb-4">
+                    <i class="bi bi-exclamation-triangle" style="font-size: 3rem;"></i>
+                </div>
+                <h2 class="mb-3">Battle Failed</h2>
+                <p class="text-muted">{{ battle.error_message or 'An error occurred while scanning.' }}</p>
+                <a href="{{ url_for('leads.speed_battle') }}" class="btn btn-primary">Try Again</a>
+            </div>
+
+            {% else %}
+            <!-- Battle completed -->
+            <div class="text-center mb-5">
+                <h1 class="display-4 fw-bold">
+                    {% if battle.winner == 'challenger' %}
+                    Victory!
+                    {% elif battle.winner == 'opponent' %}
+                    Defeat
+                    {% else %}
+                    It's a Tie!
+                    {% endif %}
+                </h1>
+            </div>
+
+            <!-- Score comparison -->
+            <div class="row mb-5">
+                <div class="col-md-5 text-center">
+                    <div class="card {% if battle.winner == 'challenger' %}border-success{% endif %}">
+                        <div class="card-body">
+                            <h5 class="text-muted">Your Store</h5>
+                            <p class="text-truncate">{{ battle.challenger_url }}</p>
+                            <div class="display-1 fw-bold {% if challenger_tier %}text-{{ challenger_tier.color }}{% endif %}">
+                                {{ battle.challenger_score or '-' }}
+                            </div>
+                            {% if challenger_tier %}
+                            <span class="badge bg-{{ challenger_tier.color }}">{{ challenger_tier.label }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2 d-flex align-items-center justify-content-center">
+                    <span class="display-4 text-muted">VS</span>
+                </div>
+                <div class="col-md-5 text-center">
+                    <div class="card {% if battle.winner == 'opponent' %}border-danger{% endif %}">
+                        <div class="card-body">
+                            <h5 class="text-muted">Competitor</h5>
+                            <p class="text-truncate">{{ battle.opponent_url }}</p>
+                            <div class="display-1 fw-bold {% if opponent_tier %}text-{{ opponent_tier.color }}{% endif %}">
+                                {{ battle.opponent_score or '-' }}
+                            </div>
+                            {% if opponent_tier %}
+                            <span class="badge bg-{{ opponent_tier.color }}">{{ opponent_tier.label }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Round breakdown -->
+            {% if rounds %}
+            <div class="card mb-5">
+                <div class="card-header">
+                    <h5 class="mb-0">Round Breakdown</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th class="text-center">Weight</th>
+                                    <th class="text-center">You</th>
+                                    <th class="text-center">Competitor</th>
+                                    <th class="text-center">Winner</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for round in rounds %}
+                                <tr>
+                                    <td>{{ round.name }}</td>
+                                    <td class="text-center">{{ round.weight }}%</td>
+                                    <td class="text-center {% if round.winner == 'challenger' %}text-success fw-bold{% endif %}">
+                                        {{ round.challenger_score }}
+                                    </td>
+                                    <td class="text-center {% if round.winner == 'opponent' %}text-danger fw-bold{% endif %}">
+                                        {{ round.opponent_score }}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if round.winner == 'challenger' %}
+                                        <span class="badge bg-success">You</span>
+                                        {% elif round.winner == 'opponent' %}
+                                        <span class="badge bg-danger">Them</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Tie</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Email capture -->
+            {% if not battle.email %}
+            <div class="card mb-5">
+                <div class="card-body text-center py-4">
+                    <h4>Get Your Detailed Report</h4>
+                    <p class="text-muted">Enter your email to receive a detailed breakdown and improvement tips.</p>
+                    <form id="unlock-form" class="row justify-content-center g-2">
+                        <div class="col-auto">
+                            <input type="email" class="form-control" id="email" name="email"
+                                   placeholder="you@example.com" required>
+                        </div>
+                        <div class="col-auto">
+                            <button type="submit" class="btn btn-primary">Get Report</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <script>
+            document.getElementById('unlock-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const email = document.getElementById('email').value;
+
+                fetch('{{ url_for("leads.speed_battle_unlock", battle_uid=battle.battle_uid) }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ email: email })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                    } else {
+                        alert('Check your inbox for the detailed report!');
+                        window.location.reload();
+                    }
+                });
+            });
+            </script>
+            {% endif %}
+
+            <!-- Share buttons -->
+            <div class="text-center">
+                <h5 class="mb-3">Challenge a Friend</h5>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-primary share-btn" data-platform="twitter">
+                        Twitter
+                    </button>
+                    <button type="button" class="btn btn-outline-primary share-btn" data-platform="facebook">
+                        Facebook
+                    </button>
+                    <button type="button" class="btn btn-outline-primary share-btn" data-platform="linkedin">
+                        LinkedIn
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary share-btn" data-platform="copy">
+                        Copy Link
+                    </button>
+                </div>
+            </div>
+
+            <script>
+            document.querySelectorAll('.share-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const platform = this.dataset.platform;
+                    const shareUrl = '{{ url_for("leads.speed_battle", ref=battle.battle_uid, _external=True) }}';
+
+                    // Track the share
+                    fetch('{{ url_for("leads.speed_battle_share", battle_uid=battle.battle_uid) }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ platform: platform })
+                    });
+
+                    if (platform === 'copy') {
+                        navigator.clipboard.writeText(shareUrl);
+                        alert('Link copied!');
+                    } else if (platform === 'twitter') {
+                        window.open('https://twitter.com/intent/tweet?url=' + encodeURIComponent(shareUrl) + '&text=I just beat my competitor in a Speed Battle!');
+                    } else if (platform === 'facebook') {
+                        window.open('https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(shareUrl));
+                    } else if (platform === 'linkedin') {
+                        window.open('https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl));
+                    }
+                });
+            });
+            </script>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

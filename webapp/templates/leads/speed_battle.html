@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Speed Battle - Compare Your Store{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="text-center mb-5">
+                <h1 class="display-4 fw-bold">Speed Battle</h1>
+                <p class="lead text-muted">Compare your store's speed against a competitor</p>
+            </div>
+
+            {% if referrer_battle %}
+            <div class="alert alert-info mb-4">
+                <strong>Challenge accepted!</strong>
+                Someone shared a battle with you. Enter your store URL to compete!
+            </div>
+            {% endif %}
+
+            <div class="card shadow">
+                <div class="card-body p-4">
+                    <form id="battle-form" method="POST" action="{{ url_for('leads.speed_battle_start') }}">
+                        <div class="mb-4">
+                            <label for="challenger_url" class="form-label fw-semibold">Your Store URL</label>
+                            <input type="url" class="form-control form-control-lg" id="challenger_url"
+                                   name="challenger_url" placeholder="https://mystore.com" required>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="opponent_url" class="form-label fw-semibold">Competitor URL</label>
+                            <input type="url" class="form-control form-control-lg" id="opponent_url"
+                                   name="opponent_url" placeholder="https://competitor.com"
+                                   {% if referrer_battle %}value="{{ referrer_battle.challenger_url }}"{% endif %}
+                                   required>
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                Start Battle
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('battle-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const form = this;
+    const formData = new FormData(form);
+
+    fetch(form.action, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+            challenger_url: formData.get('challenger_url'),
+            opponent_url: formData.get('opponent_url')
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(data.error);
+        } else if (data.redirect_url) {
+            window.location.href = data.redirect_url;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred. Please try again.');
+    });
+});
+</script>
+{% endblock %}
